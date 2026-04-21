@@ -55,4 +55,4 @@ We may update these Terms from time to time. Continued use of the app after chan
 
 ## Contact
 
-If you have questions about these Terms or want to report a violation, contact us at: **[your email address]**
+If you have questions about these Terms or want to report a violation, contact us at: **[jackinho1999@icloud.com]**
