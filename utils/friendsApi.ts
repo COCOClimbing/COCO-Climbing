@@ -20,7 +20,7 @@ export interface FriendRequest {
 
 export interface FriendActivity {
   friend: FriendProfile;
-  recentClimbs: any[]; // climbs from last 7 days
+  recentClimbs: any[]; // climbs from last 30 days
 }
 
 export interface FriendCounts {
@@ -29,20 +29,29 @@ export interface FriendCounts {
 }
 
 // Search users by username (partial match, exclude self and existing friends)
-export async function searchByUsername(query: string, currentUserId: string): Promise<FriendProfile[]> {
+export async function searchByUsername(query: string, currentUserId: string, excludeIds: string[] = []): Promise<FriendProfile[]> {
   if (!query.trim()) return [];
-  const { data, error } = await supabase
+  let q = supabase
     .from('profiles')
     .select('id, name, username, avatar_url, hometown, is_private')
     .ilike('username', `%${query.trim()}%`)
-    .neq('id', currentUserId)
-    .limit(10);
+    .neq('id', currentUserId);
+  if (excludeIds.length > 0) q = q.not('id', 'in', `(${excludeIds.join(',')})`);
+  const { data, error } = await q.limit(10);
   if (error || !data) return [];
   return data as FriendProfile[];
 }
 
 // Follow a user. Public profiles are auto-accepted; private profiles create a pending request.
 export async function sendFriendRequest(senderId: string, receiverId: string, isPrivate = false): Promise<{ error: string | null }> {
+  // Reject if either party has blocked the other
+  const { data: block } = await supabase
+    .from('blocked_users')
+    .select('id')
+    .or(`and(blocker_id.eq.${senderId},blocked_id.eq.${receiverId}),and(blocker_id.eq.${receiverId},blocked_id.eq.${senderId})`)
+    .limit(1);
+  if (block && block.length > 0) return { error: 'Unable to follow this user.' };
+
   const { error } = await supabase.from('friendships').insert({
     sender_id: senderId,
     receiver_id: receiverId,
@@ -144,11 +153,11 @@ export async function removeFriend(userId: string, friendId: string): Promise<vo
     .eq('receiver_id', friendId);
 }
 
-// Get a friend's climbs from the last 7 days
+// Get a friend's climbs from the last 30 days
 export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const cutoff = sevenDaysAgo.toISOString().split('T')[0];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
 
   const { data } = await supabase
     .from('climbs')
@@ -156,6 +165,21 @@ export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
     .eq('user_id', friendId)
     .gte('date', cutoff)
     .order('date', { ascending: false });
+  return data ?? [];
+}
+
+// Get a friend's sessions from the last 30 days (for media)
+export async function getFriendRecentSessions(friendId: string): Promise<any[]> {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+
+  const { data } = await supabase
+    .from('sessions')
+    .select('id, media_uris, media_types')
+    .eq('user_id', friendId)
+    .gte('date', cutoff)
+    .not('media_uris', 'is', null);
   return data ?? [];
 }
 
@@ -191,14 +215,21 @@ export async function getFriendshipStatus(userId: string, otherId: string): Prom
 }
 
 export async function getFriendCounts(userId: string): Promise<FriendCounts> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('followers_count, following_count')
-    .eq('id', userId)
-    .single();
+  const [followersRes, followingRes] = await Promise.all([
+    supabase
+      .from('friendships')
+      .select('id', { count: 'exact', head: true })
+      .eq('receiver_id', userId)
+      .eq('status', 'accepted'),
+    supabase
+      .from('friendships')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', userId)
+      .eq('status', 'accepted'),
+  ]);
   return {
-    followers: data?.followers_count ?? 0,
-    following: data?.following_count ?? 0,
+    followers: followersRes.count ?? 0,
+    following: followingRes.count ?? 0,
   };
 }
 

@@ -2,6 +2,15 @@ import React, { createContext, useContext, useState } from 'react';
 
 export type ScreenId = 'log' | 'sessions' | 'projects' | 'stats' | 'friends' | 'settings' | 'account' | 'login' | 'welcome' | 'onboarding';
 
+export interface PendingFriendProfile {
+  id: string;
+  name: string;
+  username: string;
+  avatar_url: string | null;
+  hometown?: string | null;
+  is_private?: boolean;
+}
+
 interface NavContextType {
   screen: ScreenId;
   drawerOpen: boolean;
@@ -9,6 +18,8 @@ interface NavContextType {
   settingsOpen: boolean;
   friendsOpen: boolean;
   navCount: number;
+  tabResetCount: Record<string, number>;
+  pendingFriendProfile: PendingFriendProfile | null;
   navigate: (screen: ScreenId) => void;
   openDrawer: () => void;
   closeDrawer: () => void;
@@ -17,6 +28,8 @@ interface NavContextType {
   closeSettings: () => void;
   openFriends: () => void;
   closeFriends: () => void;
+  viewFriendProfile: (profile: PendingFriendProfile) => void;
+  clearPendingFriendProfile: () => void;
 }
 
 const NavContext = createContext<NavContextType>({
@@ -26,6 +39,8 @@ const NavContext = createContext<NavContextType>({
   settingsOpen: false,
   friendsOpen: false,
   navCount: 0,
+  tabResetCount: {},
+  pendingFriendProfile: null,
   navigate: () => {},
   openDrawer: () => {},
   closeDrawer: () => {},
@@ -34,6 +49,8 @@ const NavContext = createContext<NavContextType>({
   closeSettings: () => {},
   openFriends: () => {},
   closeFriends: () => {},
+  viewFriendProfile: () => {},
+  clearPendingFriendProfile: () => {},
 });
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
@@ -43,11 +60,17 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [navCount, setNavCount] = useState(0);
+  const [tabResetCount, setTabResetCount] = useState<Record<string, number>>({});
+  const [pendingFriendProfile, setPendingFriendProfile] = useState<PendingFriendProfile | null>(null);
 
   function navigate(s: ScreenId) {
-    setScreen(s);
-    setDrawerOpen(false);
-    setNavCount(c => c + 1);
+    if (s === screen) {
+      setTabResetCount(prev => ({ ...prev, [s]: (prev[s] ?? 0) + 1 }));
+    } else {
+      setScreen(s);
+      setDrawerOpen(false);
+      setNavCount(c => c + 1);
+    }
   }
 
   function openFriends() {
@@ -58,6 +81,17 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     setFriendsOpen(false);
   }
 
+  function viewFriendProfile(profile: PendingFriendProfile) {
+    setPendingFriendProfile(profile);
+    setScreen('friends');
+    setDrawerOpen(false);
+    setNavCount(c => c + 1);
+  }
+
+  function clearPendingFriendProfile() {
+    setPendingFriendProfile(null);
+  }
+
   return (
     <NavContext.Provider value={{
       screen,
@@ -66,6 +100,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       settingsOpen,
       friendsOpen,
       navCount,
+      tabResetCount,
+      pendingFriendProfile,
       navigate,
       openDrawer: () => setDrawerOpen(true),
       closeDrawer: () => setDrawerOpen(false),
@@ -74,6 +110,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       closeSettings: () => setScreen('account'),
       openFriends,
       closeFriends,
+      viewFriendProfile,
+      clearPendingFriendProfile,
     }}>
       {children}
     </NavContext.Provider>

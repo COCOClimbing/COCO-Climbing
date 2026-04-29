@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Line } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
+import ImageCropPicker from 'react-native-image-crop-picker';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
@@ -26,7 +27,7 @@ import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredD
 
 export default function AccountScreen() {
   const { colors, mode, accentId, setMode, setAccent } = useTheme();
-  const { settingsOpen, closeSettings, navigate, screen, friendsOpen } = useNav();
+  const { settingsOpen, closeSettings, navigate, screen, friendsOpen, viewFriendProfile } = useNav();
   const { user, profileName, avatarUrl, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
 
   const [friendCounts, setFriendCounts] = useState<{ followers: number; following: number } | null>(null);
@@ -62,6 +63,8 @@ export default function AccountScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
+  const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -96,11 +99,8 @@ export default function AccountScreen() {
           table: 'profiles',
           filter: `id=eq.${user.id}`,
         },
-        (payload: any) => {
-          setFriendCounts({
-            following: payload.new.following_count ?? 0,
-            followers: payload.new.followers_count ?? 0,
-          });
+        () => {
+          getFriendCounts(user.id).then(setFriendCounts).catch(() => {});
         }
       )
       .subscribe();
@@ -285,42 +285,50 @@ export default function AccountScreen() {
   }
 
   async function handlePickPhoto() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to your photo library.');
-      return;
+    try {
+      const image = await ImageCropPicker.openPicker({
+        width: 400,
+        height: 400,
+        cropping: true,
+        cropperCircleOverlay: true,
+        compressImageQuality: 0.9,
+        cropperToolbarTitle: 'Move and Scale',
+      });
+      await handleConfirmAvatar(image.path);
+    } catch {
+      // User cancelled — no-op
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri;
-      try {
-        const path = `${user.id}/avatar.jpg`;
-        const { data: { session } } = await supabase.auth.getSession();
-        const formData = new FormData();
-        formData.append('file', { uri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
-        const uploadResponse = await fetch(
-          `https://wgjdcevttuhofbvfsocm.supabase.co/storage/v1/object/avatars/${path}`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-              'x-upsert': 'true',
-            },
-            body: formData,
-          }
-        );
-        if (!uploadResponse.ok) throw new Error(await uploadResponse.text());
-        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-        await upsertProfile(user.id, profileName ?? '', `${publicUrl}?t=${Date.now()}`);
-        await refreshProfile();
-      } catch (e: any) {
-        Alert.alert('Error', e?.message ?? JSON.stringify(e) ?? 'Failed to update photo.');
-      }
+  }
+
+  async function handleConfirmAvatar(uri?: string) {
+    const avatarUri = uri ?? pendingAvatarUri;
+    if (!avatarUri || !user) return;
+    setUploadingAvatar(true);
+    try {
+      const path = `${user.id}/avatar.jpg`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append('file', { uri: avatarUri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
+      const uploadResponse = await fetch(
+        `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/avatars/${path}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'x-upsert': 'true',
+          },
+          body: formData,
+        }
+      );
+      if (!uploadResponse.ok) throw new Error(await uploadResponse.text());
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      await upsertProfile(user.id, profileName ?? '', `${publicUrl}?t=${Date.now()}`);
+      await refreshProfile();
+      setPendingAvatarUri(null);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? JSON.stringify(e) ?? 'Failed to update photo.');
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -492,6 +500,46 @@ export default function AccountScreen() {
       {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} />}
 
       {/* Following / Followers Modal */}
+      {/* Avatar preview / confirm modal */}
+      <Modal
+        visible={pendingAvatarUri !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPendingAvatarUri(null)}
+      >
+        <View style={styles.avatarModalOverlay}>
+          <View style={[styles.avatarModalCard, { backgroundColor: colors.bgCard }]}>
+            <Text style={[styles.avatarModalTitle, { color: colors.textPrimary }]}>Use this photo?</Text>
+            <View style={[styles.avatarModalPreview, { borderColor: colors.accent }]}>
+              {pendingAvatarUri && (
+                <Image source={{ uri: pendingAvatarUri }} style={styles.avatarModalImage} />
+              )}
+            </View>
+            <View style={styles.avatarModalButtons}>
+              <TouchableOpacity
+                onPress={() => setPendingAvatarUri(null)}
+                style={[styles.avatarModalBtn, { borderColor: colors.border }]}
+                activeOpacity={0.7}
+                disabled={uploadingAvatar}
+              >
+                <Text style={[styles.avatarModalBtnText, { color: colors.textSecondary }]}>Choose Different</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmAvatar}
+                style={[styles.avatarModalBtn, styles.avatarModalBtnPrimary, { backgroundColor: colors.accent }]}
+                activeOpacity={0.7}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={[styles.avatarModalBtnText, { color: '#fff' }]}>Use Photo</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={followListModal !== null}
         animationType="slide"
@@ -530,7 +578,15 @@ export default function AccountScreen() {
             ) : (
               <ScrollView contentContainerStyle={styles.followModalList}>
                 {list.map(p => (
-                  <View key={p.id} style={[styles.followModalRow, { borderBottomColor: colors.border }]}>
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.followModalRow, { borderBottomColor: colors.border }]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setFollowListModal(null);
+                      viewFriendProfile(p);
+                    }}
+                  >
                     <View style={[styles.followModalAvatar, { backgroundColor: colors.accentSoft }]}>
                       <Text style={[styles.followModalAvatarText, { color: colors.accent }]}>
                         {(p.name ?? '?')[0].toUpperCase()}
@@ -540,7 +596,7 @@ export default function AccountScreen() {
                       <Text style={[styles.followModalName, { color: colors.textPrimary }]}>{p.name}</Text>
                       {p.username ? <Text style={[styles.followModalUsername, { color: colors.textMuted }]}>@{p.username}</Text> : null}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             );
@@ -1303,6 +1359,54 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: SPACING.xl,
   },
+  avatarModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarModalCard: {
+    width: 300,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    gap: 20,
+  },
+  avatarModalTitle: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.semibold,
+  },
+  avatarModalPreview: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 3,
+    overflow: 'hidden',
+  },
+  avatarModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  avatarModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarModalBtnPrimary: {
+    borderWidth: 0,
+  },
+  avatarModalBtnText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.semibold,
+  },
   avatarCircle: {
     width: 80,
     height: 80,
@@ -1379,6 +1483,7 @@ const styles = StyleSheet.create({
   followModalTabs: {
     flexDirection: 'row',
     flex: 1,
+    paddingLeft: SPACING.md,
   },
   followModalTab: {
     paddingHorizontal: SPACING.lg,
