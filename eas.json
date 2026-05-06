@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -9,18 +10,27 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "ios": {
         "simulator": false
       }
     },
     "production": {
       "autoIncrement": true,
+      "channel": "production",
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "env": {
+        "SENTRY_ALLOW_FAILURE": "true"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6762497120"
+      }
+    }
   }
 }
