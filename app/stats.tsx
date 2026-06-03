@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
-import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES } from '../utils/theme';
+import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
-import { getAllClimbs, getAllSessions } from '../utils/storage';
+import { useNav } from '../utils/NavigationContext';
+import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions } from '../utils/storage';
 import { gradeToNum } from '../utils/gradeUtils';
+import { supabase } from '../utils/supabase';
 import { EmptyState } from '../components/UI';
 import { parseISO, differenceInDays } from 'date-fns';
 
@@ -18,10 +20,13 @@ const PAD = { top: 8, bottom: 24, left: 32, right: 8 };
 function gradeNum(c: Climb): number {
   return gradeToNum(c.grade, c.gradeSystem);
 }
+const ROPE_TYPES = ['top_rope', 'sport', 'trad', 'auto_belay'];
+
 function hardestSend(climbs: Climb[], system: string): Climb | undefined {
+  const types = system === 'v-scale' ? ['boulder'] : system === 'font' ? ['boulder'] : ROPE_TYPES;
   return [...climbs]
-    .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && c.gradeSystem === system)
-    .sort((a, b) => gradeNum(b) - gradeNum(a))[0];
+    .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && c.gradeSystem === system && types.includes(c.type))
+    .sort((a, b) => getGradeDifficulty(b.grade, b.gradeSystem) - getGradeDifficulty(a.grade, a.gradeSystem))[0];
 }
 function numToLabel(n: number, sys: string): string {
   if (sys === 'v-scale') {
@@ -41,19 +46,63 @@ function numToLabel(n: number, sys: string): string {
 
 export default function StatsScreen() {
   const { colors } = useTheme();
+  const { screen } = useNav();
   const [climbs, setClimbs] = useState<Climb[]>([]);
   const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>({});
   const [sessionCount, setSessionCount] = useState(0);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    // Pull fresh data from Supabase so stats always reflect the latest cloud state
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const userId = session.user.id;
+      const [climbsRes, sessionsRes] = await Promise.all([
+        supabase.from('climbs').select('*').eq('user_id', userId),
+        supabase.from('sessions').select('*').eq('user_id', userId),
+      ]);
+      if (climbsRes.data) {
+        const mapped: Climb[] = climbsRes.data.map((r: any) => ({
+          id: r.id, date: r.date, sessionId: r.session_id,
+          type: r.type, outcome: r.outcome, styles: r.styles ?? [],
+          environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
+          routeName: r.route_name ?? undefined, location: r.location ?? undefined,
+          notes: r.notes ?? undefined, attempts: r.attempts ?? 1,
+          projectId: r.project_id ?? undefined, projectName: r.project_name ?? undefined,
+          mediaUri: r.media_uri ?? undefined, mediaType: r.media_type ?? undefined,
+          mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
+        }));
+        await bulkSaveClimbs(mapped);
+      }
+      if (sessionsRes.data) {
+        const mapped = sessionsRes.data.map((r: any) => ({
+          id: r.id, date: r.date, environment: r.environment,
+          location: r.location ?? undefined, notes: r.notes ?? undefined,
+          startedAt: r.started_at ?? undefined, endedAt: r.ended_at ?? undefined,
+          lastClimbAt: r.last_climb_at ?? undefined, friends: r.friends ?? undefined,
+          mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
+          mediaUri: r.media_uris?.[0] ?? undefined, mediaType: r.media_types?.[0] ?? undefined,
+        }));
+        await bulkSaveSessions(mapped);
+      }
+    }
+
+    const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+    setClimbs(allClimbs);
+    setSessionCount(allSessions.length);
+    const map: Record<string, string> = {};
+    allSessions.forEach(s => { map[s.id] = s.date; });
+    setSessionDateMap(map);
+  }, []);
 
   useEffect(() => {
-    getAllClimbs().then(setClimbs);
-    getAllSessions().then(sessions => {
-      setSessionCount(sessions.length);
-      const map: Record<string, string> = {};
-      sessions.forEach(s => { map[s.id] = s.date; });
-      setSessionDateMap(map);
-    });
-  }, []);
+    if (screen === 'stats') loadData();
+  }, [screen]);
+
+  useEffect(() => {
+    setStatsRefreshCallback(loadData);
+    return () => setStatsRefreshCallback(null);
+  }, [loadData]);
 
   const computed = useMemo(() => {
     if (climbs.length === 0) return null;
@@ -144,16 +193,19 @@ export default function StatsScreen() {
     const outdoorSends = sends.filter(c => c.environment === 'outdoor').length;
 
     const dominantSys = systems[0];
-    const sendsByDate: Record<string, Climb[]> = {};
-    sends.filter(c => c.gradeSystem === dominantSys).forEach(c => {
-      const day = (c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10);
-      if (!sendsByDate[day]) sendsByDate[day] = [];
-      sendsByDate[day].push(c);
+    const climbsBySession: Record<string, { date: string; climbs: Climb[] }> = {};
+    climbs.filter(c => c.gradeSystem === dominantSys).forEach(c => {
+      const key = c.sessionId || c.date.slice(0, 10);
+      const date = (c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10);
+      if (!climbsBySession[key]) climbsBySession[key] = { date, climbs: [] };
+      climbsBySession[key].climbs.push(c);
     });
-    const chartPoints = Object.keys(sendsByDate).sort().map(date => {
-      const best = [...sendsByDate[date]].sort((a, b) => gradeNum(b) - gradeNum(a))[0];
-      return { date, val: gradeNum(best) };
-    });
+    const chartPoints = Object.values(climbsBySession)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(({ date, climbs: sc }) => {
+        const avg = sc.reduce((sum, c) => sum + gradeNum(c), 0) / sc.length;
+        return { date, val: avg };
+      });
     const chartVals = chartPoints.map(p => p.val);
     const minVal = Math.min(...chartVals);
     const maxVal = Math.max(...chartVals);
@@ -278,7 +330,7 @@ export default function StatsScreen() {
           const SMALL_SIZE = (gridW - SPACING.sm * 2) / 3;
 
           function Square({ id, label, size }: { id: string; label: string; size: number }) {
-            const best = [...sends].filter(c => c.type === id).sort((a, b) => gradeNum(b) - gradeNum(a))[0];
+            const best = [...sends].filter(c => c.type === id).sort((a, b) => getGradeDifficulty(b.grade, b.gradeSystem) - getGradeDifficulty(a.grade, a.gradeSystem))[0];
             const hasData = !!best;
             const fontSize = size > 130 ? 28 : size > 90 ? FONTS.sizes.xl : FONTS.sizes.md;
             return (
@@ -355,7 +407,7 @@ export default function StatsScreen() {
         {chartPoints.length >= 2 && (
           <View style={{ marginTop: SPACING.lg }}>
             <Text style={[ss.chartCaption, { color: colors.textMuted }]}>
-              Best {dominantSys === 'v-scale' ? 'boulder' : 'route'} send per session
+              Avg {dominantSys === 'v-scale' ? 'boulder' : 'route'} grade tried per session
             </Text>
             <Svg width={CHART_W} height={CHART_H}>
               {[0, 0.5, 1].map(t => {
@@ -397,13 +449,14 @@ export default function StatsScreen() {
           const count = typeCounts[t.id] || 0;
           const pct = count / maxTypeCount;
           return (
-            <View key={t.id} style={ss.typeRow}>
+            <TouchableOpacity key={t.id} style={ss.typeRow} onPress={() => setSelectedType(t.id)} activeOpacity={0.7}>
               <Text style={[ss.typeName, { color: colors.textSecondary }]}>{t.label}</Text>
               <View style={[ss.typeTrack, { backgroundColor: colors.bgElevated }]}>
                 <View style={[ss.typeFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: colors.accent + '88' }]} />
               </View>
               <Text style={[ss.typeCount, { color: colors.textMuted }]}>{count}</Text>
-            </View>
+              <Text style={[ss.typeChevron, { color: colors.textMuted }]}>›</Text>
+            </TouchableOpacity>
           );
         })}
 
@@ -470,7 +523,6 @@ export default function StatsScreen() {
           const items = [
             { label: 'Longest streak', value: String(longestStreak), unit: longestStreak === 1 ? 'week' : 'weeks' },
             ...(mostActiveMonth ? [{ label: 'Best month', value: mostActiveMonth, unit: '' }] : []),
-            ...(favLocation ? [{ label: 'Favourite spot', value: favLocation, unit: '' }] : []),
           ];
           return (
             <View style={ss.insightRow}>
@@ -489,9 +541,92 @@ export default function StatsScreen() {
             </View>
           );
         })()}
+        {favLocation && (
+          <>
+            <Text style={[ss.insightSubhead, { color: colors.textMuted }]}>FAVOURITE SPOT</Text>
+            <View style={{ marginBottom: SPACING.lg }}>
+              <Text style={[ss.insightVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{favLocation}</Text>
+            </View>
+          </>
+        )}
 
         <View style={{ height: SPACING.xxl * 2 }} />
       </ScrollView>
+
+      {/* ── Grade breakdown modal ── */}
+      <Modal
+        visible={selectedType !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedType(null)}
+      >
+        <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
+          {(() => {
+            if (!selectedType) return null;
+            const typeInfo = CLIMB_TYPES.find(t => t.id === selectedType);
+            const typeClimbs = climbs.filter(c => c.type === selectedType);
+            const gradeCounts: Record<string, { total: number; sends: number; system: string }> = {};
+            typeClimbs.forEach(c => {
+              if (!gradeCounts[c.grade]) gradeCounts[c.grade] = { total: 0, sends: 0, system: c.gradeSystem };
+              gradeCounts[c.grade].total += 1;
+              if (c.outcome === 'send' || c.outcome === 'flash') gradeCounts[c.grade].sends += 1;
+            });
+            const gradeEntries = Object.entries(gradeCounts).sort((a, b) =>
+              getGradeDifficulty(b[0], b[1].system) - getGradeDifficulty(a[0], a[1].system)
+            );
+            const maxCount = Math.max(...gradeEntries.map(([, v]) => v.total), 1);
+            const accentColor = CLIMB_TYPES.find(t => t.id === selectedType)?.color ?? colors.accent;
+
+            return (
+              <>
+                <View style={ss.modalHeader}>
+                  <TouchableOpacity onPress={() => setSelectedType(null)} style={ss.modalClose}>
+                    <Text style={[ss.modalCloseText, { color: colors.textMuted }]}>Done</Text>
+                  </TouchableOpacity>
+                  <Text style={[ss.modalTitle, { color: colors.textPrimary }]}>{typeInfo?.label ?? selectedType}</Text>
+                  <Text style={[ss.modalSubtitle, { color: colors.textMuted }]}>{typeClimbs.length} climbs</Text>
+                </View>
+                {gradeEntries.length === 0 ? (
+                  <View style={ss.modalEmpty}>
+                    <Text style={[ss.modalEmptyText, { color: colors.textMuted }]}>No climbs logged</Text>
+                  </View>
+                ) : (
+                  <ScrollView contentContainerStyle={ss.modalScroll} showsVerticalScrollIndicator={false}>
+                    <Text style={[ss.modalSectionLabel, { color: colors.textMuted }]}>GRADE BREAKDOWN</Text>
+                    {gradeEntries.map(([grade, { total, sends }]) => (
+                      <View key={grade} style={ss.gradeRow}>
+                        <Text style={[ss.gradeLabel, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>{grade}</Text>
+                        <View style={ss.gradeBarWrap}>
+                          <View style={[ss.gradeTrack, { backgroundColor: colors.bgElevated }]}>
+                            <View style={[ss.gradeFill, { width: `${Math.round((total / maxCount) * 100)}%`, backgroundColor: accentColor + 'AA' }]} />
+                            {sends > 0 && (
+                              <View style={[ss.gradeSendFill, { width: `${Math.round((sends / maxCount) * 100)}%`, backgroundColor: accentColor }]} />
+                            )}
+                          </View>
+                        </View>
+                        <Text style={[ss.gradeCount, { color: colors.textSecondary }]}>{total}</Text>
+                        {sends > 0 && (
+                          <Text style={[ss.gradeSends, { color: accentColor, fontFamily: FONTS.family.semibold }]}>{sends}✓</Text>
+                        )}
+                      </View>
+                    ))}
+                    <View style={ss.gradeLegend}>
+                      <View style={ss.legendItem}>
+                        <View style={[ss.legendDot, { backgroundColor: accentColor }]} />
+                        <Text style={[ss.legendText, { color: colors.textMuted }]}>Sends</Text>
+                      </View>
+                      <View style={ss.legendItem}>
+                        <View style={[ss.legendDot, { backgroundColor: accentColor + 'AA' }]} />
+                        <Text style={[ss.legendText, { color: colors.textMuted }]}>Attempts</Text>
+                      </View>
+                    </View>
+                  </ScrollView>
+                )}
+              </>
+            );
+          })()}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -528,7 +663,7 @@ const ss = StyleSheet.create({
 
   // Environment
   envRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.md },
-  envLabel: { fontSize: FONTS.sizes.sm, width: 56 },
+  envLabel: { fontSize: FONTS.sizes.sm, minWidth: 56 },
   envTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   envFill: { height: '100%', borderRadius: 3 },
   envPct: { fontSize: FONTS.sizes.xs, width: 28, textAlign: 'right' },
@@ -556,6 +691,31 @@ const ss = StyleSheet.create({
   typeTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   typeFill: { height: '100%', borderRadius: 3 },
   typeCount: { fontSize: FONTS.sizes.xs, width: 24, textAlign: 'right' },
+  typeChevron: { fontSize: FONTS.sizes.lg, width: 16, textAlign: 'right' },
+
+  // Grade breakdown modal
+  modalContainer: { flex: 1 },
+  modalHeader: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md, alignItems: 'center' },
+  modalClose: { alignSelf: 'flex-end' },
+  modalCloseText: { fontSize: FONTS.sizes.sm },
+  modalTitle: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.family.bold, marginTop: SPACING.sm },
+  modalSubtitle: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
+  modalScroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
+  modalSectionLabel: { fontSize: FONTS.sizes.xs, letterSpacing: 1.5, fontFamily: FONTS.family.semibold, marginBottom: SPACING.lg, marginTop: SPACING.md },
+  modalEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  modalEmptyText: { fontSize: FONTS.sizes.md },
+  gradeRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+  gradeLabel: { fontSize: FONTS.sizes.sm, width: 52 },
+  gradeBarWrap: { flex: 1 },
+  gradeTrack: { height: 8, borderRadius: 4, overflow: 'hidden', position: 'relative' },
+  gradeFill: { position: 'absolute', left: 0, top: 0, height: '100%', borderRadius: 4 },
+  gradeSendFill: { position: 'absolute', left: 0, top: 0, height: '100%', borderRadius: 4 },
+  gradeCount: { fontSize: FONTS.sizes.xs, width: 20, textAlign: 'right' },
+  gradeSends: { fontSize: FONTS.sizes.xs, width: 32, textAlign: 'right' },
+  gradeLegend: { flexDirection: 'row', gap: SPACING.lg, marginTop: SPACING.xl },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: FONTS.sizes.xs },
 
   // Insights
   insightRow: { flexDirection: 'row', marginBottom: SPACING.lg },
