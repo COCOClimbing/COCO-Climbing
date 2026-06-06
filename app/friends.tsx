@@ -14,7 +14,6 @@ import {
   PanResponder,
   Animated,
   Dimensions,
-  Linking,
   Share,
   KeyboardAvoidingView,
   Platform,
@@ -749,18 +748,11 @@ export default function FriendsScreen() {
   async function handleShareToStories() {
     try {
       const uri = await captureCurrentShareCard();
-      const isTransparent = SHARE_CARDS[shareCardIndex].transparent;
-      const param = isTransparent ? 'stickerImage' : 'backgroundImage';
-      const instagramUrl = `instagram-stories://share?${param}=${encodeURIComponent(uri)}&backgroundTopColor=%230A0A0A&backgroundBottomColor=%230A0A0A`;
-      const canOpen = await Linking.canOpenURL(instagramUrl);
-      if (canOpen) {
-        await Linking.openURL(instagramUrl);
-        setShareEntry(null);
-      } else {
-        Alert.alert('Instagram not found', 'Instagram doesn\'t appear to be installed on this device.');
-      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share to Instagram Stories' });
     } catch {
-      Alert.alert('Error', 'Could not share to Instagram Stories.');
+      Alert.alert('Error', 'Could not share the session card.');
+    } finally {
+      setShareEntry(null);
     }
   }
 
