@@ -7,12 +7,16 @@ export type NotificationPrefs = {
   session_tag: boolean;
   likes: boolean;
   comments: boolean;
+  new_follower: boolean;
+  follow_request: boolean;
 };
 
 const DEFAULTS: NotificationPrefs = {
   session_tag: true,
   likes: true,
   comments: true,
+  new_follower: true,
+  follow_request: true,
 };
 
 export async function getNotificationPrefs(userId: string): Promise<NotificationPrefs> {
