@@ -12,9 +12,9 @@ function toR2Url(url: string): string {
   return R2_BASE + url.slice(SUPABASE_STORAGE_PREFIX.length);
 }
 
-export async function migrateLocalMediaUrls(): Promise<void> {
+export async function migrateLocalMediaUrls(): Promise<boolean> {
   const done = await AsyncStorage.getItem(R2_MIGRATION_FLAG);
-  if (done) return;
+  if (done) return false;
 
   const [climbs, sessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
 
@@ -38,6 +38,7 @@ export async function migrateLocalMediaUrls(): Promise<void> {
   ]);
 
   await AsyncStorage.setItem(R2_MIGRATION_FLAG, '1');
+  return true;
 }
 import { Climb, Session } from './theme';
 

@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
-import { setCloudUserId } from './storage';
+import { setCloudUserId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
@@ -63,9 +63,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Safety net: if INITIAL_SESSION never fires (e.g. network timeout), unblock the splash after 8s
     const timeout = setTimeout(() => setLoading(false), 8000);
 
+    // Run local media migration whenever the app comes to foreground
+    const appStateSub = AppState.addEventListener('change', async (state) => {
+      if (state === 'active') {
+        const migrated = await migrateLocalMediaUrls();
+        if (migrated) {
+          triggerSessionsRefresh();
+          triggerProjectsRefresh();
+          triggerStatsRefresh();
+        }
+      }
+    });
+
     return () => {
       subscription.unsubscribe();
       clearTimeout(timeout);
+      appStateSub.remove();
     };
   }, []);
 
@@ -130,7 +143,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSyncOnLogin(userId: string) {
     try {
-      await migrateLocalMediaUrls();
+      const migrated = await migrateLocalMediaUrls();
+      if (migrated) {
+        triggerSessionsRefresh();
+        triggerProjectsRefresh();
+        triggerStatsRefresh();
+      }
       await reuploadMissingMedia(userId);
       await mergeData(userId);
     } catch (e) {
