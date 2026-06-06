@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
   },
@@ -145,9 +145,10 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
   },
   tagline: {
-    fontSize: FONTS.sizes.xs,
+    fontSize: 9,
     fontFamily: FONTS.family.regular,
     letterSpacing: 0.5,
+    paddingBottom: 2,
   },
   dateBlock: {
     gap: 2,
