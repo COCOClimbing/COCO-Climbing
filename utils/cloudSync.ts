@@ -3,13 +3,12 @@ import { supabase } from './supabase';
 import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh } from './storage';
 import { uploadMedia } from './mediaUpload';
 
-const SUPABASE_STORAGE_PREFIX = 'https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/public/climbs/';
-const R2_BASE = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev/';
-const R2_MIGRATION_FLAG = 'coco_r2_migration_v2';
+const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
+const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
 
-function toR2Url(url: string): string {
-  if (!url.startsWith(SUPABASE_STORAGE_PREFIX)) return url;
-  return R2_BASE + url.slice(SUPABASE_STORAGE_PREFIX.length);
+// Returns true if a URL points to deleted Supabase Storage (bucket was wiped)
+export function isDeadMediaUrl(url: string): boolean {
+  return url.includes(SUPABASE_STORAGE_HOST);
 }
 
 export async function migrateLocalMediaUrls(): Promise<boolean> {
@@ -20,16 +19,16 @@ export async function migrateLocalMediaUrls(): Promise<boolean> {
 
   const migratedClimbs = climbs.map(c => {
     const uris = c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []);
-    if (uris.length === 0 || uris.every(u => !u.startsWith(SUPABASE_STORAGE_PREFIX))) return c;
-    const newUris = uris.map(toR2Url);
-    return { ...c, mediaUris: newUris, mediaUri: newUris[0] };
+    const liveUris = uris.filter(u => !isDeadMediaUrl(u));
+    if (liveUris.length === uris.length) return c;
+    return { ...c, mediaUris: liveUris.length > 0 ? liveUris : undefined, mediaUri: liveUris[0] };
   });
 
   const migratedSessions = sessions.map(s => {
     const uris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
-    if (uris.length === 0 || uris.every(u => !u.startsWith(SUPABASE_STORAGE_PREFIX))) return s;
-    const newUris = uris.map(toR2Url);
-    return { ...s, mediaUris: newUris, mediaUri: newUris[0] };
+    const liveUris = uris.filter(u => !isDeadMediaUrl(u));
+    if (liveUris.length === uris.length) return s;
+    return { ...s, mediaUris: liveUris.length > 0 ? liveUris : undefined, mediaUri: liveUris[0] };
   });
 
   await Promise.all([

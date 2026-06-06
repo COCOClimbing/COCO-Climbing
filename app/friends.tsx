@@ -34,6 +34,7 @@ import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, V_GRADES, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
+import { isDeadMediaUrl } from '../utils/cloudSync';
 import ClimbCard from '../components/ClimbCard';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import {
@@ -834,7 +835,8 @@ export default function FriendsScreen() {
               return { ...raw, avatar_url: match?.avatar_url ?? null };
             })
           : undefined;
-        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing
+        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing.
+        // Filter out dead Supabase Storage URLs (bucket was wiped during R2 migration).
         const sessionLevelUris = (dbSessionMedia[s.id]?.length ?? 0) > 0
           ? dbSessionMedia[s.id]
           : (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []));
@@ -844,7 +846,7 @@ export default function FriendsScreen() {
             const dbUris = dbClimbMedia[c.id];
             return (dbUris?.length ?? 0) > 0 ? dbUris : (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []));
           }),
-        ];
+        ].filter(u => !isDeadMediaUrl(u));
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
         summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined });
@@ -871,8 +873,8 @@ export default function FriendsScreen() {
           hardestGradeSystem = gradedClimbs[0].grade_system;
         }
         const sessionPhotos = [
-          ...((s.media_uris ?? []) as string[]).filter((u: string) => u.startsWith('http')),
-          ...climbs.flatMap((c: any) => (c.media_uris ?? (c.media_uri ? [c.media_uri] : [])) as string[]).filter((u: string) => u.startsWith('http')),
+          ...((s.media_uris ?? []) as string[]).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u)),
+          ...climbs.flatMap((c: any) => (c.media_uris ?? (c.media_uri ? [c.media_uri] : [])) as string[]).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u)),
         ];
         const rawFriends: { id: string; name: string }[] = s.friends ?? [];
         const partnerIds = rawFriends.map((f: any) => f.id).filter((id: string) => id !== s.user_id);
@@ -970,8 +972,8 @@ export default function FriendsScreen() {
               const environment = sessionClimbs[0]?.environment ?? 'indoor';
               const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
               const climbType = hardestClimb?.type ?? undefined;
-              const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http'));
-              const sessionLevelPhotos = friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : [];
+              const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
+              const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
               const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
               const rawFriends: { id: string; name: string }[] = friendSessionId ? (sessionFriendsMap.get(friendSessionId) ?? []) : [];
               const partnerIds = rawFriends.map((p: any) => p.id).filter((id: string) => id !== f.id);
