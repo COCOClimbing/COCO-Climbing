@@ -58,8 +58,9 @@ Deno.serve(async (req) => {
       type === 'session_tag'    ? 'session_tag'    :
       type === 'like'           ? 'likes'          :
       type === 'comment'        ? 'comments'       :
-      type === 'new_follower'   ? 'new_follower'   :
-      type === 'follow_request' ? 'follow_request' :
+      type === 'new_follower'            ? 'new_follower'   :
+      type === 'follow_request_accepted' ? 'new_follower'   :
+      type === 'follow_request'          ? 'follow_request' :
       null
 
     let filteredIds = ids
@@ -121,6 +122,11 @@ Deno.serve(async (req) => {
         title = 'New follower'
         body = `${senderName} is now following you`
         data = { followerId: senderId ?? user.id, type }
+        break
+      case 'follow_request_accepted':
+        title = 'Follow request accepted'
+        body = `${senderName} accepted your follow request`
+        data = { senderId: senderId ?? user.id, type }
         break
       case 'comment_like':
         title = 'Comment liked'

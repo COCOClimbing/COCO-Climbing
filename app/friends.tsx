@@ -68,7 +68,7 @@ import {
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
-import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendCommentLikeNotification } from '../utils/notifications';
+import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -291,7 +291,7 @@ function FriendDetailView({
         const req = requests.find(r => r.sender_id === friend.id);
         if (req) {
           await acceptFriendRequest(req.id);
-          sendNewFollowerNotification(friend.id, user.id).catch(() => {});
+          sendFollowRequestAcceptedNotification(friend.id, user.id).catch(() => {});
         }
         setFriendStatus('accepted');
       }
@@ -1084,7 +1084,7 @@ export default function FriendsScreen() {
       await refreshPendingCount();
       loadFeed();
       if (req && user) {
-        sendNewFollowerNotification(req.sender_id, user.id).catch(() => {});
+        sendFollowRequestAcceptedNotification(req.sender_id, user.id).catch(() => {});
       }
     } catch {
       Alert.alert('Error', 'Failed to accept request.');
