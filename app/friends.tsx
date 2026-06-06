@@ -793,6 +793,24 @@ export default function FriendsScreen() {
       const activeSessionId = getActiveSessionId();
       const recentSessions = allSessions.filter(s => normDate(s.date) >= cutoff && s.id !== activeSessionId);
       const selfProfile = { id: user.id, name: 'You', username: username ?? '', avatar_url: avatarUrl };
+
+      // Fetch own session/climb media from DB — guaranteed R2 URLs, bypasses stale local cache
+      const recentSessionIds = recentSessions.map(s => s.id);
+      const [{ data: dbOwnSessions }, { data: dbOwnClimbs }] = await Promise.all(
+        recentSessionIds.length > 0
+          ? [
+              supabase.from('sessions').select('id, media_uris').in('id', recentSessionIds),
+              supabase.from('climbs').select('id, media_uris').in('session_id', recentSessionIds),
+            ]
+          : [Promise.resolve({ data: [] }), Promise.resolve({ data: [] })]
+      );
+      const dbSessionMedia: Record<string, string[]> = Object.fromEntries(
+        (dbOwnSessions ?? []).map((r: any) => [r.id, ((r.media_uris ?? []) as string[]).filter(u => u.startsWith('http'))])
+      );
+      const dbClimbMedia: Record<string, string[]> = Object.fromEntries(
+        (dbOwnClimbs ?? []).map((r: any) => [r.id, ((r.media_uris ?? []) as string[]).filter(u => u.startsWith('http'))])
+      );
+
       recentSessions.forEach(s => {
         const sessionClimbs = allClimbs.filter(c => c.sessionId === s.id);
         if (sessionClimbs.length === 0) return;
@@ -816,9 +834,16 @@ export default function FriendsScreen() {
               return { ...raw, avatar_url: match?.avatar_url ?? null };
             })
           : undefined;
+        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing
+        const sessionLevelUris = (dbSessionMedia[s.id]?.length ?? 0) > 0
+          ? dbSessionMedia[s.id]
+          : (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []));
         const sessionPhotos = [
-          ...(s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])),
-          ...sessionClimbs.flatMap(c => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])),
+          ...sessionLevelUris,
+          ...sessionClimbs.flatMap(c => {
+            const dbUris = dbClimbMedia[c.id];
+            return (dbUris?.length ?? 0) > 0 ? dbUris : (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []));
+          }),
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
