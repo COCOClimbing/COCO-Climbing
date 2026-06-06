@@ -277,13 +277,21 @@ function FriendDetailView({
         const { error } = await sendFriendRequest(user.id, friend.id, friend.is_private ?? false);
         if (error) throw new Error(error);
         setFriendStatus(friend.is_private ? 'pending_sent' : 'accepted');
+        if (friend.is_private) {
+          sendFollowRequestNotification(friend.id, user.id).catch(() => {});
+        } else {
+          sendNewFollowerNotification(friend.id, user.id).catch(() => {});
+        }
       } else if (friendStatus === 'accepted') {
         await removeFriend(user.id, friend.id);
         setFriendStatus('none');
       } else if (friendStatus === 'pending_received') {
         const requests = await getPendingRequests(user.id);
         const req = requests.find(r => r.sender_id === friend.id);
-        if (req) await acceptFriendRequest(req.id);
+        if (req) {
+          await acceptFriendRequest(req.id);
+          sendNewFollowerNotification(friend.id, user.id).catch(() => {});
+        }
         setFriendStatus('accepted');
       }
       await loadCounts();
