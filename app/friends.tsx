@@ -695,10 +695,10 @@ export default function FriendsScreen() {
   const feedScrollY = useRef(0);
   const SCREEN_WIDTH = Dimensions.get('window').width;
   const SHARE_CARDS = [
-    { label: 'Card',                transparent: false, vertical: true,  strava: false, stravasolid: false },
-    { label: 'Transparent Card',    transparent: true,  vertical: true,  strava: false, stravasolid: false },
-    { label: 'Sticker',             transparent: false, vertical: false, strava: true,  stravasolid: true  },
-    { label: 'Transparent Sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
+    { label: 'Card',                hint: null,                          transparent: false, vertical: true,  strava: false, stravasolid: false },
+    { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false },
+    { label: 'Sticker',             hint: null,                          transparent: false, vertical: false, strava: true,  stravasolid: true  },
+    { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
   ];
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1945,6 +1945,7 @@ export default function FriendsScreen() {
                   ))}
                 </ViewShot>
                 <Text style={[styles.shareCardLabel, { color: 'rgba(255,255,255,0.5)' }]}>{card.label}</Text>
+                {card.hint ? <Text style={[styles.shareCardHint, { color: 'rgba(255,255,255,0.3)' }]}>{card.hint}</Text> : null}
               </View>
             ))}
           </ScrollView>
@@ -2607,6 +2608,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.regular,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  shareCardHint: {
+    marginTop: 2,
+    fontSize: 10,
+    fontFamily: FONTS.family.regular,
+    textAlign: 'center',
   },
   shareDotsRow: {
     flexDirection: 'row',
