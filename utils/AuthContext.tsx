@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Alert } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
-import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia } from './cloudSync';
+import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
 import { setCloudUserId } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -130,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSyncOnLogin(userId: string) {
     try {
+      await migrateLocalMediaUrls();
       await reuploadMissingMedia(userId);
       await mergeData(userId);
     } catch (e) {

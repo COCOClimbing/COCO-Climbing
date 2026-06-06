@@ -2,6 +2,43 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject } from './storage';
 import { uploadMedia } from './mediaUpload';
+
+const SUPABASE_STORAGE_PREFIX = 'https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/public/climbs/';
+const R2_BASE = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev/';
+const R2_MIGRATION_FLAG = 'coco_r2_migration_v1';
+
+function toR2Url(url: string): string {
+  if (!url.startsWith(SUPABASE_STORAGE_PREFIX)) return url;
+  return R2_BASE + url.slice(SUPABASE_STORAGE_PREFIX.length);
+}
+
+export async function migrateLocalMediaUrls(): Promise<void> {
+  const done = await AsyncStorage.getItem(R2_MIGRATION_FLAG);
+  if (done) return;
+
+  const [climbs, sessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+
+  const migratedClimbs = climbs.map(c => {
+    const uris = c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []);
+    if (uris.length === 0 || uris.every(u => !u.startsWith(SUPABASE_STORAGE_PREFIX))) return c;
+    const newUris = uris.map(toR2Url);
+    return { ...c, mediaUris: newUris, mediaUri: newUris[0] };
+  });
+
+  const migratedSessions = sessions.map(s => {
+    const uris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
+    if (uris.length === 0 || uris.every(u => !u.startsWith(SUPABASE_STORAGE_PREFIX))) return s;
+    const newUris = uris.map(toR2Url);
+    return { ...s, mediaUris: newUris, mediaUri: newUris[0] };
+  });
+
+  await Promise.all([
+    bulkSaveClimbs(migratedClimbs),
+    bulkSaveSessions(migratedSessions),
+  ]);
+
+  await AsyncStorage.setItem(R2_MIGRATION_FLAG, '1');
+}
 import { Climb, Session } from './theme';
 
 // ─── Upload all local data to Supabase ───────────────────────────────────────
