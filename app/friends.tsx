@@ -778,10 +778,10 @@ export default function FriendsScreen() {
 
       const summaries: SessionSummary[] = [];
 
-      // Add user's own recent sessions (last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const cutoff = thirtyDaysAgo.toISOString().slice(0, 10);
+      // Add user's own recent sessions (last 14 days)
+      const fourteenDaysAgo = new Date();
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+      const cutoff = fourteenDaysAgo.toISOString().slice(0, 10);
       const activeSessionId = getActiveSessionId();
       const recentSessions = allSessions.filter(s => normDate(s.date) >= cutoff && s.id !== activeSessionId);
       const selfProfile = { id: user.id, name: 'You', username: username ?? '', avatar_url: avatarUrl };
@@ -966,10 +966,6 @@ export default function FriendsScreen() {
       });
       setActivityFeed(deduped);
 
-      // Prefetch session photos in the background so they're cached when rendered
-      deduped.forEach(e => {
-        e.sessionPhotos?.forEach(uri => Image.prefetch(uri));
-      });
 
       // Load likes & comments for sessions that have an ID
       deduped.forEach(e => {

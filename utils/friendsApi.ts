@@ -153,11 +153,11 @@ export async function removeFriend(userId: string, friendId: string): Promise<vo
     .eq('receiver_id', friendId);
 }
 
-// Get a friend's session IDs from the last 30 days
+// Get a friend's session IDs from the last 14 days
 export async function getFriendEndedSessionIds(friendId: string): Promise<Set<string>> {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const cutoff = fourteenDaysAgo.toISOString().split('T')[0];
 
   const { data } = await supabase
     .from('sessions')
@@ -167,11 +167,11 @@ export async function getFriendEndedSessionIds(friendId: string): Promise<Set<st
   return new Set((data ?? []).map((s: any) => s.id));
 }
 
-// Get a friend's climbs from the last 30 days
+// Get a friend's climbs from the last 14 days
 export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const cutoff = fourteenDaysAgo.toISOString().split('T')[0];
 
   const { data } = await supabase
     .from('climbs')
@@ -183,11 +183,11 @@ export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
   return data ?? [];
 }
 
-// Get a friend's recent sessions from the last 30 days (for media)
+// Get a friend's recent sessions from the last 14 days (for media)
 export async function getFriendRecentSessions(friendId: string): Promise<any[]> {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const cutoff = fourteenDaysAgo.toISOString().split('T')[0];
 
   const { data } = await supabase
     .from('sessions')
@@ -197,11 +197,11 @@ export async function getFriendRecentSessions(friendId: string): Promise<any[]> 
   return data ?? [];
 }
 
-// Get ended sessions from the last 30 days where userId was tagged, with the session owner's profile
+// Get ended sessions from the last 14 days where userId was tagged, with the session owner's profile
 export async function getTaggedSessions(userId: string): Promise<{ session: any; profile: any }[]> {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const cutoff = fourteenDaysAgo.toISOString().split('T')[0];
 
   const { data: sessions } = await supabase
     .from('sessions')
