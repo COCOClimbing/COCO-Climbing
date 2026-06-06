@@ -81,7 +81,7 @@ async function main() {
   console.log('\nMigrating session media...');
   const { data: sessions, error: sessionsErr } = await supabase
     .from('sessions')
-    .select('id, media_uris, media_uri')
+    .select('id, media_uris')
     .not('media_uris', 'is', null);
   if (sessionsErr) { console.error('Failed to fetch sessions:', sessionsErr.message); process.exit(1); }
 
@@ -90,7 +90,7 @@ async function main() {
     if (uris.every((u: string) => u.startsWith(R2_PUBLIC_BASE_URL))) continue;
     console.log(`Session ${session.id} (${uris.length} photo(s)):`);
     const newUris = await Promise.all(uris.map(migrateUrl));
-    await supabase.from('sessions').update({ media_uris: newUris, media_uri: newUris[0] }).eq('id', session.id);
+    await supabase.from('sessions').update({ media_uris: newUris }).eq('id', session.id);
   }
 
   // ── Avatar photos ─────────────────────────────────────────────────────────
