@@ -19,6 +19,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { upsertProfile } from '../utils/cloudSync';
+import { uploadMedia } from '../utils/mediaUpload';
 import { supabase } from '../utils/supabase';
 import { isUsernameAvailable, getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, ACCENT_COLORS, AccentId, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
@@ -309,21 +310,8 @@ export default function AccountScreen() {
     try {
       const path = `${user.id}/avatar.jpg`;
       const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.append('file', { uri: avatarUri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
-      const uploadResponse = await fetch(
-        `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/avatars/${path}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'x-upsert': 'true',
-          },
-          body: formData,
-        }
-      );
-      if (!uploadResponse.ok) throw new Error(await uploadResponse.text());
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      if (!session) throw new Error('Not authenticated');
+      const publicUrl = await uploadMedia(avatarUri, path, session.access_token);
       await upsertProfile(user.id, profileName ?? '', publicUrl);
       await refreshProfile();
       setPendingAvatarUri(null);

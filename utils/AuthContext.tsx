@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia } from './cloudSync';
+import { deleteMedia } from './mediaUpload';
 import { setCloudUserId } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -210,11 +211,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const uid = user.id;
 
-      // Delete avatar files from storage (not covered by DB cascade)
-      const { data: avatarFiles } = await supabase.storage.from('avatars').list(uid);
-      if (avatarFiles && avatarFiles.length > 0) {
-        const paths = avatarFiles.map(f => `${uid}/${f.name}`);
-        await supabase.storage.from('avatars').remove(paths);
+      // Delete avatar from R2 (not covered by DB cascade)
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      if (authSession) {
+        await deleteMedia(`${uid}/avatar.jpg`, authSession.access_token);
       }
 
       // Delete auth user — cascades to all related DB tables

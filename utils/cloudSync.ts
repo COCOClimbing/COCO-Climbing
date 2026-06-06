@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject } from './storage';
+import { uploadMedia } from './mediaUpload';
 import { Climb, Session } from './theme';
 
 // ─── Upload all local data to Supabase ───────────────────────────────────────
@@ -159,21 +160,10 @@ async function uploadClimbMedia(climb: Climb, userId: string): Promise<void> {
     try {
       const ext = type === 'video' ? 'mp4' : 'jpg';
       const path = `${userId}/${climb.id}_${i}.${ext}`;
-      const formData = new FormData();
-      formData.append('file', { uri, name: `climb.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
-      const res = await fetch(
-        `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
-        { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'x-upsert': 'true' }, body: formData }
-      );
-      if (res.ok) {
-        const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
-        newUris.push(publicUrl);
-        newTypes.push(type);
-        changed = true;
-      } else {
-        newUris.push(uri);
-        newTypes.push(type);
-      }
+      const url = await uploadMedia(uri, path, session.access_token);
+      newUris.push(url);
+      newTypes.push(type);
+      changed = true;
     } catch {
       newUris.push(uri);
       newTypes.push(type);
@@ -216,16 +206,8 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
         try {
           const ext = type === 'video' ? 'mp4' : 'jpg';
           const path = `${userId}/session_${session.id}_${i}.${ext}`;
-          const formData = new FormData();
-          formData.append('file', { uri, name: `session.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
-          const res = await fetch(
-            `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
-            { method: 'POST', headers: { Authorization: `Bearer ${authSession.access_token}`, 'x-upsert': 'true' }, body: formData }
-          );
-          if (res.ok) {
-            const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
-            newUris.push(publicUrl); newTypes.push(type); changed = true;
-          } else { newUris.push(uri); newTypes.push(type); }
+          const url = await uploadMedia(uri, path, authSession.access_token);
+          newUris.push(url); newTypes.push(type); changed = true;
         } catch { newUris.push(uri); newTypes.push(type); }
       }
       if (changed) {
@@ -412,21 +394,10 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/${climb.id}_${i}.${ext}`;
-        const formData = new FormData();
-        formData.append('file', { uri, name: `climb.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
-        const res = await fetch(
-          `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
-          { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'x-upsert': 'true' }, body: formData }
-        );
-        if (res.ok) {
-          const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
-          newUris.push(publicUrl);
-          newTypes.push(type);
-          changed = true;
-        } else {
-          newUris.push(uri);
-          newTypes.push(type);
-        }
+        const url = await uploadMedia(uri, path, session.access_token);
+        newUris.push(url);
+        newTypes.push(type);
+        changed = true;
       } catch {
         newUris.push(uri);
         newTypes.push(type);
@@ -479,16 +450,8 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/session_${s.id}_${i}.${ext}`;
-        const formData = new FormData();
-        formData.append('file', { uri, name: `session.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
-        const res = await fetch(
-          `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
-          { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'x-upsert': 'true' }, body: formData }
-        );
-        if (res.ok) {
-          const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
-          newUris.push(publicUrl); newTypes.push(type); changed = true;
-        } else { newUris.push(uri); newTypes.push(type); }
+        const url = await uploadMedia(uri, path, session.access_token);
+        newUris.push(url); newTypes.push(type); changed = true;
       } catch { newUris.push(uri); newTypes.push(type); }
     }
 
