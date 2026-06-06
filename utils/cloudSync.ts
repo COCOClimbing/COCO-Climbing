@@ -66,14 +66,17 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
         friends: s.friends ?? null,
         media_uris: uris.length > 0 ? uris : null,
         media_types: uris.length > 0 ? types : null,
+        ended_at: s.endedAt ?? null,
       };
     });
-    await supabase.from('sessions').upsert(rows, { onConflict: 'id' });
+    const { error: sessErr } = await supabase.from('sessions').upsert(rows, { onConflict: 'id' });
+    if (sessErr) console.warn('[uploadAllLocalData] sessions upsert failed:', sessErr.message, sessErr.code);
   }
 
   if (climbs.length > 0) {
     const rows = climbs.map(c => climbToRow(c, userId));
-    await supabase.from('climbs').upsert(rows, { onConflict: 'id' });
+    const { error: climbErr } = await supabase.from('climbs').upsert(rows, { onConflict: 'id' });
+    if (climbErr) console.warn('[uploadAllLocalData] climbs upsert failed:', climbErr.message, climbErr.code);
   }
 
   if (projects.length > 0) {
