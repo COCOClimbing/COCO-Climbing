@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
       type === 'session_tag'    ? 'session_tag'    :
       type === 'like'           ? 'likes'          :
       type === 'comment'        ? 'comments'       :
-      type === 'new_follower'            ? 'new_follower'   :
-      type === 'follow_request_accepted' ? 'new_follower'   :
-      type === 'follow_request'          ? 'follow_request' :
+      type === 'new_follower'            ? 'new_follower' :
+      type === 'follow_request_accepted' ? 'new_follower' :
+      type === 'follow_request'          ? 'new_follower' :
       null
 
     let filteredIds = ids

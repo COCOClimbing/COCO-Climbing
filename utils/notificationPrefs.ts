@@ -8,7 +8,6 @@ export type NotificationPrefs = {
   likes: boolean;
   comments: boolean;
   new_follower: boolean;
-  follow_request: boolean;
 };
 
 const DEFAULTS: NotificationPrefs = {
@@ -16,7 +15,6 @@ const DEFAULTS: NotificationPrefs = {
   likes: true,
   comments: true,
   new_follower: true,
-  follow_request: true,
 };
 
 export async function getNotificationPrefs(userId: string): Promise<NotificationPrefs> {

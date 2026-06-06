@@ -24,7 +24,7 @@ export default function SettingsScreen() {
   const [preferredRope, setPreferredRope] = useState<'yds' | 'french' | 'british'>('yds');
   const [privateToggle, setPrivateToggle] = useState(isPrivate);
   const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({ session_tag: true, likes: true, comments: true });
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({ session_tag: true, likes: true, comments: true, new_follower: true });
   const [savingNotif, setSavingNotif] = useState(false);
 
   useEffect(() => { setPrivateToggle(isPrivate); }, [isPrivate]);
@@ -252,8 +252,7 @@ export default function SettingsScreen() {
                   { key: 'session_tag' as const, label: 'Session Tags', hint: 'When someone tags you in a session' },
                   { key: 'comments' as const, label: 'Comments', hint: 'When someone comments on your session' },
                   { key: 'likes' as const, label: 'Likes', hint: 'When someone likes your session' },
-                  { key: 'new_follower' as const, label: 'New Followers', hint: 'When someone follows you or accepts your request' },
-                  { key: 'follow_request' as const, label: 'Follow Requests', hint: 'When someone requests to follow you' },
+                  { key: 'new_follower' as const, label: 'Followers & Following', hint: 'New followers, follow requests, and accepted requests' },
                 ] as const).map(({ key, label, hint }, i, arr) => (
                   <View key={key}>
                     {i > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
