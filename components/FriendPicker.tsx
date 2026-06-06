@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard, ScrollView,
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
-import { searchByUsername, FriendProfile } from '../utils/friendsApi';
+import { getFollowing, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING } from '../utils/theme';
 
 interface SelectedFriend { id: string; name: string; }
@@ -12,40 +12,43 @@ interface SelectedFriend { id: string; name: string; }
 interface Props {
   selected: SelectedFriend[];
   onChange: (friends: SelectedFriend[]) => void;
+  onFocus?: () => void;
+  onDropdownChange?: (open: boolean) => void;
+  dropup?: boolean;
 }
 
-export default function FriendPicker({ selected, onChange }: Props) {
+export default function FriendPicker({ selected, onChange, onFocus, onDropdownChange, dropup }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FriendProfile[]>([]);
+  const [following, setFollowing] = useState<FriendProfile[]>([]);
   const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Debounced live search
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const found = await searchByUsername(query.trim(), user?.id ?? '');
-        setResults(found.filter(f => !selected.some(s => s.id === f.id)));
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query, user?.id]);
+    if (!user) return;
+    setLoading(true);
+    getFollowing(user.id)
+      .then(setFollowing)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user?.id]);
 
-  const suggestions = results.filter(f => !selected.some(s => s.id === f.id));
+  const q = query.trim().toLowerCase();
+  const suggestions = following.filter(f =>
+    !selected.some(s => s.id === f.id) &&
+    (q === '' || f.name?.toLowerCase().includes(q) || f.username?.toLowerCase().includes(q))
+  );
+
+  useEffect(() => {
+    onDropdownChange?.(focused);
+  }, [focused]);
 
   function handleSelect(f: FriendProfile) {
+    Keyboard.dismiss();
     onChange([...selected, { id: f.id, name: f.name }]);
     setQuery('');
-    setResults([]);
+    setFocused(false);
   }
 
   function handleRemove(id: string) {
@@ -53,11 +56,11 @@ export default function FriendPicker({ selected, onChange }: Props) {
   }
 
   function handleBlur() {
-    setTimeout(() => setFocused(false), 150);
+    setTimeout(() => setFocused(false), 300);
   }
 
   return (
-    <View>
+    <View style={{ position: 'relative', zIndex: focused ? 100 : 1 }}>
       {/* Selected friend chips */}
       {selected.length > 0 && (
         <View style={styles.chips}>
@@ -81,9 +84,9 @@ export default function FriendPicker({ selected, onChange }: Props) {
           style={[styles.input, { color: colors.textPrimary }]}
           value={query}
           onChangeText={setQuery}
-          onFocus={() => setFocused(true)}
+          onFocus={() => { setFocused(true); onFocus?.(); }}
           onBlur={handleBlur}
-          placeholder="Search by username…"
+          placeholder="Search friends…"
           placeholderTextColor={colors.textMuted}
           returnKeyType="search"
           autoCorrect={false}
@@ -93,7 +96,7 @@ export default function FriendPicker({ selected, onChange }: Props) {
           ? <ActivityIndicator size="small" color={colors.textMuted} style={{ marginRight: SPACING.sm }} />
           : query.trim().length > 0
             ? (
-              <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }} style={{ marginRight: SPACING.sm }}>
+              <TouchableOpacity onPress={() => setQuery('')} style={{ marginRight: SPACING.sm }}>
                 <Text style={[styles.clearBtn, { color: colors.textMuted }]}>×</Text>
               </TouchableOpacity>
             )
@@ -102,10 +105,17 @@ export default function FriendPicker({ selected, onChange }: Props) {
       </View>
 
       {/* Dropdown results */}
-      {focused && query.trim().length > 0 && (
-        <View style={[styles.dropdown, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          {suggestions.length === 0 && !loading ? (
-            <Text style={[styles.empty, { color: colors.textMuted }]}>No users found</Text>
+      {focused && (
+        <ScrollView
+          style={[styles.dropdown, { backgroundColor: colors.bgCard, borderColor: colors.border }, dropup && styles.dropup]}
+          keyboardShouldPersistTaps="always"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+        >
+          {suggestions.length === 0 ? (
+            <Text style={[styles.empty, { color: colors.textMuted }]}>
+              {following.length === 0 ? 'Follow someone to tag them' : 'No matching friends'}
+            </Text>
           ) : (
             suggestions.map((f, i) => (
               <TouchableOpacity
@@ -121,12 +131,12 @@ export default function FriendPicker({ selected, onChange }: Props) {
                 </View>
                 <View style={styles.info}>
                   <Text style={[styles.name, { color: colors.textPrimary }]}>{f.name}</Text>
-                  <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text>
+                  {f.username ? <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text> : null}
                 </View>
               </TouchableOpacity>
             ))
           )}
-        </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -179,6 +189,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 4,
     overflow: 'hidden',
+    maxHeight: 220,
+  },
+  dropup: {
+    position: 'absolute',
+    bottom: '100%' as any,
+    left: 0,
+    right: 0,
+    marginTop: 0,
+    marginBottom: 4,
+    zIndex: 200,
+    elevation: 5,
   },
   empty: {
     fontSize: FONTS.sizes.sm,

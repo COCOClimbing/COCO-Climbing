@@ -114,16 +114,27 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
           ) : null}
 
           {/* Media */}
-          {climb.mediaUri ? (
-            <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[ss.sectionLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>MEDIA</Text>
-              <Image
-                source={{ uri: climb.mediaUri }}
-                style={ss.media}
-                resizeMode="cover"
-              />
-            </View>
-          ) : null}
+          {(() => {
+            const uris = climb.mediaUris && climb.mediaUris.length > 0
+              ? climb.mediaUris
+              : climb.mediaUri ? [climb.mediaUri] : [];
+            if (uris.length === 0) return null;
+            return (
+              <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                <Text style={[ss.sectionLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>MEDIA</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {uris.map((uri, i) => (
+                    <Image
+                      key={i}
+                      source={{ uri }}
+                      style={[ss.media, i < uris.length - 1 && { marginRight: SPACING.sm }]}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            );
+          })()}
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -165,5 +176,5 @@ const ss = StyleSheet.create({
   tag: { borderRadius: 6, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
   tagText: { fontSize: FONTS.sizes.sm },
   notesText: { fontSize: FONTS.sizes.md, lineHeight: 22 },
-  media: { width: '100%', height: 240, borderRadius: 8 },
+  media: { width: 280, height: 240, borderRadius: 8 },
 });

@@ -16,6 +16,10 @@ import {
   Dimensions,
   Linking,
   Share,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  Pressable,
 } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -24,6 +28,7 @@ import SwipeToDelete from '../components/SwipeToDelete';
 import SessionShareCardVertical from '../components/SessionShareCardVertical';
 import SessionShareCardStrava from '../components/SessionShareCardStrava';
 import { useTheme } from '../utils/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, V_GRADES, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
@@ -48,6 +53,7 @@ import {
   getFriendRecentSessions,
   getFriendAllClimbs,
   getFriendshipStatus,
+  getTaggedSessions,
   getFriendCounts,
   getSessionLikes,
   likeSession,
@@ -55,8 +61,13 @@ import {
   getSessionComments,
   addSessionComment,
   deleteSessionComment,
+  getCommentLikes,
+  likeComment,
+  unlikeComment,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
+import { supabase } from '../utils/supabase';
+import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendCommentLikeNotification } from '../utils/notifications';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,16 +87,25 @@ function SwipeableComment({
   isOwn,
   onDelete,
   onReport,
+  onLike,
+  onNamePress,
   colors,
   commentAvatarUrl,
+  likedByUserIds,
+  currentUserId,
 }: {
   c: any;
   isOwn: boolean;
   onDelete: () => void;
   onReport: () => void;
+  onLike: () => void;
+  onNamePress: () => void;
   colors: any;
   commentAvatarUrl: string | null;
+  likedByUserIds: string[];
+  currentUserId: string;
 }) {
+  const liked = likedByUserIds.includes(currentUserId);
   return (
     <SwipeToDelete onDelete={onDelete} disabled={!isOwn} heightOffset={0}>
       <TouchableOpacity
@@ -94,19 +114,29 @@ function SwipeableComment({
         onLongPress={onReport}
         delayLongPress={500}
       >
-        {commentAvatarUrl
-          ? <Image source={{ uri: commentAvatarUrl }} style={swipeCommentStyles.avatar} />
-          : <View style={[swipeCommentStyles.avatar, { backgroundColor: colors.border }]} />
-        }
+        <TouchableOpacity onPress={onNamePress} activeOpacity={0.7}>
+          {commentAvatarUrl
+            ? <Image source={{ uri: commentAvatarUrl }} style={swipeCommentStyles.avatar} />
+            : <View style={[swipeCommentStyles.avatar, { backgroundColor: colors.border }]} />
+          }
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={[swipeCommentStyles.name, { color: colors.textPrimary }]}>
-            {c.profile?.name ?? 'Unknown'}{' '}
+            <Text onPress={onNamePress}>{c.profile?.name ?? 'Unknown'}</Text>{' '}
             <Text style={[swipeCommentStyles.text, { color: colors.textSecondary }]}>{c.text}</Text>
           </Text>
           <Text style={[swipeCommentStyles.time, { color: colors.textMuted }]}>
             {formatDistanceToNow(parseISO(c.created_at), { addSuffix: true })}
           </Text>
         </View>
+        <TouchableOpacity onPress={onLike} activeOpacity={0.7} style={swipeCommentStyles.likeBtn}>
+          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={14} color={liked ? '#e05c4a' : colors.textMuted} />
+          {likedByUserIds.length > 0 && (
+            <Text style={[swipeCommentStyles.likeCount, { color: liked ? '#e05c4a' : colors.textMuted }]}>
+              {likedByUserIds.length}
+            </Text>
+          )}
+        </TouchableOpacity>
       </TouchableOpacity>
     </SwipeToDelete>
   );
@@ -118,6 +148,8 @@ const swipeCommentStyles = StyleSheet.create({
   name: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   text: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   time: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
+  likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: SPACING.sm, paddingTop: 2 },
+  likeCount: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium },
 });
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -166,13 +198,17 @@ type DayGroup = { date: string; climbs: any[] };
 const PHOTO_HEIGHT = 220;
 
 function NaturalPhoto({ uri, onPress }: { uri: string; onPress: () => void }) {
-  const [imgWidth, setImgWidth] = useState(PHOTO_HEIGHT);
-  useEffect(() => {
-    Image.getSize(uri, (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)), () => {});
-  }, [uri]);
+  const [imgWidth, setImgWidth] = useState<number | null>(null);
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <Image source={{ uri }} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10 }} />
+      <Image
+        source={{ uri }}
+        style={{ width: imgWidth ?? PHOTO_HEIGHT, height: PHOTO_HEIGHT, borderRadius: 10, opacity: imgWidth ? 1 : 0 }}
+        onLoad={e => {
+          const { width: w, height: h } = e.nativeEvent.source;
+          setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
+        }}
+      />
     </TouchableOpacity>
   );
 }
@@ -259,7 +295,8 @@ function FriendDetailView({
 
   const normDate = (d: string) => (d ?? '').slice(0, 10);
   const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const monthStart = thirtyDaysAgo.toISOString().slice(0, 10);
   const monthClimbs = climbs.filter(c => normDate(c.date) >= monthStart);
   const monthSends = monthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
 
@@ -405,7 +442,7 @@ function FriendDetailView({
           <View style={detailStyles.statsWrapper}>
 
             {/* ── This Month ── */}
-            <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>THIS MONTH</Text>
+            <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>LAST 30 DAYS</Text>
             <View style={detailStyles.monthRow}>
               {[
                 { label: 'Climbs', value: String(monthClimbs.length) },
@@ -437,7 +474,7 @@ function FriendDetailView({
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>TOTALS</Text>
             <View style={detailStyles.hardestRow}>
               {[
-                { label: 'Climbs', value: String(climbs.length) },
+                { label: 'Climbs', value: String(climbs.reduce((s: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return s; if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1; return s + (c.attempts ?? 1); }, 0)) },
                 { label: 'Sends', value: String(allSends.length) },
               ].map(item => (
                 <View key={item.label} style={detailStyles.hardestItem}>
@@ -546,6 +583,8 @@ export default function FriendsScreen() {
   const { colors } = useTheme();
   const { navigate, screen, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, username } = useAuth();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 70 + (insets.bottom || 0);
 
   // Activity feed state
   type SessionSummary = {
@@ -562,6 +601,8 @@ export default function FriendsScreen() {
     climbType?: string;
     partners?: { id: string; name: string; avatar_url?: string | null }[];
     sessionPhotos?: string[];
+    notes?: string;
+    title?: string;
   };
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
@@ -627,9 +668,11 @@ export default function FriendsScreen() {
   // Likes & comments
   const [likesMap, setLikesMap] = useState<Record<string, SessionLike[]>>({});
   const [commentsMap, setCommentsMap] = useState<Record<string, SessionComment[]>>({});
+  const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
   const [commentingKey, setCommentingKey] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [expandedCommentsKeys, setExpandedCommentsKeys] = useState<Record<string, boolean>>({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Photo viewer
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
@@ -639,6 +682,8 @@ export default function FriendsScreen() {
   const [shareCardIndex, setShareCardIndex] = useState(0);
   const shareCardRefs = useRef<(ViewShot | null)[]>([]);
   const shareScrollRef = useRef<ScrollView>(null);
+  const feedScrollRef = useRef<ScrollView>(null);
+  const feedScrollY = useRef(0);
   const SCREEN_WIDTH = Dimensions.get('window').width;
   const SHARE_CARDS = [
     { label: 'Card',                transparent: false, vertical: true,  strava: false, stravasolid: false },
@@ -665,6 +710,12 @@ export default function FriendsScreen() {
   useEffect(() => {
     if (friendsOpen && user) loadRequests();
   }, [friendsOpen]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', e => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardWillHide', () => { setKeyboardHeight(0); setCommentingKey(null); setCommentText(''); });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // ── Share handlers ────────────────────────────────────────────────────────────
 
@@ -761,8 +812,68 @@ export default function FriendsScreen() {
           ...(s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])),
           ...sessionClimbs.flatMap(c => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])),
         ];
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.length, sends, flashes, hardestGrade, hardestGradeSystem, environment: s.environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined });
+        const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
+        const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined });
       });
+
+      // Add sessions where the current user was tagged (even if not following the poster)
+      const taggedSessions = await getTaggedSessions(user.id);
+      for (const { session: s, profile } of taggedSessions) {
+        if (!profile || allExcluded.includes(s.user_id) || s.user_id === user.id) continue;
+        const { data: sessionClimbs } = await supabase
+          .from('climbs')
+          .select('*')
+          .eq('session_id', s.id);
+        const climbs = sessionClimbs ?? [];
+        if (climbs.length === 0) continue;
+        const sends = climbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+        const flashes = climbs.filter((c: any) => c.outcome === 'flash').length;
+        const gradedClimbs = climbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
+        let hardestGrade: string | null = null;
+        let hardestGradeSystem: string | null = null;
+        if (gradedClimbs.length > 0) {
+          gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
+          hardestGrade = gradedClimbs[0].grade;
+          hardestGradeSystem = gradedClimbs[0].grade_system;
+        }
+        const sessionPhotos = [
+          ...((s.media_uris ?? []) as string[]).filter((u: string) => u.startsWith('http')),
+          ...climbs.flatMap((c: any) => (c.media_uris ?? (c.media_uri ? [c.media_uri] : [])) as string[]).filter((u: string) => u.startsWith('http')),
+        ];
+        const rawFriends: { id: string; name: string }[] = s.friends ?? [];
+        const partnerIds = rawFriends.map((f: any) => f.id).filter((id: string) => id !== s.user_id);
+        let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
+        if (partnerIds.length > 0) {
+          const { data: partnerProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, avatar_url')
+            .in('id', partnerIds);
+          const profileMap = new Map((partnerProfiles ?? []).map((p: any) => [p.id, p]));
+          partners = rawFriends.map((f: any) => ({
+            id: f.id,
+            name: profileMap.get(f.id)?.name ?? f.name,
+            avatar_url: profileMap.get(f.id)?.avatar_url ?? null,
+          }));
+        }
+        summaries.push({
+          friend: profile,
+          sessionDate: normDate(s.date),
+          sessionTime: s.started_at ?? undefined,
+          climbCount: climbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0),
+          sends,
+          flashes,
+          hardestGrade,
+          hardestGradeSystem,
+          environment: s.environment ?? 'indoor',
+          climbType: climbs[0]?.type ?? undefined,
+          sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined,
+          sessionId: s.id,
+          partners,
+          notes: s.notes ?? undefined,
+          title: s.title ?? undefined,
+        });
+      }
 
       // Add friends' recent sessions
       await Promise.all(
@@ -775,12 +886,32 @@ export default function FriendsScreen() {
             const sessionMediaMap = new Map<string, string[]>(
               friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
             );
+            const sessionFriendsMap = new Map<string, any[]>(
+              friendSessions.map((s: any) => [s.id, s.friends ?? []])
+            );
+            const sessionNotesMap = new Map<string, string>(
+              friendSessions.filter((s: any) => s.notes).map((s: any) => [s.id, s.notes])
+            );
+            const sessionTitleMap = new Map<string, string>(
+              friendSessions.filter((s: any) => s.title).map((s: any) => [s.id, s.title])
+            );
+            const sessionDateMap = new Map<string, string>(
+              friendSessions.filter((s: any) => s.date).map((s: any) => [s.id, normDate(s.date)])
+            );
+            const sessionStartedAtMap = new Map<string, string>(
+              friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
+            );
             if (climbs.length === 0) return;
 
-            // Group by session_id (fall back to date for climbs without a session)
+            // Build a date→sessionId lookup from the fetched sessions so climbs
+            // that are missing session_id can still be bucketed into the right session.
+            const sessionIdByDate = new Map<string, string>(
+              friendSessions.map((s: any) => [normDate(s.date), s.id])
+            );
+
             const sessionGroups = new Map<string, any[]>();
             for (const c of climbs) {
-              const key = c.session_id ?? normDate(c.date);
+              const key = c.session_id ?? sessionIdByDate.get(normDate(c.date)) ?? normDate(c.date);
               if (!sessionGroups.has(key)) sessionGroups.set(key, []);
               sessionGroups.get(key)!.push(c);
             }
@@ -798,15 +929,28 @@ export default function FriendsScreen() {
                 hardestGradeSystem = gradedClimbs[0].grade_system;
                 hardestClimb = gradedClimbs[0];
               }
-              const sessionDate = normDate(sessionClimbs[0].date);
-              const environment = sessionClimbs[0]?.environment ?? 'indoor';
-              const firstClimbTime = sessionClimbs[0]?.date ?? undefined;
-              const climbType = hardestClimb?.type ?? undefined;
               const friendSessionId = sessionClimbs[0]?.session_id ?? undefined;
+              // Use the session record's date (local date when created) rather than the
+              // first climb's UTC timestamp, which can cross a date boundary for users
+              // in non-UTC timezones.
+              const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
+              const environment = sessionClimbs[0]?.environment ?? 'indoor';
+              const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
+              const climbType = hardestClimb?.type ?? undefined;
               const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http'));
               const sessionLevelPhotos = friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : [];
               const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
-              summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.length, sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId });
+              const rawFriends: { id: string; name: string }[] = friendSessionId ? (sessionFriendsMap.get(friendSessionId) ?? []) : [];
+              const partnerIds = rawFriends.map((p: any) => p.id).filter((id: string) => id !== f.id);
+              let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
+              if (partnerIds.length > 0) {
+                const { data: partnerProfiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', partnerIds);
+                const profileMap = new Map((partnerProfiles ?? []).map((p: any) => [p.id, p]));
+                partners = rawFriends.map((p: any) => ({ id: p.id, name: profileMap.get(p.id)?.name ?? p.name, avatar_url: profileMap.get(p.id)?.avatar_url ?? null }));
+              }
+              const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
+              const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
+              summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle });
             }
           } catch {}
         })
@@ -821,6 +965,11 @@ export default function FriendsScreen() {
         return true;
       });
       setActivityFeed(deduped);
+
+      // Prefetch session photos in the background so they're cached when rendered
+      deduped.forEach(e => {
+        e.sessionPhotos?.forEach(uri => Image.prefetch(uri));
+      });
 
       // Load likes & comments for sessions that have an ID
       deduped.forEach(e => {
@@ -888,10 +1037,17 @@ export default function FriendsScreen() {
       const isPrivate = target?.is_private ?? false;
       const { error } = await sendFriendRequest(user.id, receiverId, isPrivate);
       if (error) Alert.alert('Error', error);
-      else setSearchResults(prev => prev.map(r => r.id === receiverId
-        ? { ...r, friendshipStatus: isPrivate ? 'pending_sent' : 'accepted' }
-        : r
-      ));
+      else {
+        setSearchResults(prev => prev.map(r => r.id === receiverId
+          ? { ...r, friendshipStatus: isPrivate ? 'pending_sent' : 'accepted' }
+          : r
+        ));
+        if (isPrivate) {
+          sendFollowRequestNotification(receiverId, user.id).catch(() => {});
+        } else {
+          sendNewFollowerNotification(receiverId, user.id).catch(() => {});
+        }
+      }
     } catch {
       Alert.alert('Error', 'Failed to follow user.');
     }
@@ -901,10 +1057,14 @@ export default function FriendsScreen() {
   async function handleAccept(requestId: string) {
     setActingOnRequest(requestId);
     try {
+      const req = requests.find(r => r.id === requestId);
       await acceptFriendRequest(requestId);
       setRequests(prev => prev.filter(r => r.id !== requestId));
       await refreshPendingCount();
       loadFeed();
+      if (req && user) {
+        sendNewFollowerNotification(req.sender_id, user.id).catch(() => {});
+      }
     } catch {
       Alert.alert('Error', 'Failed to accept request.');
     }
@@ -967,7 +1127,11 @@ export default function FriendsScreen() {
         } else {
           const climbs = await getFriendRecentClimbs(entry.friend.id);
           const normDate = (d: string) => (d ?? '').slice(0, 10);
-          const sessionClimbs = climbs.filter((c: any) => normDate(c.date) === normDate(entry.sessionDate));
+          // Prefer session_id match over date match — date filtering breaks when climb
+          // timestamps cross a UTC date boundary vs the session's local date.
+          const sessionClimbs = entry.sessionId
+            ? climbs.filter((c: any) => c.session_id === entry.sessionId)
+            : climbs.filter((c: any) => normDate(c.date) === normDate(entry.sessionDate));
           mapped = sessionClimbs.map((c: any) => ({
             id: c.id,
             date: c.date,
@@ -1014,7 +1178,7 @@ export default function FriendsScreen() {
           const fetched = await getFriendRecentClimbs(entry.friend.id);
           const normDate = (d: string) => (d ?? '').slice(0, 10);
           mapped = fetched
-            .filter((c: any) => normDate(c.date) === normDate(entry.sessionDate))
+            .filter((c: any) => entry.sessionId ? c.session_id === entry.sessionId : normDate(c.date) === normDate(entry.sessionDate))
             .map((c: any) => ({
               id: c.id, date: c.date, sessionId: c.session_id,
               type: c.type, outcome: c.outcome, styles: c.styles ?? [],
@@ -1043,19 +1207,55 @@ export default function FriendsScreen() {
     ]);
     setLikesMap(prev => ({ ...prev, [sessionKey]: likes }));
     setCommentsMap(prev => ({ ...prev, [sessionKey]: comments }));
+    if (comments.length > 0) {
+      const commentLikes = await getCommentLikes(comments.map(c => c.id));
+      setCommentLikesMap(prev => ({ ...prev, ...commentLikes }));
+    }
   }
 
-  async function handleLike(sessionKey: string, sessionId: string) {
+  async function handleCommentLike(commentId: string, sessionOwnerId: string) {
+    if (!user) return;
+    const likedBy = commentLikesMap[commentId] ?? [];
+    const alreadyLiked = likedBy.includes(user.id);
+    if (alreadyLiked) {
+      await unlikeComment(commentId, user.id);
+      setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== user.id) }));
+    } else {
+      await likeComment(commentId, user.id);
+      setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, user.id] }));
+      const allComments = Object.values(commentsMap).flat();
+      const comment = allComments.find(c => c.id === commentId);
+      if (comment && comment.user_id !== user.id) {
+        sendCommentLikeNotification(comment.user_id, user.id, sessionOwnerId).catch(() => {});
+      }
+    }
+  }
+
+  function handleLike(sessionKey: string, sessionId: string) {
     if (!user) return;
     const likes = likesMap[sessionKey] ?? [];
     const alreadyLiked = likes.some(l => l.user_id === user.id);
+
+    // Optimistic update — show result immediately
+    const optimistic = alreadyLiked
+      ? likes.filter(l => l.user_id !== user.id)
+      : [...likes, { user_id: user.id, session_id: sessionId, created_at: new Date().toISOString() } as SessionLike];
+    setLikesMap(prev => ({ ...prev, [sessionKey]: optimistic }));
+
+    // Fire API call in background
     if (alreadyLiked) {
-      await unlikeSession(sessionId, user.id);
+      unlikeSession(sessionId, user.id).catch(() => {
+        setLikesMap(prev => ({ ...prev, [sessionKey]: likes }));
+      });
     } else {
-      await likeSession(sessionId, user.id);
+      likeSession(sessionId, user.id).catch(() => {
+        setLikesMap(prev => ({ ...prev, [sessionKey]: likes }));
+      });
+      const entry = activityFeed.find(e => e.sessionId === sessionId);
+      if (entry && entry.friend.id !== user.id) {
+        sendLikeNotification(entry.friend.id, user.id, sessionId).catch(() => {});
+      }
     }
-    const updated = await getSessionLikes(sessionId);
-    setLikesMap(prev => ({ ...prev, [sessionKey]: updated }));
   }
 
   async function handleDeleteComment(sessionKey: string, sessionId: string, commentId: string) {
@@ -1066,10 +1266,20 @@ export default function FriendsScreen() {
 
   async function handleSendComment(sessionKey: string, sessionId: string) {
     if (!user || !commentText.trim()) return;
-    await addSessionComment(sessionId, user.id, commentText.trim());
+    try {
+      await addSessionComment(sessionId, user.id, commentText.trim());
+    } catch (err: any) {
+      Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
+      return;
+    }
     setCommentText('');
+    Keyboard.dismiss();
     const updated = await getSessionComments(sessionId);
     setCommentsMap(prev => ({ ...prev, [sessionKey]: updated }));
+    const entry = activityFeed.find(e => e.sessionId === sessionId);
+    if (entry && entry.friend.id !== user.id) {
+      sendCommentNotification(entry.friend.id, user.id, sessionId).catch(() => {});
+    }
   }
 
   function handleMoreMenu(entry: SessionSummary) {
@@ -1164,9 +1374,11 @@ export default function FriendsScreen() {
 
   function formatRelativeDate(dateStr: string): string {
     try {
-      const date = new Date(dateStr);
+      const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+      const dateDay = new Date(y, m - 1, d);
       const today = new Date();
-      const diffDays = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const diffDays = Math.round((todayDay.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays === 0) return 'Today';
       if (diffDays === 1) return 'Yesterday';
       return `${diffDays} days ago`;
@@ -1226,7 +1438,14 @@ export default function FriendsScreen() {
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, zIndex: 100 }]}>
         <FriendDetailView
           friend={viewingFriend}
-          onBack={() => { setViewingFriend(null); if (friendSource === 'friends') openFriends(); }}
+          onBack={() => {
+            setViewingFriend(null);
+            if (friendSource === 'friends') openFriends();
+            else {
+              const y = feedScrollY.current;
+              if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
+            }
+          }}
           isBlocked={blockedIds.includes(viewingFriend.id)}
           onBlock={async (friendId) => {
             try {
@@ -1235,6 +1454,8 @@ export default function FriendsScreen() {
               setActivityFeed(prev => prev.filter(e => e.friend.id !== friendId));
               setFriends(prev => prev.filter(f => f.id !== friendId));
               setViewingFriend(null);
+              const y = feedScrollY.current;
+              if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
             } catch {
               Alert.alert('Error', 'Could not block user. Please try again.');
             }
@@ -1244,6 +1465,8 @@ export default function FriendsScreen() {
               await unblockUser(user!.id, friendId);
               setBlockedIds(prev => prev.filter(id => id !== friendId));
               setViewingFriend(null);
+              const y = feedScrollY.current;
+              if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
             } catch {
               Alert.alert('Error', 'Could not unblock user. Please try again.');
             }
@@ -1257,16 +1480,21 @@ export default function FriendsScreen() {
   // Show session detail full-screen
   if (viewingSession) {
     const { entry, climbs } = viewingSession;
+    const closeDetail = () => {
+      setViewingSession(null);
+      const y = feedScrollY.current;
+      if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
+    };
     const swipeBack = PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => g.dx > 20 && Math.abs(g.dy) < 60,
-      onPanResponderRelease: (_, g) => { if (g.dx > 60) setViewingSession(null); },
+      onPanResponderRelease: (_, g) => { if (g.dx > 60) closeDetail(); },
     });
     const date = parseISO(entry.sessionDate);
     return (
       <View style={[styles.container, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
         {/* Back bar */}
         <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => setViewingSession(null)} style={styles.detailBackBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={closeDetail} style={styles.detailBackBtn} activeOpacity={0.7}>
             <Text style={[styles.detailBackTxt, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
         </View>
@@ -1289,12 +1517,12 @@ export default function FriendsScreen() {
           {/* Stats */}
           <View style={[styles.detailStatsRow, { borderColor: colors.border }]}>
             <View style={styles.detailStat}>
-              <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
+              <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{climbs.length ? climbs.reduce((s: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return s; if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1; return s + (c.attempts ?? 1); }, 0) : entry.climbCount}</Text>
               <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Climbs</Text>
             </View>
             <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
             <View style={styles.detailStat}>
-              <Text style={[styles.detailStatNum, { color: colors.accentGreen }]}>{entry.sends}</Text>
+              <Text style={[styles.detailStatNum, { color: colors.accentGreen }]}>{climbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length || entry.sends}</Text>
               <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Sends</Text>
             </View>
             {entry.hardestGrade && (
@@ -1318,7 +1546,7 @@ export default function FriendsScreen() {
   }
 
   return (
-    <View style={screen === 'friends' ? [styles.container, { backgroundColor: colors.bg }] : { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={tabBarHeight} style={screen === 'friends' ? [styles.container, { backgroundColor: colors.bg }] : { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
       {/* Activity feed — only when on friends screen */}
       {screen === 'friends' && (loadingFeed ? (
         <View style={styles.loadingContainer}>
@@ -1343,7 +1571,7 @@ export default function FriendsScreen() {
           )}
         </View>
       ) : (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={loadFeed} />}>
+        <ScrollView ref={feedScrollRef} style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={loadFeed} />} scrollEventThrottle={16} onScroll={e => { feedScrollY.current = e.nativeEvent.contentOffset.y; }}>
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</Text>
           {activityFeed.map((entry) => {
             const sessionKey = entry.sessionId ? `sid-${entry.sessionId}` : `fid-${entry.friend.id}|${entry.sessionDate}`;
@@ -1383,9 +1611,14 @@ export default function FriendsScreen() {
                 {/* ── Activity title row ── */}
                 <View style={styles.cardTitleRow}>
                   <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                    {sessionTimeOfDay(entry.sessionTime)}
+                    {entry.title?.trim() || sessionTimeOfDay(entry.sessionTime)}
                   </Text>
                 </View>
+
+                {/* ── Session notes ── */}
+                {entry.notes?.trim() ? (
+                  <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
+                ) : null}
 
                 {/* ── Partners row ── */}
                 {entry.partners?.length ? (
@@ -1396,17 +1629,14 @@ export default function FriendsScreen() {
                         key={p.id}
                         style={styles.partnerChip}
                         activeOpacity={0.7}
-                        onPress={async () => {
-                          const results = await searchByUsername(p.name, user?.id ?? '');
-                          const byId = results.find(r => r.id === p.id);
-                          const byName = results.find(r => r.name.toLowerCase() === p.name.toLowerCase());
-                          const profile = byId ?? byName ?? { id: p.id, name: p.name, username: '', avatar_url: null };
-                          openFriendProfile(profile, 'activity');
+                        onPress={() => {
+                          if (p.id === user?.id) return;
+                          openFriendProfile({ id: p.id, name: p.name, username: '', avatar_url: p.avatar_url ?? null }, 'activity');
                         }}
                       >
                         <ProfileAvatar name={p.name} avatarUrl={p.avatar_url ?? null} size={20} colors={colors} />
                         <Text style={[styles.partnerName, { color: colors.accent }]}>
-                          {p.name}{i < entry.partners!.length - 1 ? ',' : ''}
+                          {p.id === user?.id ? 'You' : p.name}{i < entry.partners!.length - 1 ? ',' : ''}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -1477,9 +1707,11 @@ export default function FriendsScreen() {
                               <View style={styles.avatarStack}>
                                 {likes.slice(0, 3).map((l, i) => {
                                   const url = l.user_id === user?.id ? avatarUrl : l.profile?.avatar_url;
+                                  const onPress = l.user_id !== user?.id ? () => openFriendProfile({ id: l.user_id, name: l.profile?.name ?? 'Unknown', username: '', avatar_url: l.profile?.avatar_url ?? null }, 'activity') : undefined;
+                                  const likeKey = l.id ?? l.user_id ?? String(i);
                                   return url
-                                    ? <Image key={l.id} source={{ uri: url }} style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]} />
-                                    : <View key={l.id} style={[styles.likeAvatar, styles.likeAvatarFallback, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i, backgroundColor: colors.border }]} />;
+                                    ? <TouchableOpacity key={likeKey} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}><Image source={{ uri: url }} style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]} /></TouchableOpacity>
+                                    : <TouchableOpacity key={likeKey} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}><View style={[styles.likeAvatar, styles.likeAvatarFallback, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i, backgroundColor: colors.border }]} /></TouchableOpacity>;
                                 })}
                               </View>
                               <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
@@ -1535,7 +1767,7 @@ export default function FriendsScreen() {
                       </View>
 
                       {/* Comment section */}
-                      {(comments.length > 0 || isCommenting) && (
+                      {comments.length > 0 && (
                         <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
                           {(() => {
                             const isExpanded = expandedCommentsKeys[sessionKey];
@@ -1553,8 +1785,15 @@ export default function FriendsScreen() {
                                       { text: 'Cancel', style: 'cancel' },
                                       { text: 'Report', style: 'destructive', onPress: () => submitReport(c.user_id, c.id, 'comment', 'Inappropriate comment') },
                                     ]) : () => {}}
+                                    onLike={() => entry.sessionId && handleCommentLike(c.id, entry.friend.id)}
+                                    onNamePress={() => {
+                                      if (c.user_id === user?.id) return;
+                                      openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
+                                    }}
                                     colors={colors}
                                     commentAvatarUrl={c.user_id === user?.id ? avatarUrl : (c.profile?.avatar_url ?? null)}
+                                    likedByUserIds={commentLikesMap[c.id] ?? []}
+                                    currentUserId={user?.id ?? ''}
                                   />
                                 ))}
                                 {!isExpanded && hidden > 0 && (
@@ -1570,32 +1809,6 @@ export default function FriendsScreen() {
                               </>
                             );
                           })()}
-                          {isCommenting && (
-                            <View style={styles.commentInputRow}>
-                              {avatarUrl
-                                ? <Image source={{ uri: avatarUrl }} style={styles.commentAvatar} />
-                                : <View style={[styles.commentAvatar, { backgroundColor: colors.border }]} />
-                              }
-                              <View style={[styles.commentInput, { borderColor: colors.border, backgroundColor: colors.bgCard, flex: 1 }]}>
-                                <TextInput
-                                  style={[styles.commentInputText, { color: colors.textPrimary }]}
-                                  placeholder="Add a comment..."
-                                  placeholderTextColor={colors.textMuted}
-                                  value={commentText}
-                                  onChangeText={setCommentText}
-                                  multiline
-                                  blurOnSubmit
-                                  onSubmitEditing={() => entry.sessionId && handleSendComment(sessionKey, entry.sessionId)}
-                                />
-                                <TouchableOpacity
-                                  onPress={() => entry.sessionId && handleSendComment(sessionKey, entry.sessionId)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          )}
                         </View>
                       )}
                     </>
@@ -1606,6 +1819,41 @@ export default function FriendsScreen() {
           })}
         </ScrollView>
       ))}
+
+      {/* Comment bar — sibling of ScrollView, pushed up by KAV */}
+      {commentingKey && screen === 'friends' && (() => {
+        const commentingEntry = activityFeed.find(e => {
+          const key = e.sessionId ? `sid-${e.sessionId}` : `fid-${e.friend.id}|${e.sessionDate}`;
+          return key === commentingKey;
+        });
+        const sendComment = () => {
+          if (commentingEntry?.sessionId) handleSendComment(commentingKey, commentingEntry.sessionId);
+        };
+        return (
+          <View style={[styles.stickyCommentBar, { borderTopColor: colors.border, backgroundColor: colors.bg }]}>
+            {avatarUrl
+              ? <Image source={{ uri: avatarUrl }} style={styles.commentAvatar} />
+              : <View style={[styles.commentAvatar, { backgroundColor: colors.border }]} />
+            }
+            <View style={[styles.commentInput, { borderColor: colors.border, backgroundColor: colors.bgCard, flex: 1 }]}>
+              <TextInput
+                style={[styles.commentInputText, { color: colors.textPrimary }]}
+                placeholder="Add a comment..."
+                placeholderTextColor={colors.textMuted}
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+                blurOnSubmit
+                autoFocus
+                onSubmitEditing={sendComment}
+              />
+              <TouchableOpacity onPress={sendComment} activeOpacity={0.7}>
+                <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })()}
 
       {/* ── Photo viewer ── */}
       <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
@@ -1705,7 +1953,7 @@ export default function FriendsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => closeFriends()}
       >
-        <View style={[styles.manageModalContainer, { backgroundColor: colors.bg }]}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.manageModalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.manageModalHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.manageModalTitle, { color: colors.textPrimary }]}>Friends</Text>
             <TouchableOpacity onPress={() => { closeFriends(); setSearchQuery(''); }} activeOpacity={0.7}>
@@ -1831,10 +2079,10 @@ export default function FriendsScreen() {
               </>
             )}
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -2069,6 +2317,12 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.medium,
   },
+  cardNotes: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
+    lineHeight: 20,
+    paddingBottom: SPACING.sm,
+  },
   cardStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2110,8 +2364,9 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
   commentShowMore: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingVertical: 2 },
   commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xs },
+  stickyCommentBar: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderTopWidth: 1 },
   commentInput: { flexDirection: 'row', alignItems: 'flex-end', borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: SPACING.sm },
-  commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, paddingBottom: 4 },
+  commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, paddingBottom: 4, maxHeight: 100 },
   detailTopBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
   detailBackBtn: { paddingVertical: SPACING.xs },
   detailBackTxt: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },

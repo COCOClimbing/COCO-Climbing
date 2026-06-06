@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch, Linking, Image, Modal } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
 import { useNav } from '../utils/NavigationContext';
 import { ACCENT_COLORS, AccentId, FONTS, SPACING } from '../utils/theme';
 import { getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { upsertProfile } from '../utils/cloudSync';
+import { getBlockedUsers, unblockUser, BlockedUser } from '../utils/moderationApi';
+import { getNotificationPrefs, saveNotificationPrefs, NotificationPrefs } from '../utils/notificationPrefs';
+import { registerForPushNotifications } from '../utils/notifications';
 
 export default function SettingsScreen() {
   const { mode, accentId, colors, setMode, setAccent } = useTheme();
@@ -13,9 +17,15 @@ export default function SettingsScreen() {
   const { closeSettings } = useNav();
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [unblocking, setUnblocking] = useState<string | null>(null);
+  const [blockedOpen, setBlockedOpen] = useState(false);
   const [preferredBoulder, setPreferredBoulder] = useState<'v-scale' | 'font'>('v-scale');
   const [preferredRope, setPreferredRope] = useState<'yds' | 'french' | 'british'>('yds');
   const [privateToggle, setPrivateToggle] = useState(isPrivate);
+  const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({ session_tag: true, likes: true, comments: true });
+  const [savingNotif, setSavingNotif] = useState(false);
 
   useEffect(() => { setPrivateToggle(isPrivate); }, [isPrivate]);
 
@@ -25,6 +35,39 @@ export default function SettingsScreen() {
       setPreferredRope(rope as 'yds' | 'french' | 'british');
     });
   }, []);
+
+  useEffect(() => {
+    if (user) getBlockedUsers(user.id).then(setBlockedUsers).catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      setNotifPermission(status as 'granted' | 'denied' | 'undetermined');
+    });
+    if (user) {
+      getNotificationPrefs(user.id).then(setNotifPrefs);
+    }
+  }, [user]);
+
+  async function handleNotifPrefChange(key: keyof NotificationPrefs, value: boolean) {
+    if (!user) return;
+    const updated = { ...notifPrefs, [key]: value };
+    setNotifPrefs(updated);
+    setSavingNotif(true);
+    await saveNotificationPrefs(user.id, updated).catch(() => {});
+    setSavingNotif(false);
+  }
+
+  async function handleEnableNotifications() {
+    if (!user) return;
+    const { status } = await Notifications.requestPermissionsAsync();
+    setNotifPermission(status as 'granted' | 'denied' | 'undetermined');
+    if (status === 'granted') {
+      await registerForPushNotifications(user.id);
+    } else {
+      Linking.openSettings();
+    }
+  }
 
   async function handleSyncNow() {
     setSyncing(true);
@@ -83,6 +126,12 @@ export default function SettingsScreen() {
         <Text style={[styles.aboutDesc, { color: colors.textSecondary }]}>
           Your climbing logbook. Track every send, session, and project.
         </Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://cococlimbing.github.io/COCO-Climbing/privacy-policy')} activeOpacity={0.7}>
+          <Text style={[styles.privacyLink, { color: colors.accent }]}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://cococlimbing.github.io/COCO-Climbing/terms-of-service')} activeOpacity={0.7}>
+          <Text style={[styles.privacyLink, { color: colors.accent }]}>Terms of Service</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Appearance */}
@@ -177,6 +226,58 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Notifications — only shown when signed in */}
+      {user && (
+        <>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>NOTIFICATIONS</Text>
+          <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.md }]}>
+            {notifPermission !== 'granted' ? (
+              <View>
+                <Text style={[styles.notifWarning, { color: colors.textSecondary }]}>
+                  Push notifications are {notifPermission === 'denied' ? 'blocked' : 'not enabled'}.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.notifEnableBtn, { borderColor: colors.accent }]}
+                  onPress={handleEnableNotifications}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.notifEnableBtnText, { color: colors.accent }]}>
+                    {notifPermission === 'denied' ? 'Open Settings to Enable' : 'Enable Notifications'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {([
+                  { key: 'session_tag' as const, label: 'Session Tags', hint: 'When someone tags you in a session' },
+                  { key: 'comments' as const, label: 'Comments', hint: 'When someone comments on your session' },
+                  { key: 'likes' as const, label: 'Likes', hint: 'When someone likes your session' },
+                ] as const).map(({ key, label, hint }, i, arr) => (
+                  <View key={key}>
+                    {i > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                    <View style={styles.notifRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.privacyLabel, { color: colors.textPrimary }]}>{label}</Text>
+                        <Text style={[styles.privacyHint, { color: colors.textMuted }]}>{hint}</Text>
+                      </View>
+                      <View style={{ alignSelf: 'stretch', justifyContent: 'center' }}>
+                        <Switch
+                          value={notifPrefs[key]}
+                          onValueChange={(val) => handleNotifPrefChange(key, val)}
+                          trackColor={{ false: colors.border, true: colors.accent }}
+                          thumbColor="#fff"
+                          disabled={savingNotif}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        </>
+      )}
+
       {/* Privacy — only shown when signed in */}
       {user && (
         <>
@@ -204,6 +305,90 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
+        </>
+      )}
+
+      {/* Blocked Accounts — only shown when signed in */}
+      {user && (
+        <>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>PRIVACY</Text>
+          <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.blockedRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                getBlockedUsers(user.id).then(setBlockedUsers).catch(() => {});
+                setBlockedOpen(true);
+              }}
+            >
+              <Text style={[styles.blockedLabel, { color: colors.textPrimary }]}>Blocked Accounts</Text>
+              <Text style={[styles.blockedChevron, { color: colors.textMuted }]}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Modal visible={blockedOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setBlockedOpen(false)}>
+            <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Blocked Accounts</Text>
+                <TouchableOpacity onPress={() => setBlockedOpen(false)} activeOpacity={0.7}>
+                  <Text style={[styles.modalDone, { color: colors.accent }]}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.modalContent}>
+                {blockedUsers.length === 0 ? (
+                  <Text style={[styles.blockedEmpty, { color: colors.textMuted }]}>No blocked accounts</Text>
+                ) : (
+                  blockedUsers.map((bu, i) => (
+                    <View key={bu.id}>
+                      {i > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                      <View style={styles.blockedUserRow}>
+                        <View style={[styles.blockedAvatar, { backgroundColor: colors.accentSoft }]}>
+                          {bu.avatar_url
+                            ? <Image source={{ uri: bu.avatar_url }} style={styles.blockedAvatarImg} />
+                            : <Text style={[styles.blockedAvatarInitial, { color: colors.accent }]}>
+                                {(bu.name || '?')[0].toUpperCase()}
+                              </Text>
+                          }
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.blockedName, { color: colors.textPrimary }]}>{bu.name}</Text>
+                          {bu.username ? <Text style={[styles.blockedUsername, { color: colors.textMuted }]}>@{bu.username}</Text> : null}
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.unblockBtn, { borderColor: colors.accent }]}
+                          activeOpacity={0.7}
+                          disabled={unblocking === bu.id}
+                          onPress={() => {
+                            Alert.alert('Unblock user?', 'They will be able to follow you and appear in search again.', [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Unblock',
+                                onPress: async () => {
+                                  setUnblocking(bu.id);
+                                  try {
+                                    await unblockUser(user.id, bu.id);
+                                    setBlockedUsers(prev => prev.filter(u => u.id !== bu.id));
+                                  } catch {
+                                    Alert.alert('Error', 'Could not unblock user.');
+                                  }
+                                  setUnblocking(null);
+                                },
+                              },
+                            ]);
+                          }}
+                        >
+                          {unblocking === bu.id
+                            ? <ActivityIndicator size="small" color={colors.accent} />
+                            : <Text style={[styles.unblockBtnText, { color: colors.accent }]}>Unblock</Text>
+                          }
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </Modal>
         </>
       )}
 
@@ -362,6 +547,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.md,
+  },
+  notifWarning: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
+    marginBottom: SPACING.md,
+    lineHeight: 20,
+  },
+  notifEnableBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  notifEnableBtnText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.semibold,
+  },
   privacyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,5 +582,94 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.family.regular,
     marginTop: 2,
+  },
+  privacyLink: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.medium,
+    marginTop: SPACING.sm,
+    textDecorationLine: 'underline',
+  },
+  blockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.xs,
+  },
+  blockedLabel: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.medium,
+  },
+  blockedChevron: {
+    fontSize: 22,
+    fontFamily: FONTS.family.regular,
+  },
+  modalContainer: { flex: 1 },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.bold,
+  },
+  modalDone: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.medium,
+  },
+  modalContent: {
+    padding: SPACING.xl,
+  },
+  blockedEmpty: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
+    textAlign: 'center',
+    paddingVertical: SPACING.xl,
+  },
+  blockedUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  blockedAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  blockedAvatarImg: {
+    width: 38,
+    height: 38,
+  },
+  blockedAvatarInitial: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.bold,
+  },
+  blockedName: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.semibold,
+  },
+  blockedUsername: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.family.regular,
+    marginTop: 1,
+  },
+  unblockBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 5,
+    paddingHorizontal: SPACING.md,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  unblockBtnText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.semibold,
   },
 });

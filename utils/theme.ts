@@ -2,11 +2,10 @@
 
 export type ThemeId = 'obsidian' | 'slate' | 'forest' | 'crimson' | 'arctic' | 'sand' | 'meadow' | 'rose';
 export type ThemeMode = 'dark' | 'light';
-export type AccentId = 'amber' | 'orange' | 'green' | 'crimson' | 'lavender' | 'blue';
+export type AccentId = 'orange' | 'green' | 'crimson' | 'lavender' | 'blue';
 
 export const ACCENT_COLORS: Record<AccentId, { name: string; color: string }> = {
-  amber:   { name: 'Golden Brown', color: '#C97C38' },
-  orange:  { name: 'Orange',       color: '#FF6B35' },
+  orange:  { name: 'Orange',       color: '#BF5F29' },
   green:   { name: 'Green',        color: '#3A8C5C' },
   crimson: { name: 'Crimson',      color: '#C0394B' },
   lavender:{ name: 'Lavender',     color: '#9B5DE5' },
@@ -70,14 +69,14 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
   obsidian: {
     id: 'obsidian',
     name: 'Obsidian',
-    preview: '#FF6B35',
+    preview: '#BF5F29',
     bg: '#0A0A0A',
     bgCard: '#141414',
     bgElevated: '#1C1C1C',
     border: '#2A2A2A',
     borderLight: '#333333',
-    accent: '#FF6B35',
-    accentSoft: '#FF6B3522',
+    accent: '#BF5F29',
+    accentSoft: '#BF5F2922',
     accentGold: '#F5C842',
     accentGoldSoft: '#F5C84218',
     accentGreen: '#4CAF72',
@@ -312,6 +311,7 @@ export const CLIMB_STYLES = [
   { id: 'sloper',    label: 'Sloper' },
   { id: 'jug',       label: 'Jug' },
   { id: 'pocket',    label: 'Pocket' },
+  { id: 'crack',     label: 'Crack' },
   { id: 'power',     label: 'Power' },
   { id: 'slab',      label: 'Slab' },
   { id: 'overhang',  label: 'Overhang' },
@@ -450,6 +450,8 @@ export interface Climb {
   attempts?: number;
   mediaUri?: string;
   mediaType?: 'photo' | 'video';
+  mediaUris?: string[];
+  mediaTypes?: ('photo' | 'video')[];
   projectId?: string;    // links this climb to a named project
   projectName?: string;  // display name of the project
 }
@@ -459,9 +461,14 @@ export interface Session {
   date: string;
   environment: EnvironmentId;
   location?: string;
+  title?: string;
   notes?: string;
   friends?: { id: string; name: string }[];  // climbing partners
   startedAt: string;      // ISO timestamp — when the session was created
   lastClimbAt?: string;   // ISO timestamp — when the last climb was saved
   endedAt?: string;       // ISO timestamp — when the session was explicitly ended
+  mediaUri?: string;
+  mediaType?: 'photo' | 'video';
+  mediaUris?: string[];
+  mediaTypes?: ('photo' | 'video')[];
 }

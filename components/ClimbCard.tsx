@@ -9,12 +9,14 @@ interface Props {
   climb: Climb;
   onPress?: () => void;
   compact?: boolean;
+  onIncrementAttempts?: () => void;
 }
 
-export default function ClimbCard({ climb, onPress, compact }: Props) {
+export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts }: Props) {
   const { colors } = useTheme();
   const typeInfo = CLIMB_TYPES.find(t => t.id === climb.type);
   const dateStr = format(parseISO(climb.date), compact ? 'MMM d' : 'EEE, MMM d · h:mm a');
+  const isTraining = climb.type === 'hangboard' || climb.type === 'lift';
 
   return (
     <TouchableOpacity
@@ -27,14 +29,14 @@ export default function ClimbCard({ climb, onPress, compact }: Props) {
       ]}
     >
       <View style={styles.topRow}>
-        <GradeBadge grade={climb.grade} outcome={climb.outcome} />
-        {climb.type !== 'hangboard' && climb.type !== 'lift' && (
-          <OutcomeBadge outcome={climb.outcome} />
-        )}
+        {!isTraining && <GradeBadge grade={climb.grade} outcome={climb.outcome} />}
+        {!isTraining && <OutcomeBadge outcome={climb.outcome} />}
       </View>
       <View style={styles.midRow}>
         <Text style={[styles.typeLine, { color: colors.textSecondary }]}>
-          {`${typeInfo?.label ?? ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
+          {climb.type === 'hangboard' || climb.type === 'lift'
+            ? (typeInfo?.label ?? '')
+            : `${typeInfo?.label ?? ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
         </Text>
         {(climb.projectName || climb.routeName) && (
           <Text style={[styles.routeName, { color: colors.textPrimary }]} numberOfLines={1}>{climb.projectName || climb.routeName}</Text>
@@ -60,8 +62,18 @@ export default function ClimbCard({ climb, onPress, compact }: Props) {
           {!!climb.attempts && climb.attempts > 0 && climb.outcome === 'hang' && (
             <Text style={[styles.attempts, { color: colors.textMuted }]}>{climb.attempts} {climb.attempts === 1 ? 'hang' : 'hangs'}</Text>
           )}
-          {!!climb.attempts && climb.attempts > 1 && climb.outcome !== 'hang' && (
+          {climb.outcome !== 'hang' && (climb.attempts ?? 0) > 1 && (
             <Text style={[styles.attempts, { color: colors.textMuted }]}>{climb.attempts} attempts</Text>
+          )}
+          {onIncrementAttempts && !isTraining && (climb.outcome === 'attempt' || climb.outcome === 'send') && (
+            <TouchableOpacity
+              onPress={onIncrementAttempts}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={[styles.incrementBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.incrementBtnText, { color: colors.textMuted }]}>+</Text>
+            </TouchableOpacity>
           )}
           {climb.location && (
             <Text style={[styles.location, { color: colors.textMuted }]} numberOfLines={1}>{climb.location}</Text>
@@ -88,4 +100,21 @@ const styles = StyleSheet.create({
   notes: { fontSize: FONTS.sizes.sm, marginBottom: SPACING.xs, lineHeight: 18 },
   attempts: { fontSize: FONTS.sizes.xs },
   location: { fontSize: FONTS.sizes.xs, maxWidth: 140 },
+  incrementBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incrementBtnText: {
+    fontSize: 15,
+    lineHeight: 15,
+    fontFamily: FONTS.family.medium,
+    includeFontPadding: false,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    marginTop: 1,
+  },
 });

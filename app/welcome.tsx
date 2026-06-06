@@ -8,6 +8,7 @@ import {
   Dimensions,
   useColorScheme,
 } from 'react-native';
+import Svg, { Polygon, Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FONTS, SPACING } from '../utils/theme';
@@ -26,18 +27,22 @@ export async function hasSeenWelcome(): Promise<boolean> {
 
 // ─── Illustrations ────────────────────────────────────────────────────────────
 
-function MountainIllustration({ accent, muted }: { accent: string; muted: string }) {
+function MountainIllustration({ accent }: { accent: string; muted: string }) {
   return (
-    <View style={ill.container}>
-      {/* Mountain scene — all triangles share bottom: 0 inside this view */}
-      <View style={ill.mountainScene}>
-        <View style={[ill.triangleLeft,  { borderBottomColor: muted }]} />
-        <View style={[ill.triangleRight, { borderBottomColor: muted }]} />
-        <View style={[ill.triangleFront, { borderBottomColor: accent }]} />
-      </View>
-      {/* Ground line flush with mountain bases */}
-      <View style={[ill.ground, { backgroundColor: muted }]} />
-    </View>
+    <Svg width={280} height={160} viewBox="0 0 200 120">
+      {/* Left dark peak */}
+      <Path d="M -5,100 L 10,62 L 30,42 L 55,16 L 72,8 L 90,22 L 115,100 Z" fill="#1A1A1A" />
+      {/* Middle peak */}
+      <Path d="M 75,100 L 95,58 L 112,40 L 130,26 L 150,42 L 168,100 Z" fill="#222222" />
+      {/* Right grey peak */}
+      <Path d="M 130,100 L 140,62 L 152,46 L 164,34 L 176,48 L 188,62 L 205,100 Z" fill="#2A2A2A" />
+      {/* Front orange range */}
+      <Path d="M 2,100 L 30,68 L 52,55 L 72,28 L 84,22 L 96,32 L 114,48 L 132,38 L 152,58 L 172,68 L 198,100 Z" fill={accent} />
+      {/* Shadow left peak */}
+      <Polygon points="84,22 96,32 108,100 76,100" fill="#7A3D1A" opacity={0.5} />
+      {/* Shadow right peak */}
+      <Polygon points="132,38 152,58 160,100 134,100" fill="#7A3D1A" opacity={0.4} />
+    </Svg>
   );
 }
 
@@ -169,9 +174,9 @@ export default function WelcomeScreen({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
 
   const bg = dark ? '#0A0A0A' : '#F5F5F2';
-  const textPrimary = dark ? '#F0EDE8' : '#1A1A18';
+  const textPrimary = dark ? '#E4E2DD' : '#1A1A18';
   const textMuted = dark ? '#555550' : '#9E9E96';
-  const accent = '#FF6B35';
+  const accent = '#BF5F29';
   const muted = dark ? '#2A2A2A' : '#D8D8D4';
 
   function handleScroll(e: any) {
@@ -265,12 +270,12 @@ const styles = StyleSheet.create({
   },
   cocoLogo: {
     fontSize: 48,
-    fontFamily: FONTS.family.heavy,
+    fontFamily: 'OilvareBase-Regular',
     letterSpacing: 10,
     marginBottom: SPACING.xl * 2,
   },
   illustration: {
-    width: 160,
+    width: 280,
     height: 160,
     marginBottom: SPACING.xl + SPACING.md,
     justifyContent: 'center',
@@ -278,7 +283,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.sizes.hero,
-    fontFamily: FONTS.family.heavy,
+    fontFamily: 'OilvareBase-Regular',
     textAlign: 'center',
     lineHeight: 44,
     marginBottom: SPACING.lg,

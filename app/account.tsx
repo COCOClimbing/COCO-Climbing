@@ -22,6 +22,7 @@ import { upsertProfile } from '../utils/cloudSync';
 import { supabase } from '../utils/supabase';
 import { isUsernameAvailable, getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, ACCENT_COLORS, AccentId, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
+import { gradeToNum } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 
 
@@ -123,7 +124,8 @@ export default function AccountScreen() {
 
     const [climbs, sessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
     const now = new Date();
-    const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
+    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthAgo = thirtyDaysAgo.toISOString().slice(0, 10);
 
     const thisMonthClimbs = climbs.filter(c => c.date.slice(0, 10) >= monthAgo);
     const thisMonthSends = thisMonthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
@@ -160,7 +162,7 @@ export default function AccountScreen() {
     const sessionPoints = recentSessions.map(s => {
       const sessionSends = sends.filter(c => c.sessionId === s.id && c.gradeSystem === dominantSys);
       if (sessionSends.length === 0) return null;
-      const avg = sessionSends.reduce((sum, c) => sum + gradeNum(c, dominantSys), 0) / sessionSends.length;
+      const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
       return { date: s.date.slice(5, 10), avg };
     }).filter(Boolean) as { date: string; avg: number }[];
 
@@ -322,7 +324,7 @@ export default function AccountScreen() {
       );
       if (!uploadResponse.ok) throw new Error(await uploadResponse.text());
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-      await upsertProfile(user.id, profileName ?? '', `${publicUrl}?t=${Date.now()}`);
+      await upsertProfile(user.id, profileName ?? '', publicUrl);
       await refreshProfile();
       setPendingAvatarUri(null);
     } catch (e: any) {
@@ -588,9 +590,13 @@ export default function AccountScreen() {
                     }}
                   >
                     <View style={[styles.followModalAvatar, { backgroundColor: colors.accentSoft }]}>
-                      <Text style={[styles.followModalAvatarText, { color: colors.accent }]}>
-                        {(p.name ?? '?')[0].toUpperCase()}
-                      </Text>
+                      {p.avatar_url ? (
+                        <Image source={{ uri: p.avatar_url }} style={styles.followModalAvatarImage} />
+                      ) : (
+                        <Text style={[styles.followModalAvatarText, { color: colors.accent }]}>
+                          {(p.name ?? '?')[0].toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                     <View>
                       <Text style={[styles.followModalName, { color: colors.textPrimary }]}>{p.name}</Text>
@@ -1036,21 +1042,6 @@ export default function AccountScreen() {
 }
 
 // ─── Grade helpers ────────────────────────────────────────────────────────────
-function vNum(grade: string): number {
-  if (grade === 'VB') return -1;
-  return parseFloat(grade.replace('V', '').replace('+', '.5')) || 0;
-}
-function ydsNum(grade: string): number {
-  const parts = grade.split('.');
-  const main = parseInt(parts[1]) || 0;
-  const sub = ['a', 'b', 'c', 'd'].indexOf(parts[2] || '');
-  return main * 10 + (sub >= 0 ? sub : 0);
-}
-function gradeNum(c: Climb, sys: string): number {
-  if (sys === 'v-scale') return vNum(c.grade);
-  if (sys === 'yds') return ydsNum(c.grade);
-  return 0;
-}
 
 // ─── Stats section component ──────────────────────────────────────────────────
 const CHART_H = 110;
@@ -1171,7 +1162,7 @@ function ClimbStatsSection({ stats, colors }: { stats: ClimbStatsData; colors: a
     <View style={statStyles.wrapper}>
       {/* This Month */}
       <View style={statStyles.sectionLabelRow}>
-        <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>THIS MONTH</Text>
+        <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>LAST 30 DAYS</Text>
       </View>
       <View style={statStyles.monthRow}>
         {[
@@ -1191,7 +1182,7 @@ function ClimbStatsSection({ stats, colors }: { stats: ClimbStatsData; colors: a
         <>
           <View style={[statStyles.divider, { backgroundColor: colors.border }]} />
           <View style={statStyles.sectionLabelRow}>
-            <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE PER SESSION</Text>
+            <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
           </View>
           <GradeChart pts={sessionPoints} dominantSys={dominantSys} colors={colors} />
         </>
@@ -1534,6 +1525,11 @@ const styles = StyleSheet.create({
   followModalAvatarText: {
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.bold,
+  },
+  followModalAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
   },
   followModalName: {
     fontSize: FONTS.sizes.md,

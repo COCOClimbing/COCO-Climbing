@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FONTS, SPACING, ACCENT_COLORS, AccentId } from '../utils/theme';
@@ -37,7 +38,8 @@ const ROPE_OPTIONS: { id: OnboardingPrefs['ropeGradeSystem']; label: string; exa
   { id: 'british', label: 'British Trad',  example: 'VS · HVS · E3 · E6 · E12' },
 ];
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
+export const TERMS_ACCEPTED_KEY = '@coco_terms_accepted';
 
 export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const { navigate } = useNav();
@@ -54,18 +56,21 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
 
   async function finish() {
     const prefs: OnboardingPrefs = { boulderGradeSystem: boulderGrade, ropeGradeSystem: ropeGrade };
-    await AsyncStorage.setItem(ONBOARDING_PREFS_KEY, JSON.stringify(prefs));
+    await AsyncStorage.multiSet([
+      [ONBOARDING_PREFS_KEY, JSON.stringify(prefs)],
+      [TERMS_ACCEPTED_KEY, 'true'],
+    ]);
     // Save privacy setting to profile
     if (user) {
       try {
-        await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, hometown ?? undefined, bio ?? undefined, isPrivate);
+        await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, hometown ?? undefined, bio ?? undefined, isPrivate, true);
         await refreshProfile();
       } catch {
         // Non-critical — user can change in Settings
       }
     }
     onDone();
-    navigate('log');
+    navigate('friends');
   }
 
   function next() {
@@ -134,8 +139,44 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
           </View>
         </View>
 
-        {/* ── Step 1: Boulder grade ── */}
+        {/* ── Step 1: Terms of Service ── */}
         {step === 0 && (
+          <>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>
+              Before you{'\n'}start climbing.
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Please read and agree to our community terms.
+            </Text>
+            <View style={[styles.termsBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.termsHeading, { color: colors.textPrimary }]}>Community Standards</Text>
+              <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+                By using COCO, you agree to the following:
+              </Text>
+              <Text style={[styles.termsBullet, { color: colors.textSecondary }]}>
+                • You will not post objectionable, abusive, or harmful content.
+              </Text>
+              <Text style={[styles.termsBullet, { color: colors.textSecondary }]}>
+                • You will not harass, bully, or threaten other users.
+              </Text>
+              <Text style={[styles.termsBullet, { color: colors.textSecondary }]}>
+                • You will not share content that is illegal, sexually explicit, or promotes violence.
+              </Text>
+              <Text style={[styles.termsBullet, { color: colors.textSecondary }]}>
+                • Violations may result in immediate removal of content and account termination.
+              </Text>
+              <Text style={[styles.termsText, { color: colors.textSecondary, marginTop: 10 }]}>
+                Reports of objectionable content will be reviewed within 24 hours. You can report or block users at any time using the menu on any post.
+              </Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://cococlimbing.github.io/COCO-Climbing/privacy-policy')} activeOpacity={0.7}>
+                <Text style={[styles.termsLink, { color: colors.accent }]}>View Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {/* ── Step 2: Boulder grade ── */}
+        {step === 1 && (
           <>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               Boulder grade{'\n'}system?
@@ -155,8 +196,8 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
           </>
         )}
 
-        {/* ── Step 2: Rope grade ── */}
-        {step === 1 && (
+        {/* ── Step 3: Rope grade ── */}
+        {step === 2 && (
           <>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               Rope grade{'\n'}system?
@@ -176,8 +217,8 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
           </>
         )}
 
-        {/* ── Step 3: Privacy ── */}
-        {step === 2 && (
+        {/* ── Step 4: Privacy ── */}
+        {step === 3 && (
           <>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               Who can{'\n'}follow you?
@@ -232,8 +273,8 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
           </>
         )}
 
-        {/* ── Step 4: Theme ── */}
-        {step === 3 && (
+        {/* ── Step 5: Theme ── */}
+        {step === 4 && (
           <>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               Make it{'\n'}yours.
@@ -319,7 +360,7 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
             activeOpacity={0.85}
           >
             <Text style={styles.nextText}>
-              {step === TOTAL_STEPS - 1 ? 'Start Climbing' : 'Continue'}
+              {step === 0 ? 'I Agree & Continue' : step === TOTAL_STEPS - 1 ? 'Start Climbing' : 'Continue'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -518,5 +559,33 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.bold,
     letterSpacing: 0.5,
+  },
+  termsBox: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  termsHeading: {
+    fontSize: FONTS.sizes.md,
+    fontFamily: FONTS.family.bold,
+    marginBottom: SPACING.xs,
+  },
+  termsText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
+    lineHeight: 20,
+  },
+  termsBullet: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
+    lineHeight: 20,
+    paddingLeft: SPACING.xs,
+  },
+  termsLink: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.medium,
+    marginTop: SPACING.xs,
+    textDecorationLine: 'underline',
   },
 });

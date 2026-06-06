@@ -5,6 +5,7 @@ import { vGradeToNum, ydsGradeToNum } from './gradeUtils';
 const KEYS = {
   CLIMBS: 'coco_climbs',
   SESSIONS: 'coco_sessions',
+  ACTIVE_SESSION_ID: 'coco_active_session_id',
 };
 
 // ─── Cloud sync hook ──────────────────────────────────────────────────────────
@@ -25,16 +26,41 @@ let _onProjectsRefresh: (() => void) | null = null;
 export function setProjectsRefreshCallback(cb: (() => void) | null) { _onProjectsRefresh = cb; }
 export function triggerProjectsRefresh() { _onProjectsRefresh?.(); }
 
+// ─── Stats refresh hook ───────────────────────────────────────────────────────
+// stats.tsx registers its load() here; BottomTabBar calls triggerStatsRefresh() after saving
+let _onStatsRefresh: (() => void) | null = null;
+export function setStatsRefreshCallback(cb: (() => void) | null) { _onStatsRefresh = cb; }
+export function triggerStatsRefresh() { _onStatsRefresh?.(); }
+
 // ─── Active session tracker ───────────────────────────────────────────────────
 // null  = no active session (never started or explicitly ended)
 // string = ID of the currently open session
 let _activeSessionId: string | null = null;
-export function setActiveSessionId(id: string | null) { _activeSessionId = id; }
+export function setActiveSessionId(id: string | null) {
+  _activeSessionId = id;
+  // Persist so the session survives the app being killed and reopened
+  if (id) {
+    AsyncStorage.setItem(KEYS.ACTIVE_SESSION_ID, id).catch(() => {});
+  } else {
+    AsyncStorage.removeItem(KEYS.ACTIVE_SESSION_ID).catch(() => {});
+  }
+}
 export function getActiveSessionId(): string | null { return _activeSessionId; }
+
+// Called once on app load. Reads the persisted active session ID from disk,
+// validates the 1.5-hour lapse rule, and restores or clears _activeSessionId.
+export async function restoreActiveSession(): Promise<void> {
+  if (_activeSessionId) return; // already set (e.g. in-process restart)
+  const stored = await AsyncStorage.getItem(KEYS.ACTIVE_SESSION_ID);
+  if (!stored) return;
+
+  _activeSessionId = stored; // temporarily set so getValidActiveSessionId can check it
+  await getValidActiveSessionId(); // validates and clears _activeSessionId + storage if expired
+}
 
 export async function endSession(id: string): Promise<void> {
   // Null immediately so any renders during the async work see no active session
-  if (_activeSessionId === id) _activeSessionId = null;
+  if (_activeSessionId === id) setActiveSessionId(null);
 
   const sessions = await getAllSessions();
   const idx = sessions.findIndex(s => s.id === id);
@@ -52,7 +78,7 @@ export async function endSession(id: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.SESSIONS, JSON.stringify(sessions));
 }
 
-const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+const THREE_HOURS_MS = 1.5 * 60 * 60 * 1000;
 
 // Returns the active session ID if it's still valid (within 3 hours of last climb,
 // or session has no climbs yet and was started within 3 hours). Auto-expires otherwise.
@@ -63,7 +89,7 @@ export async function getValidActiveSessionId(): Promise<string | null> {
   const sessions = await getAllSessions();
   const session = sessions.find(s => s.id === id);
   if (!session) {
-    _activeSessionId = null;
+    setActiveSessionId(null);
     return null;
   }
 
@@ -72,7 +98,16 @@ export async function getValidActiveSessionId(): Promise<string | null> {
   if (checkTime) {
     const elapsed = Date.now() - new Date(checkTime).getTime();
     if (elapsed > THREE_HOURS_MS) {
-      _activeSessionId = null;
+      await endSession(id);
+      if (_cloudUserId) {
+        const updated = await getAllSessions();
+        const ended = updated.find(s => s.id === id);
+        if (ended) {
+          import('./cloudSync').then(({ syncSessionToCloud }) =>
+            syncSessionToCloud(ended, _cloudUserId!).catch(() => {})
+          );
+        }
+      }
       return null;
     }
   }
@@ -180,7 +215,7 @@ export async function createNewSession(environment: string = 'indoor', location?
   const now = new Date();
   const newSession: Session = {
     id: generateId(),
-    date: now.toISOString().split('T')[0],
+    date: getTodayISO(),
     environment: environment as any,
     location,
     startedAt: now.toISOString(),
@@ -305,7 +340,8 @@ export function generateId(): string {
 }
 
 export function getTodayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // ─── Last Used Climb Type ─────────────────────────────────────────────────────
@@ -319,6 +355,34 @@ export async function saveLastClimbType(type: string): Promise<void> {
 export async function getLastClimbType(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(LAST_TYPE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+const LAST_OUTCOME_KEY = 'coco_last_outcome';
+
+export async function saveLastOutcome(outcome: string): Promise<void> {
+  await AsyncStorage.setItem(LAST_OUTCOME_KEY, outcome);
+}
+
+export async function getLastOutcome(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(LAST_OUTCOME_KEY);
+  } catch {
+    return null;
+  }
+}
+
+const LAST_ENVIRONMENT_KEY = 'coco_last_environment';
+
+export async function saveLastEnvironment(environment: string): Promise<void> {
+  await AsyncStorage.setItem(LAST_ENVIRONMENT_KEY, environment);
+}
+
+export async function getLastEnvironment(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(LAST_ENVIRONMENT_KEY);
   } catch {
     return null;
   }
@@ -394,6 +458,28 @@ export async function saveLastGradeSystem(climbType: string, system: string): Pr
 export async function getLastGradeSystem(climbType: string): Promise<string | null> {
   try {
     const raw = await AsyncStorage.getItem(GRADE_SYSTEM_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map[climbType] || null;
+  } catch { return null; }
+}
+
+// ─── Last Used Grade Per Type ─────────────────────────────────────────────────
+
+const LAST_GRADE_KEY = 'coco_last_grade';
+
+export async function saveLastGrade(climbType: string, grade: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_GRADE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[climbType] = grade;
+    await AsyncStorage.setItem(LAST_GRADE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export async function getLastGrade(climbType: string): Promise<string | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_GRADE_KEY);
     if (!raw) return null;
     const map = JSON.parse(raw);
     return map[climbType] || null;

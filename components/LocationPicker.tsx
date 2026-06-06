@@ -51,71 +51,30 @@ interface NominatimResult {
   };
 }
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-async function searchNominatim(query: string): Promise<SearchResult[]> {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=4&addressdetails=1`;
+async function searchPlaces(query: string): Promise<SearchResult[]> {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1`;
   const res = await fetch(url, { headers: { 'User-Agent': 'COCO-ClimbingApp/1.0' } });
   const data: NominatimResult[] = await res.json();
-  return data.map(r => {
-    const a = r.address;
-    const placeName = a.amenity || a.building || r.name || '';
-    const streetLine = [a.house_number, a.road].filter(Boolean).join(' ');
-    const cityLine = [a.city || a.town || a.village, a.state].filter(Boolean).join(', ');
-    const primary = placeName || streetLine || cityLine || r.display_name.split(',')[0];
-    const secondary = [placeName ? streetLine : '', cityLine].filter(Boolean).join(', ');
-    const fullName = placeName
-      ? `${placeName}${a.city || a.town ? `, ${a.city || a.town}` : ''}`
-      : [streetLine, a.city || a.town].filter(Boolean).join(', ');
-    return { id: `n-${r.place_id}`, primary, secondary, fullName: fullName || primary };
-  });
-}
-
-async function searchOverpass(query: string): Promise<SearchResult[]> {
-  // Escape regex special chars
-  const safe = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const body = `[out:json][timeout:10];(node["name"~"${safe}",i];way["name"~"${safe}",i];);out center 6;`;
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body,
-  });
-  const data: { elements: OverpassElement[] } = await res.json();
-  return data.elements
-    .filter(e => e.tags?.name)
-    .map(e => {
-      const t = e.tags!;
-      const name = t.name;
-      const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
-      const city = t['addr:city'] || t['addr:town'] || '';
-      const secondary = [street, city].filter(Boolean).join(', ');
-      const fullName = [name, city].filter(Boolean).join(', ');
-      return { id: `o-${e.id}`, primary: name, secondary, fullName };
-    });
-}
-
-async function searchPlaces(query: string): Promise<SearchResult[]> {
-  const [nominatim, overpass] = await Promise.allSettled([
-    searchNominatim(query),
-    searchOverpass(query),
-  ]);
-  const combined = [
-    ...(nominatim.status === 'fulfilled' ? nominatim.value : []),
-    ...(overpass.status === 'fulfilled' ? overpass.value : []),
-  ];
   const seen = new Set<string>();
-  return combined.filter(r => {
-    const key = r.fullName.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 6);
+  return data
+    .map(r => {
+      const a = r.address;
+      const placeName = a.amenity || a.building || r.name || '';
+      const streetLine = [a.house_number, a.road].filter(Boolean).join(' ');
+      const cityLine = [a.city || a.town || a.village, a.state].filter(Boolean).join(', ');
+      const primary = placeName || streetLine || cityLine || r.display_name.split(',')[0];
+      const secondary = [placeName ? streetLine : '', cityLine].filter(Boolean).join(', ');
+      const fullName = placeName
+        ? `${placeName}${a.city || a.town ? `, ${a.city || a.town}` : ''}`
+        : [streetLine, a.city || a.town].filter(Boolean).join(', ');
+      return { id: `n-${r.place_id}`, primary, secondary, fullName: fullName || primary };
+    })
+    .filter(r => {
+      const key = r.fullName.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 interface Props {

@@ -95,7 +95,7 @@ export default function LoginScreen() {
     if (err) {
       setError(err);
     } else {
-      const dest = returnTo ?? 'log';
+      const dest = returnTo ?? 'friends';
       setReturnTo(null);
       navigate(dest);
     }

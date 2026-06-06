@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Alert } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
-import { mergeData, upsertProfile, getCloudProfile } from './cloudSync';
+import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia } from './cloudSync';
 import { setCloudUserId } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -48,23 +48,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncedRef = useRef(false);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       }
       setSession(session);
       setUser(session?.user ?? null);
+      if (event === 'INITIAL_SESSION') {
+        setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety net: if INITIAL_SESSION never fires (e.g. network timeout), unblock the splash after 8s
+    const timeout = setTimeout(() => setLoading(false), 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   // Set cloud user ID and load profile + sync when user changes
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSyncOnLogin(userId: string) {
     try {
+      await reuploadMissingMedia(userId);
       await mergeData(userId);
     } catch (e) {
       console.warn('Sync error:', e);
@@ -137,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function syncNow() {
     if (!user) return;
     try {
+      await reuploadMissingMedia(user.id);
       await mergeData(user.id);
     } catch (e) {
       console.warn('Sync error:', e);
@@ -188,9 +191,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
-    // Clear climb/session data only — onboarding and welcome flags stay so
-    // returning users aren't sent through setup flows again on next login
-    await AsyncStorage.multiRemove(['coco_climbs', 'coco_sessions', 'coco_named_projects']);
+    await AsyncStorage.multiRemove([
+      'coco_climbs',
+      'coco_sessions',
+      'coco_named_projects',
+      'coco_theme_mode',
+      'coco_theme_accent',
+      'coco_grade_system',
+      'coco_preferred_display_grades',
+      'coco_last_climb_type',
+      '@coco_onboarding_prefs',
+    ]);
     await supabase.auth.signOut();
   }
 

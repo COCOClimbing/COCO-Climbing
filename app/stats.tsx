@@ -42,6 +42,78 @@ function numToLabel(n: number, sys: string): string {
   return String(Math.round(n));
 }
 
+// ── Shared grade breakdown modal ─────────────────────────────────────────────
+
+function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onClose }: {
+  visible: boolean;
+  title: string;
+  filteredClimbs: Climb[];
+  accentColor: string;
+  onClose: () => void;
+}) {
+  const { colors } = useTheme();
+  const gradeCounts: Record<string, { total: number; sends: number; system: string }> = {};
+  filteredClimbs.forEach(c => {
+    if (!gradeCounts[c.grade]) gradeCounts[c.grade] = { total: 0, sends: 0, system: c.gradeSystem };
+    gradeCounts[c.grade].total += 1;
+    if (c.outcome === 'send' || c.outcome === 'flash') gradeCounts[c.grade].sends += 1;
+  });
+  const gradeEntries = Object.entries(gradeCounts).sort((a, b) =>
+    getGradeDifficulty(b[0], b[1].system) - getGradeDifficulty(a[0], a[1].system)
+  );
+  const maxCount = Math.max(...gradeEntries.map(([, v]) => v.total), 1);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
+        <View style={ss.modalHeader}>
+          <TouchableOpacity onPress={onClose} style={ss.modalClose}>
+            <Text style={[ss.modalCloseText, { color: colors.textMuted }]}>Done</Text>
+          </TouchableOpacity>
+          <Text style={[ss.modalTitle, { color: colors.textPrimary }]}>{title}</Text>
+          <Text style={[ss.modalSubtitle, { color: colors.textMuted }]}>{filteredClimbs.length} climbs</Text>
+        </View>
+        {gradeEntries.length === 0 ? (
+          <View style={ss.modalEmpty}>
+            <Text style={[ss.modalEmptyText, { color: colors.textMuted }]}>No climbs logged</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={ss.modalScroll} showsVerticalScrollIndicator={false}>
+            <Text style={[ss.modalSectionLabel, { color: colors.textMuted }]}>GRADE BREAKDOWN</Text>
+            {gradeEntries.map(([grade, { total, sends }]) => (
+              <View key={grade} style={ss.gradeRow}>
+                <Text style={[ss.gradeLabel, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>{grade}</Text>
+                <View style={ss.gradeBarWrap}>
+                  <View style={[ss.gradeTrack, { backgroundColor: colors.bgElevated }]}>
+                    <View style={[ss.gradeFill, { width: `${Math.round((total / maxCount) * 100)}%`, backgroundColor: '#555555' }]} />
+                    {sends > 0 && (
+                      <View style={[ss.gradeSendFill, { width: `${Math.round((sends / maxCount) * 100)}%`, backgroundColor: accentColor }]} />
+                    )}
+                  </View>
+                </View>
+                <Text style={[ss.gradeCount, { color: colors.textSecondary }]}>{total}</Text>
+                {sends > 0 && (
+                  <Text style={[ss.gradeSends, { color: accentColor, fontFamily: FONTS.family.semibold }]}>{sends}✓</Text>
+                )}
+              </View>
+            ))}
+            <View style={ss.gradeLegend}>
+              <View style={ss.legendItem}>
+                <View style={[ss.legendDot, { backgroundColor: accentColor }]} />
+                <Text style={[ss.legendText, { color: colors.textMuted }]}>Sends</Text>
+              </View>
+              <View style={ss.legendItem}>
+                <View style={[ss.legendDot, { backgroundColor: '#555555' }]} />
+                <Text style={[ss.legendText, { color: colors.textMuted }]}>Attempts</Text>
+              </View>
+            </View>
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function StatsScreen() {
@@ -51,6 +123,7 @@ export default function StatsScreen() {
   const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>({});
   const [sessionCount, setSessionCount] = useState(0);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     // Pull fresh data from Supabase so stats always reflect the latest cloud state
@@ -149,7 +222,7 @@ export default function StatsScreen() {
 
     const typeCounts: Record<string, number> = {};
     climbs.forEach(c => { typeCounts[c.type] = (typeCounts[c.type] || 0) + 1; });
-    const topTypes = CLIMB_TYPES.filter(t => typeCounts[t.id]).sort((a, b) => (typeCounts[b.id] || 0) - (typeCounts[a.id] || 0));
+    const topTypes = CLIMB_TYPES.filter(t => typeCounts[t.id] && t.id !== 'hangboard').sort((a, b) => (typeCounts[b.id] || 0) - (typeCounts[a.id] || 0));
     const maxTypeCount = Math.max(...topTypes.map(t => typeCounts[t.id] || 0));
 
     const climbWeeks = [...new Set(climbs.map(c => {
@@ -407,7 +480,7 @@ export default function StatsScreen() {
         {chartPoints.length >= 2 && (
           <View style={{ marginTop: SPACING.lg }}>
             <Text style={[ss.chartCaption, { color: colors.textMuted }]}>
-              Avg {dominantSys === 'v-scale' ? 'boulder' : 'route'} grade tried per session
+              Avg Grade Attempted Per Session
             </Text>
             <Svg width={CHART_W} height={CHART_H}>
               {[0, 0.5, 1].map(t => {
@@ -473,7 +546,7 @@ export default function StatsScreen() {
               const pct = Math.round((count / maxStyleCount) * 100);
               const styleLabel = CLIMB_STYLES.find(s => s.id === style)?.label ?? style;
               return (
-                <View key={style} style={ss.styleRow}>
+                <TouchableOpacity key={style} style={ss.styleRow} onPress={() => setSelectedStyle(style)} activeOpacity={0.7}>
                   <Text style={[ss.styleName, { color: colors.textSecondary }]}>{styleLabel}</Text>
                   <View style={[ss.styleTrack, { backgroundColor: colors.bgElevated }]}>
                     <View style={[ss.styleFill, { width: `${pct}%`, backgroundColor: colors.accentBlue + 'AA' }]} />
@@ -482,7 +555,8 @@ export default function StatsScreen() {
                   {hardest && (
                     <Text style={[ss.styleHardest, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>{hardest.grade}</Text>
                   )}
-                </View>
+                  <Text style={[ss.typeChevron, { color: colors.textMuted }]}>›</Text>
+                </TouchableOpacity>
               );
             })}
             <Divider />
@@ -553,80 +627,21 @@ export default function StatsScreen() {
         <View style={{ height: SPACING.xxl * 2 }} />
       </ScrollView>
 
-      {/* ── Grade breakdown modal ── */}
-      <Modal
+      {/* ── Grade breakdown modals ── */}
+      <GradeBreakdownModal
         visible={selectedType !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedType(null)}
-      >
-        <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
-          {(() => {
-            if (!selectedType) return null;
-            const typeInfo = CLIMB_TYPES.find(t => t.id === selectedType);
-            const typeClimbs = climbs.filter(c => c.type === selectedType);
-            const gradeCounts: Record<string, { total: number; sends: number; system: string }> = {};
-            typeClimbs.forEach(c => {
-              if (!gradeCounts[c.grade]) gradeCounts[c.grade] = { total: 0, sends: 0, system: c.gradeSystem };
-              gradeCounts[c.grade].total += 1;
-              if (c.outcome === 'send' || c.outcome === 'flash') gradeCounts[c.grade].sends += 1;
-            });
-            const gradeEntries = Object.entries(gradeCounts).sort((a, b) =>
-              getGradeDifficulty(b[0], b[1].system) - getGradeDifficulty(a[0], a[1].system)
-            );
-            const maxCount = Math.max(...gradeEntries.map(([, v]) => v.total), 1);
-            const accentColor = CLIMB_TYPES.find(t => t.id === selectedType)?.color ?? colors.accent;
-
-            return (
-              <>
-                <View style={ss.modalHeader}>
-                  <TouchableOpacity onPress={() => setSelectedType(null)} style={ss.modalClose}>
-                    <Text style={[ss.modalCloseText, { color: colors.textMuted }]}>Done</Text>
-                  </TouchableOpacity>
-                  <Text style={[ss.modalTitle, { color: colors.textPrimary }]}>{typeInfo?.label ?? selectedType}</Text>
-                  <Text style={[ss.modalSubtitle, { color: colors.textMuted }]}>{typeClimbs.length} climbs</Text>
-                </View>
-                {gradeEntries.length === 0 ? (
-                  <View style={ss.modalEmpty}>
-                    <Text style={[ss.modalEmptyText, { color: colors.textMuted }]}>No climbs logged</Text>
-                  </View>
-                ) : (
-                  <ScrollView contentContainerStyle={ss.modalScroll} showsVerticalScrollIndicator={false}>
-                    <Text style={[ss.modalSectionLabel, { color: colors.textMuted }]}>GRADE BREAKDOWN</Text>
-                    {gradeEntries.map(([grade, { total, sends }]) => (
-                      <View key={grade} style={ss.gradeRow}>
-                        <Text style={[ss.gradeLabel, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>{grade}</Text>
-                        <View style={ss.gradeBarWrap}>
-                          <View style={[ss.gradeTrack, { backgroundColor: colors.bgElevated }]}>
-                            <View style={[ss.gradeFill, { width: `${Math.round((total / maxCount) * 100)}%`, backgroundColor: accentColor + 'AA' }]} />
-                            {sends > 0 && (
-                              <View style={[ss.gradeSendFill, { width: `${Math.round((sends / maxCount) * 100)}%`, backgroundColor: accentColor }]} />
-                            )}
-                          </View>
-                        </View>
-                        <Text style={[ss.gradeCount, { color: colors.textSecondary }]}>{total}</Text>
-                        {sends > 0 && (
-                          <Text style={[ss.gradeSends, { color: accentColor, fontFamily: FONTS.family.semibold }]}>{sends}✓</Text>
-                        )}
-                      </View>
-                    ))}
-                    <View style={ss.gradeLegend}>
-                      <View style={ss.legendItem}>
-                        <View style={[ss.legendDot, { backgroundColor: accentColor }]} />
-                        <Text style={[ss.legendText, { color: colors.textMuted }]}>Sends</Text>
-                      </View>
-                      <View style={ss.legendItem}>
-                        <View style={[ss.legendDot, { backgroundColor: accentColor + 'AA' }]} />
-                        <Text style={[ss.legendText, { color: colors.textMuted }]}>Attempts</Text>
-                      </View>
-                    </View>
-                  </ScrollView>
-                )}
-              </>
-            );
-          })()}
-        </SafeAreaView>
-      </Modal>
+        title={CLIMB_TYPES.find(t => t.id === selectedType)?.label ?? selectedType ?? ''}
+        filteredClimbs={selectedType ? climbs.filter(c => c.type === selectedType) : []}
+        accentColor={CLIMB_TYPES.find(t => t.id === selectedType)?.color ?? colors.accent}
+        onClose={() => setSelectedType(null)}
+      />
+      <GradeBreakdownModal
+        visible={selectedStyle !== null}
+        title={CLIMB_STYLES.find(s => s.id === selectedStyle)?.label ?? selectedStyle ?? ''}
+        filteredClimbs={selectedStyle ? climbs.filter(c => c.styles.includes(selectedStyle as any)) : []}
+        accentColor={colors.accentBlue}
+        onClose={() => setSelectedStyle(null)}
+      />
     </View>
   );
 }

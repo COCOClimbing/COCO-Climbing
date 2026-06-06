@@ -153,6 +153,20 @@ export async function removeFriend(userId: string, friendId: string): Promise<vo
     .eq('receiver_id', friendId);
 }
 
+// Get a friend's session IDs from the last 30 days
+export async function getFriendEndedSessionIds(friendId: string): Promise<Set<string>> {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+
+  const { data } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('user_id', friendId)
+    .gte('date', cutoff);
+  return new Set((data ?? []).map((s: any) => s.id));
+}
+
 // Get a friend's climbs from the last 30 days
 export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
   const thirtyDaysAgo = new Date();
@@ -165,10 +179,11 @@ export async function getFriendRecentClimbs(friendId: string): Promise<any[]> {
     .eq('user_id', friendId)
     .gte('date', cutoff)
     .order('date', { ascending: false });
+
   return data ?? [];
 }
 
-// Get a friend's sessions from the last 30 days (for media)
+// Get a friend's recent sessions from the last 30 days (for media)
 export async function getFriendRecentSessions(friendId: string): Promise<any[]> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -176,11 +191,34 @@ export async function getFriendRecentSessions(friendId: string): Promise<any[]> 
 
   const { data } = await supabase
     .from('sessions')
-    .select('id, media_uris, media_types')
+    .select('id, date, started_at, media_uris, media_types, friends, notes, title')
     .eq('user_id', friendId)
-    .gte('date', cutoff)
-    .not('media_uris', 'is', null);
+    .gte('date', cutoff);
   return data ?? [];
+}
+
+// Get ended sessions from the last 30 days where userId was tagged, with the session owner's profile
+export async function getTaggedSessions(userId: string): Promise<{ session: any; profile: any }[]> {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+
+  const { data: sessions } = await supabase
+    .from('sessions')
+    .select('*')
+    .gte('date', cutoff)
+    .contains('friends', [{ id: userId }]);
+
+  if (!sessions || sessions.length === 0) return [];
+
+  const ownerIds = [...new Set(sessions.map((s: any) => s.user_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, name, username, avatar_url, hometown, is_private')
+    .in('id', ownerIds);
+
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  return sessions.map((s: any) => ({ session: s, profile: profileMap.get(s.user_id) ?? null }));
 }
 
 // Get ALL of a friend's climbs (for their profile view)
@@ -215,21 +253,17 @@ export async function getFriendshipStatus(userId: string, otherId: string): Prom
 }
 
 export async function getFriendCounts(userId: string): Promise<FriendCounts> {
-  const [followersRes, followingRes] = await Promise.all([
-    supabase
-      .from('friendships')
-      .select('id', { count: 'exact', head: true })
-      .eq('receiver_id', userId)
-      .eq('status', 'accepted'),
-    supabase
-      .from('friendships')
-      .select('id', { count: 'exact', head: true })
-      .eq('sender_id', userId)
-      .eq('status', 'accepted'),
-  ]);
+  // Read from profile columns instead of counting friendships rows directly —
+  // the friendships RLS only exposes rows the viewer is party to, which gives
+  // wrong counts for other users.
+  const { data } = await supabase
+    .from('profiles')
+    .select('followers_count, following_count')
+    .eq('id', userId)
+    .single();
   return {
-    followers: followersRes.count ?? 0,
-    following: followingRes.count ?? 0,
+    followers: data?.followers_count ?? 0,
+    following: data?.following_count ?? 0,
   };
 }
 
@@ -303,11 +337,36 @@ export async function getSessionComments(sessionId: string): Promise<SessionComm
 }
 
 export async function addSessionComment(sessionId: string, userId: string, text: string): Promise<void> {
-  await supabase.from('session_comments').insert({ session_id: sessionId, user_id: userId, text });
+  const { error } = await supabase.from('session_comments').insert({ session_id: sessionId, user_id: userId, text });
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteSessionComment(commentId: string): Promise<void> {
   await supabase.from('session_comments').delete().eq('id', commentId);
+}
+
+// ─── Comment Likes ────────────────────────────────────────────────────────────
+
+export async function getCommentLikes(commentIds: string[]): Promise<Record<string, string[]>> {
+  if (commentIds.length === 0) return {};
+  const { data } = await supabase
+    .from('comment_likes')
+    .select('comment_id, user_id')
+    .in('comment_id', commentIds);
+  const map: Record<string, string[]> = {};
+  for (const row of data ?? []) {
+    if (!map[row.comment_id]) map[row.comment_id] = [];
+    map[row.comment_id].push(row.user_id);
+  }
+  return map;
+}
+
+export async function likeComment(commentId: string, userId: string): Promise<void> {
+  await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: userId });
+}
+
+export async function unlikeComment(commentId: string, userId: string): Promise<void> {
+  await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', userId);
 }
 
 // ─── Username ─────────────────────────────────────────────────────────────────

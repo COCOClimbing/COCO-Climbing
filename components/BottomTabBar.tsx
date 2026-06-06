@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh, triggerProjectsRefresh } from '../utils/storage';
+import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from '../utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav, ScreenId } from '../utils/NavigationContext';
@@ -100,7 +100,7 @@ export default function BottomTabBar() {
       <LogClimbModal
         visible={logModalVisible}
         onClose={() => { setLogModalVisible(false); sessionIdRef.current = undefined; }}
-        onSaved={() => { setLogModalVisible(false); sessionIdRef.current = undefined; triggerSessionsRefresh(); triggerProjectsRefresh(); }}
+        onSaved={() => { setLogModalVisible(false); sessionIdRef.current = undefined; triggerSessionsRefresh(); triggerProjectsRefresh(); triggerStatsRefresh(); }}
         defaultSessionId={sessionIdRef.current}
       />
     </>

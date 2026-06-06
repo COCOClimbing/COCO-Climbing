@@ -9,10 +9,8 @@ import AddProjectModal from '../components/AddProjectModal';
 import LogClimbModal from '../components/LogClimbModal';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import { format, parseISO } from 'date-fns';
+import { useNav } from '../utils/NavigationContext';
 
-interface NamedProject {
-  id: string; name: string; grade: string; type: string; createdAt: string;
-}
 interface PastProject {
   projectId: string; projectName?: string; grade: string; type: string;
   sentDate?: string; workDays: string[]; totalSessions: number;
@@ -20,6 +18,11 @@ interface PastProject {
 
 export default function ProjectsScreen() {
   const { colors } = useTheme();
+  const { tabResetCount } = useNav();
+
+  useEffect(() => {
+    if (tabResetCount['projects']) setDetailProject(null);
+  }, [tabResetCount['projects']]);
   const [projects, setProjects] = useState<Climb[]>([]);
   const [namedProjects, setNamedProjects] = useState<NamedProject[]>([]);
   const [showingPast, setShowingPast] = useState(false);
@@ -113,6 +116,8 @@ export default function ProjectsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await deleteNamedProject(id);
+        const all = await getAllClimbs();
+        await Promise.all(all.filter(c => c.projectId === id).map(c => deleteClimb(c.id)));
         await load();
       }},
     ]);

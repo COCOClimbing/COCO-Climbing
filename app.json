@@ -32,7 +32,8 @@
         "NSLocationWhenInUseUsageDescription": "COCO uses your location to tag your climbing sessions with the gym or crag you're at.",
         "NSUserNotificationsUsageDescription": "COCO notifies you when friends tag you in a climbing session.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "versionCode": 1,

@@ -12,8 +12,8 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType>({
   mode: 'light',
-  accentId: 'amber',
-  colors: buildColorScheme('light', 'amber'),
+  accentId: 'orange',
+  colors: buildColorScheme('light', 'orange'),
   setMode: () => {},
   setAccent: () => {},
 });
@@ -26,28 +26,28 @@ const OLD_KEY    = 'coco_theme';
 const ACCENT_MIGRATION: Record<string, AccentId> = {
   orange:  'orange',
   blue:    'blue',
-  amber:   'amber',
+  amber:   'orange',
   sage:    'green',
   rose:    'crimson',
   purple:  'lavender',
   pink:    'lavender',
-  obsidian:'amber',
-  slate:   'amber',
+  obsidian:'orange',
+  slate:   'orange',
   forest:  'green',
   crimson: 'crimson',
-  arctic:  'amber',
-  sand:    'amber',
+  arctic:  'orange',
+  sand:    'orange',
   meadow:  'green',
 };
 
 // Migrate old single-theme IDs to the new mode + accent system
 const OLD_THEME_MAP: Record<string, { mode: ThemeMode; accentId: AccentId }> = {
-  obsidian: { mode: 'dark',  accentId: 'amber'   },
+  obsidian: { mode: 'dark',  accentId: 'orange'  },
   slate:    { mode: 'dark',  accentId: 'blue'    },
   forest:   { mode: 'dark',  accentId: 'green'   },
   crimson:  { mode: 'dark',  accentId: 'crimson' },
   arctic:   { mode: 'light', accentId: 'blue'    },
-  sand:     { mode: 'light', accentId: 'amber'   },
+  sand:     { mode: 'light', accentId: 'orange'  },
   meadow:   { mode: 'light', accentId: 'green'   },
   rose:     { mode: 'light', accentId: 'crimson' },
 };
@@ -55,7 +55,7 @@ const OLD_THEME_MAP: Record<string, { mode: ThemeMode; accentId: AccentId }> = {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState]     = useState<ThemeMode>('light');
-  const [accentId, setAccentState] = useState<AccentId>('amber');
+  const [accentId, setAccentState] = useState<AccentId>('orange');
 
   useEffect(() => {
     (async () => {
@@ -66,7 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       ]);
 
       let m: ThemeMode = 'light';
-      let a: AccentId  = 'amber';
+      let a: AccentId  = 'orange';
 
       if (savedMode && savedAccent) {
         m = savedMode as ThemeMode;

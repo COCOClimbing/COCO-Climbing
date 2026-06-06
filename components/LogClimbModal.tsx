@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Modal,
   TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image
@@ -13,8 +13,13 @@ import { useTheme } from '../utils/ThemeContext';
 import {
   saveClimb, createNewSession, generateId, getTodayISO,
   saveLastClimbType, getLastClimbType, getAllNamedProjects, getAllClimbs, saveNamedProject,
-  saveLastGradeSystem, getLastGradeSystem, setActiveSessionId, getAllSessions, saveSession,
+  saveLastGradeSystem, getLastGradeSystem, saveLastGrade, getLastGrade, setActiveSessionId, getAllSessions, saveSession,
+  saveLastOutcome, getLastOutcome,
+  saveLastEnvironment, getLastEnvironment,
 } from '../utils/storage';
+import { Video, Image as CompressorImage } from 'react-native-compressor';
+import { supabase } from '../utils/supabase';
+import { useAuth } from '../utils/AuthContext';
 import { Pill, Divider } from './UI';
 import GradePicker from './GradePicker';
 import FriendPicker from './FriendPicker';
@@ -30,15 +35,21 @@ interface Props {
   editProjectMode?: boolean; // hides environment + project picker, shows project name as title
 }
 
+// Persists last-used outcome across modal opens within an app session
+let _lastUsedOutcome: OutcomeId = 'send';
+
 export default function LogClimbModal({ visible, onClose, onSaved, existingClimb, defaultSessionId, sessionDate, editProjectMode }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const notesYRef = useRef(0);
 
   // Form state
   const [environment, setEnvironment]       = useState<EnvironmentId>('indoor');
   const [isProject, setIsProject]           = useState(false);
   const [climbType, setClimbType]           = useState<ClimbTypeId>('boulder');
-  const [outcome, setOutcome]               = useState<OutcomeId>('send');
+  const [outcome, setOutcome]               = useState<OutcomeId>(_lastUsedOutcome);
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
   const [gradeSystem, setGradeSystem]       = useState<'v-scale' | 'yds' | 'french' | 'british'>('v-scale');
   const [grade, setGrade]                   = useState('V3');
@@ -48,8 +59,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const [attempts, setAttempts]             = useState('1');
   const [showGradePicker, setShowGradePicker] = useState(false);
   const [routine, setRoutine]               = useState('');
-  const [mediaUri, setMediaUri]             = useState<string | undefined>();
-  const [mediaType, setMediaType]           = useState<'photo' | 'video' | undefined>();
+  const [mediaItems, setMediaItems]         = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
 
   // Friends state
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
@@ -82,43 +92,41 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     }
   }, [visible, defaultSessionId]);
 
-  // Load last climb type and grade system for new climbs
+  async function restoreLastGrade(type: ClimbTypeId) {
+    if (type === 'boulder') {
+      const sys = await getLastGradeSystem('boulder');
+      const resolved = sys && ['v-scale', 'font'].includes(sys) ? sys : 'v-scale';
+      setGradeSystem(resolved as any);
+      setGrade((await getLastGrade(type)) ?? (resolved === 'font' ? '6a' : 'V3'));
+    } else if (type !== 'hangboard' && type !== 'lift') {
+      const sys = await getLastGradeSystem(type);
+      const resolved = sys && ['yds', 'french', 'british'].includes(sys) ? sys : 'yds';
+      setGradeSystem(resolved as any);
+      setGrade((await getLastGrade(type)) ?? (resolved === 'yds' ? '5.10a' : resolved === 'french' ? '6a' : 'VS'));
+    }
+  }
+
+  // Load last climb type, grade system, grade, and outcome for new climbs
   useEffect(() => {
     if (!existingClimb && visible) {
-      getLastClimbType().then(last => {
+      getLastOutcome().then(last => {
+        if (last) { _lastUsedOutcome = last as OutcomeId; setOutcome(last as OutcomeId); }
+      });
+      getLastEnvironment().then(last => {
+        if (last) setEnvironment(last as EnvironmentId);
+      });
+      getLastClimbType().then(async last => {
         const type = (last as ClimbTypeId) || 'boulder';
         setClimbType(type);
-        if (type === 'boulder') {
-          setGradeSystem('v-scale');
-          setGrade('V3');
-        } else {
-          getLastGradeSystem(type).then(sys => {
-            const validRopeSystems = ['yds', 'french', 'british'];
-            const resolved = sys && validRopeSystems.includes(sys) ? sys : 'yds';
-            setGradeSystem(resolved as any);
-          });
-        }
+        await restoreLastGrade(type);
       });
     }
   }, [visible, existingClimb]);
 
-  // When climb type changes, always restore last used grade system for that type
+  // When climb type changes, restore last used grade system and grade for that type
   useEffect(() => {
-    if (climbType === 'boulder') {
-      getLastGradeSystem('boulder').then(sys => {
-        const valid = ['v-scale', 'font'];
-        const resolved = sys && valid.includes(sys) ? sys : 'v-scale';
-        setGradeSystem(resolved as any);
-        setGrade(resolved === 'font' ? '6a' : 'V3');
-      });
-    } else if (climbType !== 'hangboard' && climbType !== 'lift') {
-      getLastGradeSystem(climbType).then(sys => {
-        const valid = ['yds', 'french', 'british'];
-        const resolved = sys && valid.includes(sys) ? sys : 'yds';
-        setGradeSystem(resolved as any);
-        setGrade(resolved === 'yds' ? '5.10a' : resolved === 'french' ? '6a' : 'VS');
-      });
-    }
+    if (existingClimb) return;
+    restoreLastGrade(climbType);
   }, [climbType]);
 
   // Load existing climb data
@@ -137,8 +145,14 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setAttempts(String(existingClimb.attempts || 1));
       setSelectedProjectId(existingClimb.projectId);
       setNewProjectName(existingClimb.projectName && !existingClimb.projectId ? existingClimb.projectName : '');
-      setMediaUri(existingClimb.mediaUri);
-      setMediaType(existingClimb.mediaType);
+      // Load existing media — prefer the new array, fall back to legacy single field
+      if (existingClimb.mediaUris && existingClimb.mediaUris.length > 0) {
+        setMediaItems(existingClimb.mediaUris.map((uri, i) => ({ uri, type: existingClimb.mediaTypes?.[i] ?? 'photo' })));
+      } else if (existingClimb.mediaUri) {
+        setMediaItems([{ uri: existingClimb.mediaUri, type: existingClimb.mediaType ?? 'photo' }]);
+      } else {
+        setMediaItems([]);
+      }
     } else {
       resetForm();
     }
@@ -150,7 +164,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     setEnvironment('indoor');
     setIsProject(false);
     setClimbType('boulder');
-    setOutcome('send');
+    setOutcome(_lastUsedOutcome);
     setSelectedStyles([]);
     setGradeSystem('v-scale');
     setGrade('V3');
@@ -161,8 +175,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     setRoutine('');
     setSelectedProjectId(undefined);
     setNewProjectName('');
-    setMediaUri(undefined);
-    setMediaType(undefined);
+    setMediaItems([]);
     setShowGradePicker(false);
     setFriends([]);
   }
@@ -191,8 +204,11 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
       quality: 0.85,
+      allowsMultipleSelection: type === 'photo',
     });
-    if (!result.canceled && result.assets[0]) { setMediaUri(result.assets[0].uri); setMediaType(type); }
+    if (!result.canceled && result.assets.length > 0) {
+      setMediaItems(prev => [...prev, ...result.assets.map(a => ({ uri: a.uri, type }))]);
+    }
   }
 
   async function takeMedia(type: 'photo' | 'video') {
@@ -202,7 +218,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
       quality: 0.85,
     });
-    if (!result.canceled && result.assets[0]) { setMediaUri(result.assets[0].uri); setMediaType(type); }
+    if (!result.canceled && result.assets[0]) {
+      setMediaItems(prev => [...prev, { uri: result.assets[0].uri, type }]);
+    }
   }
 
   function showMediaOptions() {
@@ -216,6 +234,29 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }
 
   const isTraining = climbType === 'hangboard' || climbType === 'lift';
+
+  async function uploadMedia(localUri: string, climbId: string, type: 'photo' | 'video'): Promise<string> {
+    const ext = type === 'video' ? 'mp4' : 'jpg';
+    const path = `${user!.id}/${climbId}.${ext}`;
+    const { data: { session } } = await supabase.auth.getSession();
+
+    let uploadUri = localUri;
+    if (type === 'video') {
+      uploadUri = await Video.compress(localUri, { compressionMethod: 'auto' });
+    } else {
+      uploadUri = await CompressorImage.compress(localUri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+    }
+
+    const formData = new FormData();
+    formData.append('file', { uri: uploadUri, name: `climb.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
+    const res = await fetch(
+      `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'x-upsert': 'true' }, body: formData }
+    );
+    if (!res.ok) throw new Error('Media upload failed');
+    const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
+    return publicUrl;
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -248,11 +289,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
       // Determine final outcome
       let finalOutcome: OutcomeId = outcome;
-
-      // Auto-flash: 1 attempt send → flash
-      if (!isProject && outcome === 'send' && (parseInt(attempts) || 1) === 1) {
-        finalOutcome = 'flash';
-      }
+      _lastUsedOutcome = finalOutcome;
 
       // Handle project name
       let projId = selectedProjectId;
@@ -272,24 +309,54 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       }
 
       await saveLastClimbType(climbType);
-      if (!isTraining) await saveLastGradeSystem(climbType, gradeSystem);
+      await saveLastOutcome(finalOutcome);
+      await saveLastEnvironment(environment);
+      if (!isTraining) {
+        await saveLastGradeSystem(climbType, gradeSystem);
+        await saveLastGrade(climbType, grade);
+      }
+
+      const climbId = existingClimb?.id || generateId();
+
+      // Upload media items to Supabase — new local files only
+      const finalMediaUris: string[] = [];
+      const finalMediaTypes: ('photo' | 'video')[] = [];
+      for (let i = 0; i < mediaItems.length; i++) {
+        const item = mediaItems[i];
+        if (user && !item.uri.startsWith('http')) {
+          try {
+            const url = await uploadMedia(item.uri, `${climbId}_${i}`, item.type);
+            finalMediaUris.push(url);
+            finalMediaTypes.push(item.type);
+          } catch {
+            // Upload failed — save local URI so media is never lost
+            finalMediaUris.push(item.uri);
+            finalMediaTypes.push(item.type);
+          }
+        } else {
+          finalMediaUris.push(item.uri);
+          finalMediaTypes.push(item.type);
+        }
+      }
 
       const climb: Climb = {
-        id: existingClimb?.id || generateId(),
+        id: climbId,
         date: existingClimb?.date || new Date().toISOString(),
         sessionId,
         type: climbType,
         outcome: finalOutcome,
         styles: selectedStyles,
         environment,
-        grade,
-        gradeSystem,
+        grade: isTraining ? '' : grade,
+        gradeSystem: isTraining ? 'v-scale' : gradeSystem,
         routeName: routeName || undefined,
         location: location || undefined,
         notes: isTraining && routine ? routine : notes || undefined,
         attempts: parseInt(attempts) || 1,
-        mediaUri: mediaUri || undefined,
-        mediaType: mediaType || undefined,
+        mediaUris: finalMediaUris.length > 0 ? finalMediaUris : undefined,
+        mediaTypes: finalMediaTypes.length > 0 ? finalMediaTypes : undefined,
+        mediaUri: finalMediaUris[0] || undefined,
+        mediaType: finalMediaTypes[0] || undefined,
         projectId: isProject ? projId : undefined,
         projectName: isProject ? projName : undefined,
       };
@@ -341,11 +408,13 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               )}
             </View>
             <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={saving}>
-              <Text style={[styles.saveText, { color: colors.accent, fontFamily: FONTS.family.bold }]}>{saving ? '...' : 'Save'}</Text>
+              <Text style={[styles.saveText, { color: colors.accent, fontFamily: FONTS.family.bold }]}>
+                {saving && mediaItems.some(m => !m.uri.startsWith('http')) ? 'Uploading...' : saving ? '...' : 'Save'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
             {/* Environment + Project — hidden in editProjectMode */}
             {!editProjectMode && (
@@ -512,7 +581,22 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Details */}
             <Text style={[styles.label, { color: colors.textMuted }]}>DETAILS (optional)</Text>
             <LocationPicker value={location} onChange={setLocation} />
-            <TextInput style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]} placeholder="Notes..." placeholderTextColor={colors.textMuted} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
+            <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
+              <TextInput
+                style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
+                placeholder="Notes..."
+                placeholderTextColor={colors.textMuted}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={3}
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: notesYRef.current - 16, animated: true });
+                  }, 320);
+                }}
+              />
+            </View>
 
             {/* Tag friends */}
             <Text style={[styles.label, { color: colors.textMuted, marginTop: SPACING.sm }]}>WITH (optional)</Text>
@@ -521,18 +605,30 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Media */}
             <Divider />
             <Text style={[styles.label, { color: colors.textMuted }]}>MEDIA</Text>
-            {mediaUri ? (
-              <View style={styles.mediaPreviewRow}>
-                <Image source={{ uri: mediaUri }} style={styles.mediaThumb} resizeMode="cover" />
-                <View style={styles.mediaPreviewInfo}>
-                  <Text style={[styles.mediaTypeLabel, { color: colors.textSecondary, fontFamily: FONTS.family.semibold }]}>
-                    {mediaType === 'video' ? 'Video attached' : 'Photo attached'}
-                  </Text>
-                  <TouchableOpacity onPress={() => { setMediaUri(undefined); setMediaType(undefined); }}>
-                    <Text style={[styles.mediaRemove, { color: colors.danger, fontFamily: FONTS.family.regular }]}>Remove</Text>
+            {mediaItems.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
+                {mediaItems.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onLongPress={() => Alert.alert('Remove Photo', 'Remove this photo?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Remove', style: 'destructive', onPress: () => setMediaItems(prev => prev.filter((_, i) => i !== index)) },
+                    ])}
+                    activeOpacity={0.9}
+                    delayLongPress={400}
+                    style={{ marginRight: SPACING.sm }}
+                  >
+                    <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
                   </TouchableOpacity>
-                </View>
-              </View>
+                ))}
+                <TouchableOpacity
+                  style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
+                  onPress={showMediaOptions}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+                </TouchableOpacity>
+              </ScrollView>
             ) : (
               <TouchableOpacity
                 style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
@@ -571,11 +667,8 @@ const styles = StyleSheet.create({
   attemptsValue: { fontSize: FONTS.sizes.xl, minWidth: 28, textAlign: 'center' },
   mediaBtn: { borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.md },
   mediaBtnText: { fontSize: FONTS.sizes.md },
-  mediaPreviewRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.md },
-  mediaThumb: { width: 72, height: 72, borderRadius: 8 },
-  mediaPreviewInfo: { flex: 1, gap: SPACING.sm },
-  mediaTypeLabel: { fontSize: FONTS.sizes.md },
-  mediaRemove: { fontSize: FONTS.sizes.sm },
+  mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
+  mediaAddTile: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   pill: { borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.md },
