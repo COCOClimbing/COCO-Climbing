@@ -46,6 +46,7 @@ import {
   sendFriendRequest,
   getPendingRequests,
   getAcceptedFriends,
+  getFollowing,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
@@ -762,7 +763,7 @@ export default function FriendsScreen() {
       const normDate = (d: string) => (d ?? '').slice(0, 10);
 
       const [accepted, allSessions, allClimbs, blocked, blockedBy] = await Promise.all([
-        getAcceptedFriends(user.id),
+        getFollowing(user.id),
         getAllSessions(),
         getAllClimbs(),
         getBlockedUserIds(user.id),
