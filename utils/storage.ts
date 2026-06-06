@@ -37,6 +37,12 @@ let _onStatsRefresh: (() => void) | null = null;
 export function setStatsRefreshCallback(cb: (() => void) | null) { _onStatsRefresh = cb; }
 export function triggerStatsRefresh() { _onStatsRefresh?.(); }
 
+// ─── Feed refresh hook ────────────────────────────────────────────────────────
+// friends.tsx registers its loadFeed() here so the activity feed reloads after local media migration
+let _onFeedRefresh: (() => void) | null = null;
+export function setFeedRefreshCallback(cb: (() => void) | null) { _onFeedRefresh = cb; }
+export function triggerFeedRefresh() { _onFeedRefresh?.(); }
+
 // ─── Active session tracker ───────────────────────────────────────────────────
 // null  = no active session (never started or explicitly ended)
 // string = ID of the currently open session

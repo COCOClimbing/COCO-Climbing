@@ -33,7 +33,7 @@ import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, V_GRADES, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades } from '../utils/storage';
+import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import ClimbCard from '../components/ClimbCard';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import {
@@ -706,6 +706,14 @@ export default function FriendsScreen() {
     loadFeed();
     loadRequests();
   }, [user?.id, screen]);
+
+  // Keep a stable ref so the callback always calls the latest loadFeed
+  const loadFeedRef = useRef(loadFeed);
+  loadFeedRef.current = loadFeed;
+  useEffect(() => {
+    setFeedRefreshCallback(() => loadFeedRef.current());
+    return () => setFeedRefreshCallback(null);
+  }, []);
 
   useEffect(() => {
     if (friendsOpen && user) loadRequests();

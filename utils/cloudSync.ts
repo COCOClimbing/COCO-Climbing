@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
-import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh } from './storage';
+import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh } from './storage';
 import { uploadMedia } from './mediaUpload';
 
 const SUPABASE_STORAGE_PREFIX = 'https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/public/climbs/';
@@ -39,6 +39,7 @@ export async function migrateLocalMediaUrls(): Promise<boolean> {
 
   await AsyncStorage.setItem(R2_MIGRATION_FLAG, '1');
   triggerClimbsRefresh();
+  triggerFeedRefresh();
   return true;
 }
 import { Climb, Session } from './theme';
@@ -148,6 +149,9 @@ export async function mergeData(userId: string): Promise<void> {
   if (newSessions.length > 0) await bulkSaveSessions([...localSessions, ...newSessions]);
   if (newClimbs.length   > 0) await bulkSaveClimbs([...cleanedLocalClimbs, ...newClimbs]);
   if (newProjects.length > 0) await bulkSaveNamedProjects([...localProjects, ...newProjects]);
+
+  // If new cloud data was pulled into local storage, reload the activity feed
+  if (newSessions.length > 0 || newClimbs.length > 0) triggerFeedRefresh();
 
   // Upload everything local to cloud (covers records only on device)
   await uploadAllLocalData(userId);

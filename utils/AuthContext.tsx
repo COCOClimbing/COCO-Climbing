@@ -4,7 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
-import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from './storage';
+import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           triggerSessionsRefresh();
           triggerProjectsRefresh();
           triggerStatsRefresh();
+          triggerFeedRefresh();
         }
       }
     });
@@ -150,9 +151,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         triggerSessionsRefresh();
         triggerProjectsRefresh();
         triggerStatsRefresh();
+        triggerFeedRefresh();
       }
       await reuploadMissingMedia(userId);
       await mergeData(userId);
+      // Always refresh the feed after full sync so the activity feed picks up
+      // any data that mergeData pulled from the cloud into local storage
+      triggerFeedRefresh();
     } catch (e) {
       console.warn('Sync error:', e);
     }
