@@ -124,12 +124,13 @@ export default function SessionShareCardVertical({
 
 const styles = StyleSheet.create({
   card: {
-    width: 320,
-    minHeight: 480,
+    width: 270,
+    height: 480,
     borderRadius: 0,
     borderWidth: 0,
-    padding: SPACING.xl,
-    gap: SPACING.md,
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+    justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
