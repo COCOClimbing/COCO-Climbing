@@ -1,0 +1,10 @@
+name = "coco-media"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "coco-media"
+
+[vars]
+R2_PUBLIC_BASE_URL = "https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev"
