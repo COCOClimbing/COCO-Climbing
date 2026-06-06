@@ -745,17 +745,6 @@ export default function FriendsScreen() {
     }
   }
 
-  async function handleShareToStories() {
-    try {
-      const uri = await captureCurrentShareCard();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share to Instagram Stories' });
-    } catch {
-      Alert.alert('Error', 'Could not share the session card.');
-    } finally {
-      setShareEntry(null);
-    }
-  }
-
   // ─────────────────────────────────────────────────────────────────────────────
 
   async function loadFeed() {
@@ -1956,9 +1945,6 @@ export default function FriendsScreen() {
             ))}
           </View>
           <View style={styles.shareButtons}>
-            <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareToStories} activeOpacity={0.8}>
-              <Text style={styles.shareConfirmText}>Share to Instagram Stories</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: colors.accent }]} onPress={handleCaptureAndShare} activeOpacity={0.8}>
               <Text style={styles.shareConfirmText}>Share...</Text>
             </TouchableOpacity>
