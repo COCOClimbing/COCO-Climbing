@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
-import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject } from './storage';
+import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh } from './storage';
 import { uploadMedia } from './mediaUpload';
 
 const SUPABASE_STORAGE_PREFIX = 'https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/public/climbs/';
 const R2_BASE = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev/';
-const R2_MIGRATION_FLAG = 'coco_r2_migration_v1';
+const R2_MIGRATION_FLAG = 'coco_r2_migration_v2';
 
 function toR2Url(url: string): string {
   if (!url.startsWith(SUPABASE_STORAGE_PREFIX)) return url;
@@ -38,6 +38,7 @@ export async function migrateLocalMediaUrls(): Promise<boolean> {
   ]);
 
   await AsyncStorage.setItem(R2_MIGRATION_FLAG, '1');
+  triggerClimbsRefresh();
   return true;
 }
 import { Climb, Session } from './theme';

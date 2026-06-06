@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { FONTS, SPACING, Climb } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
-import { getAllClimbs, deleteClimb } from '../utils/storage';
+import { getAllClimbs, deleteClimb, setClimbsRefreshCallback } from '../utils/storage';
 import LogClimbModal from '../components/LogClimbModal';
 import ClimbCard from '../components/ClimbCard';
 import { EmptyState, SectionHeader } from '../components/UI';
@@ -23,7 +23,11 @@ export default function LogScreen() {
     setClimbs(all);
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    setClimbsRefreshCallback(load);
+    return () => setClimbsRefreshCallback(null);
+  }, [load]);
 
   async function handleRefresh() {
     setRefreshing(true);

@@ -15,6 +15,11 @@ export function setCloudUserId(id: string | null) { _cloudUserId = id; }
 export function getCloudUserId(): string | null { return _cloudUserId; }
 
 // ─── Sessions refresh hook ────────────────────────────────────────────────────
+// index.tsx registers its load() here; triggerClimbsRefresh() forces a reload after local migrations
+let _onClimbsRefresh: (() => void) | null = null;
+export function setClimbsRefreshCallback(cb: (() => void) | null) { _onClimbsRefresh = cb; }
+export function triggerClimbsRefresh() { _onClimbsRefresh?.(); }
+
 // sessions.tsx registers its load() here; BottomTabBar calls triggerSessionsRefresh() after saving
 let _onSessionsRefresh: (() => void) | null = null;
 export function setSessionsRefreshCallback(cb: (() => void) | null) { _onSessionsRefresh = cb; }

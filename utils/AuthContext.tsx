@@ -4,7 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
-import { setCloudUserId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from './storage';
+import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (state === 'active') {
         const migrated = await migrateLocalMediaUrls();
         if (migrated) {
+          triggerClimbsRefresh();
           triggerSessionsRefresh();
           triggerProjectsRefresh();
           triggerStatsRefresh();
@@ -145,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const migrated = await migrateLocalMediaUrls();
       if (migrated) {
+        triggerClimbsRefresh();
         triggerSessionsRefresh();
         triggerProjectsRefresh();
         triggerStatsRefresh();
