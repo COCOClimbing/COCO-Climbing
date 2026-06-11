@@ -1016,15 +1016,6 @@ export default function SessionsScreen() {
               ))}
             </View>
             <View style={styles.shareButtons}>
-              {shareCardIndex === 0 ? (
-                <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareToStories} activeOpacity={0.8}>
-                  <Text style={styles.shareConfirmText}>Share to Instagram Stories</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareAsSticker} activeOpacity={0.8}>
-                  <Text style={styles.shareConfirmText}>Save and Place as Story Sticker</Text>
-                </TouchableOpacity>
-              )}
               <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: colors.accent }]} onPress={handleCaptureAndShare} activeOpacity={0.8}>
                 <Text style={styles.shareConfirmText}>Share...</Text>
               </TouchableOpacity>
