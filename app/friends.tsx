@@ -14,18 +14,13 @@ import {
   PanResponder,
   Animated,
   Dimensions,
-  Share,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
   Pressable,
 } from 'react-native';
-import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
-import SessionShareCard from '../components/SessionShareCard';
 import SwipeToDelete from '../components/SwipeToDelete';
-import SessionShareCardVertical from '../components/SessionShareCardVertical';
-import SessionShareCardStrava from '../components/SessionShareCardStrava';
+import ShareModal from '../components/ShareModal';
 import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
@@ -688,18 +683,9 @@ export default function FriendsScreen() {
 
   // Share state
   const [shareEntry, setShareEntry] = useState<SessionSummary | null>(null);
-  const [shareCardIndex, setShareCardIndex] = useState(0);
-  const shareCardRefs = useRef<(ViewShot | null)[]>([]);
-  const shareScrollRef = useRef<ScrollView>(null);
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollY = useRef(0);
   const SCREEN_WIDTH = Dimensions.get('window').width;
-  const SHARE_CARDS = [
-    { label: 'Card',                hint: null,                          transparent: false, vertical: true,  strava: false, stravasolid: false },
-    { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false },
-    { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true  },
-    { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
-  ];
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -734,25 +720,6 @@ export default function FriendsScreen() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  // ── Share handlers ────────────────────────────────────────────────────────────
-
-  async function captureCurrentShareCard(): Promise<string> {
-    const ref = shareCardRefs.current[shareCardIndex];
-    return await (ref as any).capture();
-  }
-
-  async function handleCaptureAndShare() {
-    try {
-      const uri = await captureCurrentShareCard();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
-    } catch {
-      if (shareEntry) {
-        await Share.share({ message: `COCO | ${shareEntry.sessionDate} — ${shareEntry.climbCount} climbs, ${shareEntry.sends} sends` });
-      }
-    } finally {
-      setShareEntry(null);
-    }
-  }
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1886,84 +1853,21 @@ export default function FriendsScreen() {
       </Modal>
 
       {/* ── Share Modal ── */}
-      <Modal visible={!!shareEntry} transparent animationType="fade" onRequestClose={() => setShareEntry(null)}>
-        <View style={styles.shareOverlay}>
-          <ScrollView
-            ref={shareScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            onMomentumScrollEnd={e => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setShareCardIndex(index);
-            }}
-            style={{ flexGrow: 0 }}
-            contentContainerStyle={{ alignItems: 'center' }}
-          >
-            {SHARE_CARDS.map((card, i) => (
-              <View key={i} style={{ width: SCREEN_WIDTH, alignItems: 'center', justifyContent: 'center', paddingTop: 160, paddingBottom: SPACING.xl }}>
-                <ViewShot ref={ref => { shareCardRefs.current[i] = ref; }} options={{ format: 'png', quality: 1 }}>
-                  {shareEntry && (card.strava ? (
-                    <SessionShareCardStrava
-                      date={shareEntry.sessionDate}
-                      accentColor={colors.accent}
-                      solid={card.stravasolid}
-                      climbCount={shareEntry.climbCount}
-                      sendCount={shareEntry.sends}
-                      flashCount={shareEntry.flashes}
-                      hardestGrade={shareEntry.hardestGrade}
-                      climbType={shareEntry.climbType}
-                      friendName={shareEntry.friend.id === user?.id ? undefined : shareEntry.friend.name}
-                      climbingWith={shareEntry.partners?.map(p => p.name)}
-                    />
-                  ) : card.vertical ? (
-                    <SessionShareCardVertical
-                      date={shareEntry.sessionDate}
-                      accentColor={colors.accent}
-                      variant={card.transparent ? 'transparent' : 'solid'}
-                      climbCount={shareEntry.climbCount}
-                      sendCount={shareEntry.sends}
-                      flashCount={shareEntry.flashes}
-                      hardestGrade={shareEntry.hardestGrade}
-                      climbType={shareEntry.climbType}
-                      friendName={shareEntry.friend.id === user?.id ? undefined : shareEntry.friend.name}
-                      climbingWith={shareEntry.partners?.map(p => p.name)}
-                    />
-                  ) : (
-                    <SessionShareCard
-                      date={shareEntry.sessionDate}
-                      accentColor={colors.accent}
-                      transparent={card.transparent}
-                      climbCount={shareEntry.climbCount}
-                      sendCount={shareEntry.sends}
-                      flashCount={shareEntry.flashes}
-                      hardestGrade={shareEntry.hardestGrade}
-                      climbType={shareEntry.climbType}
-                      friendName={shareEntry.friend.id === user?.id ? undefined : shareEntry.friend.name}
-                    />
-                  ))}
-                </ViewShot>
-                <Text style={[styles.shareCardLabel, { color: 'rgba(255,255,255,0.5)' }]}>{card.label}</Text>
-                {card.hint ? <Text style={[styles.shareCardHint, { color: 'rgba(255,255,255,0.3)' }]}>{card.hint}</Text> : null}
-              </View>
-            ))}
-          </ScrollView>
-          <View style={styles.shareDotsRow}>
-            {SHARE_CARDS.map((_, i) => (
-              <View key={i} style={[styles.shareDot, { backgroundColor: i === shareCardIndex ? '#fff' : 'rgba(255,255,255,0.3)' }]} />
-            ))}
-          </View>
-          <View style={styles.shareButtons}>
-            <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: colors.accent }]} onPress={handleCaptureAndShare} activeOpacity={0.8}>
-              <Text style={styles.shareConfirmText}>Share...</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.shareCancelBtn, { borderColor: 'rgba(255,255,255,0.2)' }]} onPress={() => setShareEntry(null)} activeOpacity={0.7}>
-              <Text style={[styles.shareCancelText, { color: 'rgba(255,255,255,0.5)' }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <ShareModal
+        visible={!!shareEntry}
+        data={shareEntry ? {
+          date: shareEntry.sessionDate,
+          climbCount: shareEntry.climbCount,
+          sendCount: shareEntry.sends,
+          flashCount: shareEntry.flashes,
+          hardestGrade: shareEntry.hardestGrade,
+          climbType: shareEntry.climbType,
+          friendName: shareEntry.friend.id === user?.id ? undefined : shareEntry.friend.name,
+          climbingWith: shareEntry.partners?.map(p => p.name),
+        } : null}
+        accentColor={colors.accent}
+        onDismiss={() => setShareEntry(null)}
+      />
 
       {/* ── Friends Manager Modal ── */}
       <Modal
@@ -2592,63 +2496,5 @@ const styles = StyleSheet.create({
   declineButtonText: {
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.semibold,
-  },
-  // Share modal
-  shareOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: SPACING.lg,
-    paddingBottom: SPACING.xxl,
-  },
-  shareCardLabel: {
-    marginTop: SPACING.md,
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.regular,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  shareCardHint: {
-    marginTop: 2,
-    fontSize: 10,
-    fontFamily: FONTS.family.regular,
-    textAlign: 'center',
-  },
-  shareDotsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  shareDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  shareButtons: {
-    width: '80%',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  shareConfirmBtn: {
-    borderRadius: 14,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
-  },
-  shareConfirmText: {
-    color: '#fff',
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.bold,
-    letterSpacing: 0.3,
-  },
-  shareCancelBtn: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
-    marginTop: SPACING.xs,
-  },
-  shareCancelText: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.regular,
   },
 });

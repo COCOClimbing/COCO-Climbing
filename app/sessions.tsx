@@ -1,12 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Share, ScrollView, PanResponder, TextInput, Modal, Linking, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, PanResponder, TextInput, Modal, Linking, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../utils/supabase';
-import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
-import SessionShareCard from '../components/SessionShareCard';
-import SessionShareCardVertical from '../components/SessionShareCardVertical';
-import SessionShareCardStrava from '../components/SessionShareCardStrava';
+import ShareModal from '../components/ShareModal';
 import LocationPicker from '../components/LocationPicker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
@@ -123,9 +119,6 @@ export default function SessionsScreen() {
   const [sessionMediaItems, setSessionMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [shareDay, setShareDay] = useState<DaySession | null>(null);
-  const [shareCardIndex, setShareCardIndex] = useState(0);
-  const shareCardRefs = useRef<(ViewShot | null)[]>([]);
-  const shareScrollRef = useRef<ScrollView>(null);
   const notesInputValue = useRef('');
   const listRef = useRef<FlatList>(null);
   const pendingSessionId = useRef<string | null>(null);
@@ -377,31 +370,6 @@ export default function SessionsScreen() {
     setShareDay(day);
   }
 
-  const SHARE_CARDS = [
-    { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false },
-    { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false },
-    { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true  },
-    { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
-  ];
-
-  async function captureCurrentCard(): Promise<string> {
-    const ref = shareCardRefs.current[shareCardIndex];
-    return await (ref as any).capture();
-  }
-
-  async function handleCaptureAndShare() {
-    try {
-      const uri = await captureCurrentCard();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
-    } catch {
-      if (shareDay) {
-        const sends = shareDay.climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
-        await Share.share({ message: `COCO | ${shareDay.date} — ${shareDay.climbs.length} climbs, ${sends.length} sends` });
-      }
-    } finally {
-      setShareDay(null);
-    }
-  }
 
 
   // ── Active Session Card ───────────────────────────────────────────────────────
@@ -922,73 +890,18 @@ export default function SessionsScreen() {
           onSelectDate={(date) => changeDateSession && handleChangeSessionDate(changeDateSession, date)}
           mode="pick"
         />
-        <Modal visible={!!shareDay} transparent animationType="fade" onRequestClose={() => setShareDay(null)}>
-          <View style={styles.shareOverlay}>
-            <ScrollView
-              ref={shareScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              decelerationRate="fast"
-              onMomentumScrollEnd={e => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                setShareCardIndex(index);
-              }}
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={{ alignItems: 'center' }}
-            >
-              {SHARE_CARDS.map((card, i) => (
-                <View key={i} style={{ width: SCREEN_WIDTH, alignItems: 'center', justifyContent: 'center', paddingTop: 160, paddingBottom: SPACING.xl }}>
-                  <ViewShot ref={ref => { shareCardRefs.current[i] = ref; }} options={{ format: 'png', quality: 1 }}>
-                    {shareDay && (card.strava ? (
-                      <SessionShareCardStrava
-                        date={shareDay.date}
-                        climbs={shareDay.climbs}
-                        location={shareDay.location}
-                        accentColor={colors.accent}
-                        solid={card.stravasolid}
-                        climbingWith={shareDay.friends?.map((f: any) => f?.name ?? f)}
-                      />
-                    ) : card.vertical ? (
-                      <SessionShareCardVertical
-                        date={shareDay.date}
-                        climbs={shareDay.climbs}
-                        location={shareDay.location}
-                        accentColor={colors.accent}
-                        variant={card.transparent ? 'transparent' : 'solid'}
-                        climbingWith={shareDay.friends?.map((f: any) => f?.name ?? f)}
-                        title={shareDay.title}
-                      />
-                    ) : (
-                      <SessionShareCard
-                        date={shareDay.date}
-                        climbs={shareDay.climbs}
-                        location={shareDay.location}
-                        accentColor={colors.accent}
-                        transparent={card.transparent}
-                      />
-                    ))}
-                  </ViewShot>
-                  <Text style={[styles.cardLabel, { color: 'rgba(255,255,255,0.5)' }]}>{card.label}</Text>
-                  {card.hint ? <Text style={[styles.cardHint, { color: 'rgba(255,255,255,0.3)' }]}>{card.hint}</Text> : null}
-                </View>
-              ))}
-            </ScrollView>
-            <View style={styles.dotsRow}>
-              {SHARE_CARDS.map((_, i) => (
-                <View key={i} style={[styles.dot, { backgroundColor: i === shareCardIndex ? '#fff' : 'rgba(255,255,255,0.3)' }]} />
-              ))}
-            </View>
-            <View style={styles.shareButtons}>
-              <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: colors.accent }]} onPress={handleCaptureAndShare} activeOpacity={0.8}>
-                <Text style={styles.shareConfirmText}>Share...</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.shareCancelBtn, { borderColor: 'rgba(255,255,255,0.2)' }]} onPress={() => setShareDay(null)} activeOpacity={0.7}>
-                <Text style={[styles.shareCancelText, { color: 'rgba(255,255,255,0.5)' }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        <ShareModal
+          visible={!!shareDay}
+          data={shareDay ? {
+            date: shareDay.date,
+            climbs: shareDay.climbs,
+            location: shareDay.location,
+            title: shareDay.title,
+            climbingWith: shareDay.friends?.map((f: any) => f?.name ?? f),
+          } : null}
+          accentColor={colors.accent}
+          onDismiss={() => setShareDay(null)}
+        />
       </>
     );
   }
@@ -1189,61 +1102,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-  },
-  shareOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: SPACING.lg,
-    paddingBottom: SPACING.xxl,
-  },
-  cardLabel: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.medium,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginTop: SPACING.sm,
-  },
-  cardHint: {
-    marginTop: 2,
-    fontSize: 10,
-    fontFamily: FONTS.family.regular,
-    textAlign: 'center',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    alignItems: 'center',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  shareButtons: {
-    gap: SPACING.md,
-    width: 320,
-    marginBottom: SPACING.xl,
-  },
-  shareConfirmBtn: {
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
-  },
-  shareConfirmText: {
-    color: '#fff',
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.bold,
-  },
-  shareCancelBtn: {
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  shareCancelText: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.regular,
   },
 });
