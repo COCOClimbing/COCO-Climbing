@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Share, ScrollView, 
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../utils/supabase';
 import ViewShot from 'react-native-view-shot';
-import RNShare from 'react-native-share';
 import * as Sharing from 'expo-sharing';
 import SessionShareCard from '../components/SessionShareCard';
 import SessionShareCardVertical from '../components/SessionShareCardVertical';
@@ -404,41 +403,6 @@ export default function SessionsScreen() {
     }
   }
 
-  async function handleShareToStories() {
-    try {
-      const uri = await captureCurrentCard();
-      await RNShare.shareSingle({
-        social: RNShare.Social.INSTAGRAM_STORIES,
-        backgroundImage: uri,
-        appId: '2188945488595075',
-      });
-      setShareDay(null);
-    } catch (e: any) {
-      if (e?.message?.includes('not installed') || e?.message?.includes('not available')) {
-        Alert.alert('Instagram not found', 'Instagram doesn\'t appear to be installed on this device.');
-      } else {
-        Alert.alert('Error', 'Could not share to Instagram Stories.');
-      }
-    }
-  }
-
-  async function handleShareAsSticker() {
-    try {
-      const uri = await captureCurrentCard();
-      await RNShare.shareSingle({
-        social: RNShare.Social.INSTAGRAM_STORIES,
-        stickerImage: uri,
-        appId: '2188945488595075',
-      });
-      setShareDay(null);
-    } catch (e: any) {
-      if (e?.message?.includes('not installed') || e?.message?.includes('not available')) {
-        Alert.alert('Instagram not found', 'Instagram doesn\'t appear to be installed on this device.');
-      } else {
-        Alert.alert('Error', 'Could not share to Instagram Stories.');
-      }
-    }
-  }
 
   // ── Active Session Card ───────────────────────────────────────────────────────
 
