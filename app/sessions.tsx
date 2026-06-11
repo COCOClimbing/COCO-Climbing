@@ -959,7 +959,6 @@ export default function SessionsScreen() {
         defaultSessionId={modalSessionId}
       />
 
-      {shareDay && <ShareCardModal />}
     </View>
   );
 }

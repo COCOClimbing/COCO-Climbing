@@ -1748,7 +1748,7 @@ export default function FriendsScreen() {
                         <TouchableOpacity
                           style={styles.cardActionBtn}
                           activeOpacity={0.7}
-                          onPress={() => { setShareCardIndex(0); setShareEntry(entry); }}
+                          onPress={() => setShareEntry(entry)}
                         >
                           <Ionicons name="share-outline" size={22} color={colors.textMuted} />
                         </TouchableOpacity>
