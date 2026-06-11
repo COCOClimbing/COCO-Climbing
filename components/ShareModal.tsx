@@ -46,9 +46,14 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
   const cardRefs = useRef<(ViewShot | null)[]>([]);
 
   async function handleShare() {
+    const ref = cardRefs.current[cardIndex];
+    if (!ref) {
+      Alert.alert('Error', 'Card not ready yet. Try again.');
+      return;
+    }
     try {
-      const ref = cardRefs.current[cardIndex];
       const uri = await (ref as any).capture();
+      onDismiss();
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
     } catch {
       Alert.alert('Error', 'Could not share this card.');
