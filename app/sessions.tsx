@@ -379,7 +379,7 @@ export default function SessionsScreen() {
 
   const SHARE_CARDS = [
     { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false },
-    { label: 'Transparent Card',    hint: null,                            transparent: true,  vertical: true,  strava: false, stravasolid: false },
+    { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false },
     { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true  },
     { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
   ];
