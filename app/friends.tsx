@@ -798,18 +798,16 @@ export default function FriendsScreen() {
               return { ...raw, avatar_url: match?.avatar_url ?? null };
             })
           : undefined;
-        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing live.
-        // Must filter dead URLs BEFORE deciding whether DB is "empty" — otherwise dead Supabase
-        // storage URLs (bucket wiped) would suppress the local fallback, then get filtered away.
-        const dbSessionLive = (dbSessionMedia[s.id] ?? []).filter(u => !isDeadMediaUrl(u));
-        const sessionLevelUris = dbSessionLive.length > 0
-          ? dbSessionLive
-          : (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
+        // Use local storage directly — same source as sessions.tsx detail view where photos ARE visible.
+        // DB R2 URLs are added on top as a supplement (handles cases where local cache is stale).
+        const localSessionUris = (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
+        const dbSessionUris = (dbSessionMedia[s.id] ?? []).filter(u => !isDeadMediaUrl(u));
         const sessionPhotos = [
-          ...sessionLevelUris,
+          ...new Set([...dbSessionUris, ...localSessionUris]),
           ...sessionClimbs.flatMap(c => {
-            const dbClimbLive = (dbClimbMedia[c.id] ?? []).filter(u => !isDeadMediaUrl(u));
-            return dbClimbLive.length > 0 ? dbClimbLive : (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
+            const localUris = (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
+            const dbUris = (dbClimbMedia[c.id] ?? []).filter(u => !isDeadMediaUrl(u));
+            return [...new Set([...dbUris, ...localUris])];
           }),
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
