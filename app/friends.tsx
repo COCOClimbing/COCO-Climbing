@@ -195,16 +195,22 @@ const PHOTO_HEIGHT = 220;
 
 function NaturalPhoto({ uri, onPress }: { uri: string; onPress: () => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <Image
-        source={{ uri }}
-        style={{ width: imgWidth ?? PHOTO_HEIGHT, height: PHOTO_HEIGHT, borderRadius: 10, opacity: imgWidth ? 1 : 0 }}
-        onLoad={e => {
-          const { width: w, height: h } = e.nativeEvent.source;
-          setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
-        }}
-      />
+      <View style={{ width: imgWidth ?? PHOTO_HEIGHT * 0.75, height: PHOTO_HEIGHT, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+        <Image
+          source={{ uri }}
+          style={{ width: imgWidth ?? PHOTO_HEIGHT * 0.75, height: PHOTO_HEIGHT }}
+          resizeMode="cover"
+          onLoad={e => {
+            const { width: w, height: h } = e.nativeEvent.source;
+            setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
+          }}
+          onError={() => setFailed(true)}
+        />
+      </View>
     </TouchableOpacity>
   );
 }
