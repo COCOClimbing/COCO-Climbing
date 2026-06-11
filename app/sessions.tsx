@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Share, ScrollView, 
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../utils/supabase';
 import ViewShot from 'react-native-view-shot';
+import RNShare from 'react-native-share';
 import * as Sharing from 'expo-sharing';
 import SessionShareCard from '../components/SessionShareCard';
 import SessionShareCardVertical from '../components/SessionShareCardVertical';
@@ -257,16 +258,14 @@ export default function SessionsScreen() {
   }
 
   async function handlePickSessionMedia() {
-    Alert.alert('Add Media', 'Choose source', [
-      { text: 'Take Photo',    onPress: () => launchSessionMedia('photo', 'camera') },
-      { text: 'Record Video',  onPress: () => launchSessionMedia('video', 'camera') },
-      { text: 'Photo Library', onPress: () => launchSessionMedia('photo', 'library') },
-      { text: 'Video Library', onPress: () => launchSessionMedia('video', 'library') },
+    Alert.alert('Add Photo', 'Choose source', [
+      { text: 'Take Photo',    onPress: () => launchSessionMedia('camera') },
+      { text: 'Photo Library', onPress: () => launchSessionMedia('library') },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
-  async function launchSessionMedia(type: 'photo' | 'video', source: 'camera' | 'library') {
+  async function launchSessionMedia(source: 'camera' | 'library') {
     if (source === 'camera') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow camera access in Settings.'); return; }
@@ -275,10 +274,10 @@ export default function SessionsScreen() {
       if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo library access in Settings.'); return; }
     }
     const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos, quality: 0.85 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos, quality: 0.85, allowsMultipleSelection: type === 'photo' });
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsMultipleSelection: true });
     if (result.canceled || !result.assets?.length) return;
-    const newItems = result.assets.map(a => ({ uri: a.uri, type }));
+    const newItems = result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }));
     const updated = [...sessionMediaItems, ...newItems];
     setSessionMediaItems(updated);
     handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, updated);
@@ -380,10 +379,10 @@ export default function SessionsScreen() {
   }
 
   const SHARE_CARDS = [
-    { label: 'Card',                transparent: false, vertical: true,  strava: false, stravasolid: false },
-    { label: 'Transparent Card',    transparent: true,  vertical: true,  strava: false, stravasolid: false },
-    { label: 'Sticker',             transparent: false, vertical: false, strava: true,  stravasolid: true  },
-    { label: 'Transparent Sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
+    { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false },
+    { label: 'Transparent Card',    hint: null,                            transparent: true,  vertical: true,  strava: false, stravasolid: false },
+    { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true  },
+    { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
   ];
 
   async function captureCurrentCard(): Promise<string> {
@@ -408,18 +407,36 @@ export default function SessionsScreen() {
   async function handleShareToStories() {
     try {
       const uri = await captureCurrentCard();
-      const isTransparent = SHARE_CARDS[shareCardIndex].transparent;
-      const param = isTransparent ? 'stickerImage' : 'backgroundImage';
-      const instagramUrl = `instagram-stories://share?${param}=${encodeURIComponent(uri)}&backgroundTopColor=%230A0A0A&backgroundBottomColor=%230A0A0A`;
-      const canOpen = await Linking.canOpenURL(instagramUrl);
-      if (canOpen) {
-        await Linking.openURL(instagramUrl);
-        setShareDay(null);
-      } else {
+      await RNShare.shareSingle({
+        social: RNShare.Social.INSTAGRAM_STORIES,
+        backgroundImage: uri,
+        appId: '2188945488595075',
+      });
+      setShareDay(null);
+    } catch (e: any) {
+      if (e?.message?.includes('not installed') || e?.message?.includes('not available')) {
         Alert.alert('Instagram not found', 'Instagram doesn\'t appear to be installed on this device.');
+      } else {
+        Alert.alert('Error', 'Could not share to Instagram Stories.');
       }
-    } catch {
-      Alert.alert('Error', 'Could not share to Instagram Stories.');
+    }
+  }
+
+  async function handleShareAsSticker() {
+    try {
+      const uri = await captureCurrentCard();
+      await RNShare.shareSingle({
+        social: RNShare.Social.INSTAGRAM_STORIES,
+        stickerImage: uri,
+        appId: '2188945488595075',
+      });
+      setShareDay(null);
+    } catch (e: any) {
+      if (e?.message?.includes('not installed') || e?.message?.includes('not available')) {
+        Alert.alert('Instagram not found', 'Instagram doesn\'t appear to be installed on this device.');
+      } else {
+        Alert.alert('Error', 'Could not share to Instagram Stories.');
+      }
     }
   }
 
@@ -802,7 +819,7 @@ export default function SessionsScreen() {
                     onPress={handlePickSessionMedia}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo or Video</Text>
+                    <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -976,6 +993,7 @@ export default function SessionsScreen() {
                         accentColor={colors.accent}
                         variant={card.transparent ? 'transparent' : 'solid'}
                         climbingWith={shareDay.friends?.map((f: any) => f?.name ?? f)}
+                        title={shareDay.title}
                       />
                     ) : (
                       <SessionShareCard
@@ -988,6 +1006,7 @@ export default function SessionsScreen() {
                     ))}
                   </ViewShot>
                   <Text style={[styles.cardLabel, { color: 'rgba(255,255,255,0.5)' }]}>{card.label}</Text>
+                  {card.hint ? <Text style={[styles.cardHint, { color: 'rgba(255,255,255,0.3)' }]}>{card.hint}</Text> : null}
                 </View>
               ))}
             </ScrollView>
@@ -997,9 +1016,15 @@ export default function SessionsScreen() {
               ))}
             </View>
             <View style={styles.shareButtons}>
-              <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareToStories} activeOpacity={0.8}>
-                <Text style={styles.shareConfirmText}>Share to Instagram Stories</Text>
-              </TouchableOpacity>
+              {shareCardIndex === 0 ? (
+                <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareToStories} activeOpacity={0.8}>
+                  <Text style={styles.shareConfirmText}>Share to Instagram Stories</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: '#E1306C' }]} onPress={handleShareAsSticker} activeOpacity={0.8}>
+                  <Text style={styles.shareConfirmText}>Save and Place as Story Sticker</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={[styles.shareConfirmBtn, { backgroundColor: colors.accent }]} onPress={handleCaptureAndShare} activeOpacity={0.8}>
                 <Text style={styles.shareConfirmText}>Share...</Text>
               </TouchableOpacity>
@@ -1224,6 +1249,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: SPACING.sm,
+  },
+  cardHint: {
+    marginTop: 2,
+    fontSize: 10,
+    fontFamily: FONTS.family.regular,
+    textAlign: 'center',
   },
   dotsRow: {
     flexDirection: 'row',
