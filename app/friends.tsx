@@ -798,18 +798,20 @@ export default function FriendsScreen() {
               return { ...raw, avatar_url: match?.avatar_url ?? null };
             })
           : undefined;
-        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing.
-        // Filter out dead Supabase Storage URLs (bucket was wiped during R2 migration).
-        const sessionLevelUris = (dbSessionMedia[s.id]?.length ?? 0) > 0
-          ? dbSessionMedia[s.id]
-          : (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []));
+        // Prefer DB media (R2 URLs) over local cache; fall back to local if DB has nothing live.
+        // Must filter dead URLs BEFORE deciding whether DB is "empty" — otherwise dead Supabase
+        // storage URLs (bucket wiped) would suppress the local fallback, then get filtered away.
+        const dbSessionLive = (dbSessionMedia[s.id] ?? []).filter(u => !isDeadMediaUrl(u));
+        const sessionLevelUris = dbSessionLive.length > 0
+          ? dbSessionLive
+          : (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
         const sessionPhotos = [
           ...sessionLevelUris,
           ...sessionClimbs.flatMap(c => {
-            const dbUris = dbClimbMedia[c.id];
-            return (dbUris?.length ?? 0) > 0 ? dbUris : (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []));
+            const dbClimbLive = (dbClimbMedia[c.id] ?? []).filter(u => !isDeadMediaUrl(u));
+            return dbClimbLive.length > 0 ? dbClimbLive : (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])).filter(u => !isDeadMediaUrl(u));
           }),
-        ].filter(u => !isDeadMediaUrl(u));
+        ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
         summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined });
