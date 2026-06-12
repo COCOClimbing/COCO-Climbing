@@ -686,7 +686,10 @@ export default function FriendsScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Photo viewer
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const viewerScrollRef = useRef<ScrollView>(null);
 
   // Share state
   const [shareEntry, setShareEntry] = useState<SessionSummary | null>(null);
@@ -720,6 +723,15 @@ export default function FriendsScreen() {
   useEffect(() => {
     if (friendsOpen && user) loadRequests();
   }, [friendsOpen]);
+
+  // Scroll photo viewer to the tapped photo once the modal has laid out
+  useEffect(() => {
+    if (!viewerVisible) return;
+    const t = setTimeout(() => {
+      viewerScrollRef.current?.scrollTo({ x: viewerIndex * SCREEN_WIDTH, animated: false });
+    }, 30);
+    return () => clearTimeout(t);
+  }, [viewerVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardWillShow', e => setKeyboardHeight(e.endCoordinates.height));
@@ -1690,7 +1702,7 @@ export default function FriendsScreen() {
                     contentContainerStyle={styles.photoStripContent}
                   >
                     {entry.sessionPhotos.map((uri, i) => (
-                      <NaturalPhoto key={i} uri={uri} onPress={() => setViewingPhoto(uri)} />
+                      <NaturalPhoto key={i} uri={uri} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
                   </ScrollView>
                 )}
@@ -1870,12 +1882,55 @@ export default function FriendsScreen() {
       })()}
 
       {/* ── Photo viewer ── */}
-      <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
-        <TouchableOpacity style={styles.photoViewerOverlay} activeOpacity={1} onPress={() => setViewingPhoto(null)}>
-          {viewingPhoto && (
-            <Image source={{ uri: viewingPhoto }} style={styles.photoViewerImage} resizeMode="contain" />
+      <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)} statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
+          {/* Close */}
+          <TouchableOpacity
+            onPress={() => setViewerVisible(false)}
+            style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
+
+          {/* Counter */}
+          {viewerPhotos.length > 1 && (
+            <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
+                {viewerIndex + 1} / {viewerPhotos.length}
+              </Text>
+            </View>
           )}
-        </TouchableOpacity>
+
+          {/* Paged photo strip */}
+          <ScrollView
+            ref={viewerScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onMomentumScrollEnd={e => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setViewerIndex(idx);
+            }}
+            style={{ flex: 1 }}
+          >
+            {viewerPhotos.map((uri, i) => (
+              <View key={i} style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Dot indicators */}
+          {viewerPhotos.length > 1 && (
+            <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
+              {viewerPhotos.map((_, i) => (
+                <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
+              ))}
+            </View>
+          )}
+        </View>
       </Modal>
 
       {/* ── Share Modal ── */}
@@ -2344,16 +2399,6 @@ const styles = StyleSheet.create({
   photoStripContent: {
     paddingHorizontal: SPACING.xl,
     gap: SPACING.sm,
-  },
-  photoViewerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  photoViewerImage: {
-    width: '100%',
-    height: '80%',
   },
   cardExpandBtn: {
     flexDirection: 'row',

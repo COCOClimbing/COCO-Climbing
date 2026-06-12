@@ -124,7 +124,7 @@ export default function SessionsScreen() {
   const [viewerUris, setViewerUris] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
-  const viewerListRef = useRef<FlatList>(null);
+  const viewerScrollRef = useRef<ScrollView>(null);
   const notesInputValue = useRef('');
   const listRef = useRef<FlatList>(null);
   const pendingSessionId = useRef<string | null>(null);
@@ -143,6 +143,16 @@ export default function SessionsScreen() {
     setEditingNotes(false);
     setEditingTitle(false);
   }, [selectedDay?.sessionId]);
+
+  // Scroll photo viewer to the tapped photo once the modal has laid out
+  useEffect(() => {
+    if (!viewerVisible) return;
+    const t = setTimeout(() => {
+      const sw = Dimensions.get('window').width;
+      viewerScrollRef.current?.scrollTo({ x: viewerIndex * sw, animated: false });
+    }, 30);
+    return () => clearTimeout(t);
+  }, [viewerVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const todayISO = getTodayISO();
   const selectedDayRef = useRef<DaySession | null>(null);
@@ -1029,30 +1039,24 @@ export default function SessionsScreen() {
           )}
 
           {/* Paged photo strip */}
-          <FlatList
-            ref={viewerListRef}
-            data={viewerUris}
+          <ScrollView
+            ref={viewerScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            initialScrollIndex={viewerIndex}
-            getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+            scrollEventThrottle={16}
             onMomentumScrollEnd={e => {
               const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
               setViewerIndex(idx);
             }}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => setViewerVisible(false)}
-                style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}
-              >
-                <Image source={{ uri: item }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
-              </TouchableOpacity>
-            )}
-            keyExtractor={(_, i) => i.toString()}
             style={{ flex: 1 }}
-          />
+          >
+            {viewerUris.map((uri, i) => (
+              <View key={i} style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
+              </View>
+            ))}
+          </ScrollView>
 
           {/* Dot indicators */}
           {viewerUris.length > 1 && (
