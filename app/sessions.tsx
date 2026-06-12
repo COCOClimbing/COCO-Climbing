@@ -13,6 +13,7 @@ import {
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
   setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession,
+  triggerFeedRefresh,
 } from '../utils/storage';
 import { gradeToNum } from '../utils/gradeUtils';
 import FriendPicker from '../components/FriendPicker';
@@ -238,6 +239,7 @@ export default function SessionsScreen() {
     const newTitle = title !== undefined ? title : session.title;
     const updatedSession = { ...session, title: newTitle || undefined, notes, friends, location: location || undefined, mediaUris, mediaTypes, mediaUri: mediaUris?.[0], mediaType: mediaTypes?.[0] };
     await saveSession(updatedSession);
+    triggerFeedRefresh();
     if (user) syncSessionToCloud(updatedSession, user.id).catch(() => {});
     const updater = (d: DaySession) =>
       d.sessionId === session.id ? { ...d, title: newTitle || undefined, notes, friends, location: location || undefined, mediaUris: mediaUris ?? [], mediaTypes: mediaTypes ?? [] } : d;

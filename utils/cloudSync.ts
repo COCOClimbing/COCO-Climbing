@@ -315,6 +315,7 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
         mediaTypes = newTypes;
         const { saveSession } = await import('./storage');
         await saveSession({ ...session, mediaUris: newUris, mediaTypes: newTypes, mediaUri: newUris[0], mediaType: newTypes[0] });
+        triggerFeedRefresh();
       }
     }
   }
