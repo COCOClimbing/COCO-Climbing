@@ -26,6 +26,7 @@ import MiniCalendar from '../components/MiniCalendar';
 import { format, parseISO } from 'date-fns';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud } from '../utils/cloudSync';
+import { uploadMedia } from '../utils/mediaUpload';
 
 interface DaySession {
   date: string;
@@ -273,10 +274,42 @@ export default function SessionsScreen() {
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsMultipleSelection: true });
     if (result.canceled || !result.assets?.length) return;
-    const newItems = result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }));
-    const updated = [...sessionMediaItems, ...newItems];
-    setSessionMediaItems(updated);
-    handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, updated);
+
+    const pickedItems = result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }));
+
+    // Save with file:// URIs immediately so the UI updates right away
+    const withLocal = [...sessionMediaItems, ...pickedItems];
+    setSessionMediaItems(withLocal);
+    handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, withLocal);
+
+    // Then upload to R2 in the foreground so we have a permanent URL before
+    // iOS can clear the temp file.
+    if (!user || !selectedDayRef.current) return;
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) return;
+
+    const sessionId = selectedDayRef.current.sessionId;
+    const startIdx = sessionMediaItems.length;
+    const resolved = [...withLocal];
+    let anyUploaded = false;
+
+    for (let i = 0; i < pickedItems.length; i++) {
+      const item = pickedItems[i];
+      const slot = startIdx + i;
+      try {
+        const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
+        const url = await uploadMedia(item.uri, path, authSession.access_token);
+        resolved[slot] = { uri: url, type: item.type };
+        anyUploaded = true;
+      } catch {
+        // Keep file:// as fallback; reuploadMissingMedia will retry on next open
+      }
+    }
+
+    if (anyUploaded) {
+      setSessionMediaItems(resolved);
+      handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, resolved);
+    }
   }
 
   function handleRemoveSessionMediaItem(index: number) {
