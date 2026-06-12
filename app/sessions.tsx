@@ -121,6 +121,10 @@ export default function SessionsScreen() {
   const [sessionMediaItems, setSessionMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [shareDay, setShareDay] = useState<DaySession | null>(null);
+  const [viewerUris, setViewerUris] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const viewerListRef = useRef<FlatList>(null);
   const notesInputValue = useRef('');
   const listRef = useRef<FlatList>(null);
   const pendingSessionId = useRef<string | null>(null);
@@ -766,6 +770,7 @@ export default function SessionsScreen() {
                     {allMedia.map((item, idx) => (
                       <TouchableOpacity
                         key={idx}
+                        onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
                         onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
                         activeOpacity={0.9}
                         delayLongPress={400}
@@ -995,6 +1000,73 @@ export default function SessionsScreen() {
         onSaved={load}
         defaultSessionId={modalSessionId}
       />
+
+      {/* ── Full-screen photo viewer ── */}
+      <Modal
+        visible={viewerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerVisible(false)}
+        statusBarTranslucent
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
+          {/* Close */}
+          <TouchableOpacity
+            onPress={() => setViewerVisible(false)}
+            style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
+
+          {/* Counter */}
+          {viewerUris.length > 1 && (
+            <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
+                {viewerIndex + 1} / {viewerUris.length}
+              </Text>
+            </View>
+          )}
+
+          {/* Paged photo strip */}
+          <FlatList
+            ref={viewerListRef}
+            data={viewerUris}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={viewerIndex}
+            getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+            onMomentumScrollEnd={e => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setViewerIndex(idx);
+            }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setViewerVisible(false)}
+                style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Image source={{ uri: item }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
+              </TouchableOpacity>
+            )}
+            keyExtractor={(_, i) => i.toString()}
+            style={{ flex: 1 }}
+          />
+
+          {/* Dot indicators */}
+          {viewerUris.length > 1 && (
+            <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
+              {viewerUris.map((_, i) => (
+                <View
+                  key={i}
+                  style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      </Modal>
 
     </View>
   );
