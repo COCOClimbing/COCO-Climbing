@@ -55,6 +55,8 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
     const rows = sessions.map(s => {
       const uris = (s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : [])).filter(u => u.startsWith('http'));
       const types = uris.map((_, i) => s.mediaTypes?.[i] ?? s.mediaType ?? 'photo');
+      // Omit media_uris entirely when local has none — undefined is stripped from
+      // JSON, so the DB's existing R2 URL is preserved rather than overwritten with null.
       return {
         id: s.id,
         user_id: userId,
@@ -64,8 +66,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
         notes: s.notes ?? null,
         title: s.title ?? null,
         friends: s.friends ?? null,
-        media_uris: uris.length > 0 ? uris : null,
-        media_types: uris.length > 0 ? types : null,
+        ...(uris.length > 0 ? { media_uris: uris, media_types: types } : {}),
         ended_at: s.endedAt ?? null,
       };
     });
@@ -74,7 +75,18 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
 
   if (climbs.length > 0) {
-    const rows = climbs.map(c => climbToRow(c, userId));
+    const rows = climbs.map(c => {
+      const httpUris = (c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])).filter(u => u.startsWith('http'));
+      const httpTypes = httpUris.map((_, i) => c.mediaTypes?.[i] ?? c.mediaType ?? 'photo');
+      const base = climbToRow(c, userId);
+      if (httpUris.length > 0) {
+        // Sync the http URIs explicitly
+        return { ...base, media_uris: httpUris, media_uri: httpUris[0], media_types: httpTypes, media_type: httpTypes[0] };
+      }
+      // No http media locally: omit media fields so the DB's existing R2 URL is preserved.
+      const { media_uris, media_uri, media_type, media_types, ...rest } = base;
+      return rest;
+    });
     const { error: climbErr } = await supabase.from('climbs').upsert(rows, { onConflict: 'id' });
     if (climbErr) console.warn('[uploadAllLocalData] climbs upsert failed:', climbErr.message, climbErr.code);
   }
@@ -149,12 +161,54 @@ export async function mergeData(userId: string): Promise<void> {
   const newClimbs   = cloudClimbs.filter(r => !localClimbIds.has(r.id)).map(rowToClimb);
   const newProjects = cloudProjects.filter(r => !localProjectIds.has(r.id)).map(rowToProject);
 
-  if (newSessions.length > 0) await bulkSaveSessions([...localSessions, ...newSessions]);
-  if (newClimbs.length   > 0) await bulkSaveClimbs([...cleanedLocalClimbs, ...newClimbs]);
+  // For records that exist in both, backfill media URLs from DB into local when
+  // local has none (e.g. after migrateLocalMediaUrls stripped dead Supabase URLs
+  // but the DB still has the R2 URL from the migration script or a prior sync).
+  const cloudSessionById = new Map(cloudSessions.map(r => [r.id, r]));
+  const cloudClimbById   = new Map(cloudClimbs.map(r => [r.id, r]));
+
+  const sessionsNeedingMedia = localSessions.filter(s => {
+    if (s.mediaUris?.length) return false;
+    const cloud = cloudSessionById.get(s.id);
+    return cloud?.media_uris?.some((u: string) => u.startsWith('https://') && !isDeadMediaUrl(u));
+  });
+  const climbsNeedingMedia = cleanedLocalClimbs.filter(c => {
+    if (c.mediaUris?.length) return false;
+    const cloud = cloudClimbById.get(c.id);
+    return cloud?.media_uris?.some((u: string) => u.startsWith('https://') && !isDeadMediaUrl(u));
+  });
+
+  const mergedSessions = sessionsNeedingMedia.length > 0
+    ? localSessions.map(s => {
+        const cloud = cloudSessionById.get(s.id);
+        if (!s.mediaUris?.length && cloud?.media_uris?.length) {
+          const uris = (cloud.media_uris as string[]).filter(u => u.startsWith('https://') && !isDeadMediaUrl(u));
+          if (uris.length) return { ...s, mediaUris: uris, mediaUri: uris[0] };
+        }
+        return s;
+      })
+    : localSessions;
+
+  const mergedClimbs = climbsNeedingMedia.length > 0
+    ? cleanedLocalClimbs.map(c => {
+        const cloud = cloudClimbById.get(c.id);
+        if (!c.mediaUris?.length && cloud?.media_uris?.length) {
+          const uris = (cloud.media_uris as string[]).filter(u => u.startsWith('https://') && !isDeadMediaUrl(u));
+          if (uris.length) return { ...c, mediaUris: uris, mediaUri: uris[0] };
+        }
+        return c;
+      })
+    : cleanedLocalClimbs;
+
+  const allSessions = [...mergedSessions, ...newSessions];
+  const allClimbs   = [...mergedClimbs,   ...newClimbs];
+
+  if (newSessions.length > 0 || sessionsNeedingMedia.length > 0) await bulkSaveSessions(allSessions);
+  if (newClimbs.length > 0 || climbsNeedingMedia.length > 0) await bulkSaveClimbs(allClimbs);
   if (newProjects.length > 0) await bulkSaveNamedProjects([...localProjects, ...newProjects]);
 
   // If new cloud data was pulled into local storage, reload the activity feed
-  if (newSessions.length > 0 || newClimbs.length > 0) triggerFeedRefresh();
+  if (newSessions.length > 0 || newClimbs.length > 0 || sessionsNeedingMedia.length > 0 || climbsNeedingMedia.length > 0) triggerFeedRefresh();
 
   // Upload everything local to cloud (covers records only on device)
   await uploadAllLocalData(userId);
