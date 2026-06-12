@@ -2240,7 +2240,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.regular,
   },
   cardTitleRow: {
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
   },
   cardTitle: {
