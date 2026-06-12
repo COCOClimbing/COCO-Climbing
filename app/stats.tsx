@@ -151,6 +151,7 @@ export default function StatsScreen() {
         const mapped = sessionsRes.data.map((r: any) => ({
           id: r.id, date: r.date, environment: r.environment,
           location: r.location ?? undefined, notes: r.notes ?? undefined,
+          title: r.title ?? undefined,
           startedAt: r.started_at ?? undefined, endedAt: r.ended_at ?? undefined,
           lastClimbAt: r.last_climb_at ?? undefined, friends: r.friends ?? undefined,
           mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,

@@ -17,7 +17,7 @@ import {
   saveLastOutcome, getLastOutcome,
   saveLastEnvironment, getLastEnvironment,
 } from '../utils/storage';
-import { Video, Image as CompressorImage } from 'react-native-compressor';
+import { Image as CompressorImage } from 'react-native-compressor';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../utils/AuthContext';
 import { Pill, Divider } from './UI';
@@ -198,64 +198,56 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     if (p.type) setClimbType(p.type as ClimbTypeId);
   }
 
-  async function pickMedia(type: 'photo' | 'video') {
+  async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow access to your photo library in Settings.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
-      allowsMultipleSelection: type === 'photo',
+      allowsMultipleSelection: true,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setMediaItems(prev => [...prev, ...result.assets.map(a => ({ uri: a.uri, type }))]);
+      setMediaItems(prev => [...prev, ...result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }))]);
     }
   }
 
-  async function takeMedia(type: 'photo' | 'video') {
+  async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow camera access in Settings.'); return; }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: type === 'photo' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]) {
-      setMediaItems(prev => [...prev, { uri: result.assets[0].uri, type }]);
+      setMediaItems(prev => [...prev, { uri: result.assets[0].uri, type: 'photo' as const }]);
     }
   }
 
   function showMediaOptions() {
-    Alert.alert('Add Media', 'Choose a source', [
-      { text: 'Take Photo',    onPress: () => takeMedia('photo') },
-      { text: 'Record Video',  onPress: () => takeMedia('video') },
-      { text: 'Photo Library', onPress: () => pickMedia('photo') },
-      { text: 'Video Library', onPress: () => pickMedia('video') },
+    Alert.alert('Add Photo', 'Choose a source', [
+      { text: 'Take Photo',    onPress: () => takePhoto() },
+      { text: 'Photo Library', onPress: () => pickPhoto() },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
   const isTraining = climbType === 'hangboard' || climbType === 'lift';
 
-  async function uploadMedia(localUri: string, climbId: string, type: 'photo' | 'video'): Promise<string> {
-    const ext = type === 'video' ? 'mp4' : 'jpg';
-    const path = `${user!.id}/${climbId}.${ext}`;
+  async function uploadMedia(localUri: string, climbId: string): Promise<string> {
+    const path = `${user!.id}/${climbId}.jpg`;
     const { data: { session } } = await supabase.auth.getSession();
 
-    let uploadUri = localUri;
-    if (type === 'video') {
-      uploadUri = await Video.compress(localUri, { compressionMethod: 'auto' });
-    } else {
-      uploadUri = await CompressorImage.compress(localUri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
-    }
+    const uploadUri = await CompressorImage.compress(localUri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
 
     const formData = new FormData();
-    formData.append('file', { uri: uploadUri, name: `climb.${ext}`, type: type === 'video' ? 'video/mp4' : 'image/jpeg' } as any);
+    formData.append('file', { uri: uploadUri, name: 'climb.jpg', type: 'image/jpeg' } as any);
     const res = await fetch(
-      `https://oexaqytotrxqbxmzqabu.supabase.co/storage/v1/object/climbs/${path}`,
-      { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'x-upsert': 'true' }, body: formData }
+      `https://coco-media.jacksonwalti.workers.dev/upload?path=${encodeURIComponent(path)}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}` }, body: formData }
     );
     if (!res.ok) throw new Error('Media upload failed');
-    const { data: { publicUrl } } = supabase.storage.from('climbs').getPublicUrl(path);
-    return publicUrl;
+    const { url } = await res.json();
+    return url as string;
   }
 
   async function handleSave() {
@@ -325,7 +317,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         const item = mediaItems[i];
         if (user && !item.uri.startsWith('http')) {
           try {
-            const url = await uploadMedia(item.uri, `${climbId}_${i}`, item.type);
+            const url = await uploadMedia(item.uri, `${climbId}_${i}`);
             finalMediaUris.push(url);
             finalMediaTypes.push(item.type);
           } catch {
@@ -635,7 +627,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 onPress={showMediaOptions}
               >
                 <Text style={[styles.mediaBtnText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>
-                  + Add Photo or Video
+                  + Add Photo
                 </Text>
               </TouchableOpacity>
             )}

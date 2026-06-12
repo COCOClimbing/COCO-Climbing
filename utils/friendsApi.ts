@@ -191,7 +191,7 @@ export async function getFriendRecentSessions(friendId: string): Promise<any[]> 
 
   const { data } = await supabase
     .from('sessions')
-    .select('id, date, started_at, media_uris, media_types, friends, notes, title')
+    .select('id, date, started_at, media_uris, media_types, friends, notes, title, location')
     .eq('user_id', friendId)
     .gte('date', cutoff);
   return data ?? [];

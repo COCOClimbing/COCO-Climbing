@@ -613,6 +613,7 @@ export default function FriendsScreen() {
     sessionPhotos?: string[];
     notes?: string;
     title?: string;
+    location?: string;
   };
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
@@ -812,7 +813,7 @@ export default function FriendsScreen() {
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined });
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
@@ -870,6 +871,7 @@ export default function FriendsScreen() {
           partners,
           notes: s.notes ?? undefined,
           title: s.title ?? undefined,
+          location: s.location ?? undefined,
         });
       }
 
@@ -892,6 +894,9 @@ export default function FriendsScreen() {
             );
             const sessionTitleMap = new Map<string, string>(
               friendSessions.filter((s: any) => s.title).map((s: any) => [s.id, s.title])
+            );
+            const sessionLocationMap = new Map<string, string>(
+              friendSessions.filter((s: any) => s.location).map((s: any) => [s.id, s.location])
             );
             const sessionDateMap = new Map<string, string>(
               friendSessions.filter((s: any) => s.date).map((s: any) => [s.id, normDate(s.date)])
@@ -948,7 +953,8 @@ export default function FriendsScreen() {
               }
               const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
               const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
-              summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle });
+              const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
+              summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
             }
           } catch {}
         })
@@ -1506,6 +1512,12 @@ export default function FriendsScreen() {
               <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
                 {format(date, 'EEE, MMM d, yyyy')} · {sessionTimeOfDay(entry.sessionTime)}
               </Text>
+              {entry.location?.trim() ? (
+                <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 2 }]}>
+                  <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
+                  <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
           {/* Stats */}
@@ -1608,6 +1620,14 @@ export default function FriendsScreen() {
                     {entry.title?.trim() || sessionTimeOfDay(entry.sessionTime)}
                   </Text>
                 </View>
+
+                {/* ── Location ── */}
+                {entry.location?.trim() ? (
+                  <View style={styles.cardLocationRow}>
+                    <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
+                    <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
+                  </View>
+                ) : null}
 
                 {/* ── Session notes ── */}
                 {entry.notes?.trim() ? (
@@ -1869,6 +1889,8 @@ export default function FriendsScreen() {
           hardestGrade: shareEntry.hardestGrade,
           climbType: shareEntry.climbType,
           friendName: shareEntry.friend.id === user?.id ? undefined : shareEntry.friend.name,
+          location: shareEntry.location,
+          title: shareEntry.title,
           climbingWith: shareEntry.partners?.map(p => p.name),
         } : null}
         accentColor={colors.accent}
@@ -2245,6 +2267,16 @@ const styles = StyleSheet.create({
   partnerName: {
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.medium,
+  },
+  cardLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingBottom: SPACING.xs,
+  },
+  cardLocation: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.family.regular,
   },
   cardNotes: {
     fontSize: FONTS.sizes.sm,

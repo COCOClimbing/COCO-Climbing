@@ -18,12 +18,13 @@ interface Props {
   climbType?: string;
   friendName?: string;
   climbingWith?: string[];
+  title?: string;
 }
 
 export default function SessionShareCardVertical({
   date, accentColor, variant,
   climbs, location,
-  climbCount, sendCount, flashCount, hardestGrade, climbType, friendName, climbingWith,
+  climbCount, sendCount, flashCount, hardestGrade, climbType, friendName, climbingWith, title,
 }: Props) {
   const isTransparent = variant === 'transparent';
 
@@ -50,7 +51,7 @@ export default function SessionShareCardVertical({
       ).sort((a, b) => b[1] - a[1])[0]?.[0]
     : climbType;
   const primaryTypeLabel = primaryTypeId ? (CLIMB_TYPES.find(t => t.id === primaryTypeId)?.label ?? null) : null;
-  const sessionTitle = primaryTypeLabel ? `${timeOfDay} ${primaryTypeLabel} Session` : `${timeOfDay} Session`;
+  const sessionTitle = title || (primaryTypeLabel ? `${timeOfDay} ${primaryTypeLabel} Session` : `${timeOfDay} Session`);
 
   const textColor  = isTransparent ? '#FFFFFF'              : '#F0EDE8';
   const mutedColor = isTransparent ? 'rgba(255,255,255,0.6)' : '#888';
@@ -172,8 +173,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statsList: {
-    gap: SPACING.lg,
-    marginTop: SPACING.sm,
+    gap: SPACING.xs,
+    flex: 1,
+    justifyContent: 'space-evenly',
   },
   statRow: {
     flexDirection: 'row',
@@ -216,18 +218,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: SPACING.xs,
-  },
-  climbTypeLabel: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.bold,
-    letterSpacing: 2,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginTop: SPACING.sm,
   },
   withLabel: {
     fontSize: 9,
