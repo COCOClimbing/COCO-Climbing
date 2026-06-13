@@ -338,8 +338,12 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
     notes: session.notes ?? null,
     title: session.title ?? null,
     friends: session.friends ?? null,
-    media_uris: finalUris.length > 0 ? finalUris : null,
-    media_types: finalUris.length > 0 ? mediaTypes.filter((_, i) => mediaUris[i]?.startsWith('http')) : null,
+    // Omit media_uris when we have none — preserves any R2 URL already in the
+    // DB row rather than overwriting it with null after a failed upload.
+    ...(finalUris.length > 0 ? {
+      media_uris: finalUris,
+      media_types: mediaTypes.filter((_, i) => mediaUris[i]?.startsWith('http')),
+    } : {}),
     ended_at: session.endedAt ?? null,
   }, { onConflict: 'id' });
 
@@ -609,11 +613,17 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
   }
   if (sessionsToSyncDB.length > 0) {
     const rows = sessionsToSyncDB.map(s => {
-      const uris = (s.mediaUris ?? []).filter(u => u.startsWith('http'));
+      // Use s.mediaUri fallback so sessions using the legacy singular field are
+      // handled the same way as when we decided to push them to sessionsToSyncDB.
+      const allUris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
+      const uris = allUris.filter(u => u.startsWith('http'));
+      const types = allUris
+        .map((_, i) => s.mediaTypes?.[i] ?? s.mediaType ?? 'photo')
+        .filter((_, i) => allUris[i]?.startsWith('http'));
       return {
         id: s.id, user_id: userId,
-        media_uris: uris.length > 0 ? uris : null,
-        media_types: uris.length > 0 ? s.mediaTypes?.filter((_, i) => (s.mediaUris ?? [])[i]?.startsWith('http')) : null,
+        // Omit when empty rather than writing null — preserves any existing DB value.
+        ...(uris.length > 0 ? { media_uris: uris, media_types: types } : {}),
       };
     });
     await supabase.from('sessions').upsert(rows, { onConflict: 'id' });

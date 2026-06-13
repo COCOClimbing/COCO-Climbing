@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, PanResponder, TextInput, Modal, Linking, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '../utils/supabase';
 import ShareModal from '../components/ShareModal';
 import LocationPicker from '../components/LocationPicker';
@@ -289,40 +290,79 @@ export default function SessionsScreen() {
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsMultipleSelection: true });
     if (result.canceled || !result.assets?.length) return;
 
-    const pickedItems = result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }));
-
-    // Save with file:// URIs immediately so the UI updates right away
-    const withLocal = [...sessionMediaItems, ...pickedItems];
-    setSessionMediaItems(withLocal);
-    handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, withLocal);
-
-    // Then upload to R2 in the foreground so we have a permanent URL before
-    // iOS can clear the temp file.
     if (!user || !selectedDayRef.current) return;
-    const { data: { session: authSession } } = await supabase.auth.getSession();
-    if (!authSession) return;
 
     const sessionId = selectedDayRef.current.sessionId;
     const startIdx = sessionMediaItems.length;
+
+    // Copy each picked file to permanent document storage so the URI survives
+    // iOS clearing the ImagePicker temp directory if the app is closed mid-upload.
+    const mediaDir = `${FileSystem.documentDirectory}coco_media/`;
+    await FileSystem.makeDirectoryAsync(mediaDir, { intermediates: true }).catch(() => {});
+    const permanentItems: { uri: string; type: 'photo' | 'video' }[] = [];
+    for (let i = 0; i < result.assets.length; i++) {
+      const asset = result.assets[i];
+      const ext = 'jpg';
+      const destUri = `${mediaDir}session_${sessionId}_${startIdx + i}_${Date.now()}.${ext}`;
+      try {
+        await FileSystem.copyAsync({ from: asset.uri, to: destUri });
+        permanentItems.push({ uri: destUri, type: 'photo' });
+      } catch {
+        permanentItems.push({ uri: asset.uri, type: 'photo' });
+      }
+    }
+
+    // Save with permanent URIs immediately so the UI updates and the path
+    // survives a forced-quit / relaunch (reuploadMissingMedia can then retry).
+    const withLocal = [...sessionMediaItems, ...permanentItems];
+    setSessionMediaItems(withLocal);
+    handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, withLocal);
+
+    // Upload to R2 in the foreground.
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) return;
+
     const resolved = [...withLocal];
     let anyUploaded = false;
 
-    for (let i = 0; i < pickedItems.length; i++) {
-      const item = pickedItems[i];
+    for (let i = 0; i < permanentItems.length; i++) {
+      const item = permanentItems[i];
       const slot = startIdx + i;
       try {
         const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
         const url = await uploadMedia(item.uri, path, authSession.access_token);
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
+        // Permanent copy deleted AFTER the R2 URL is saved to local (below).
       } catch {
-        // Keep file:// as fallback; reuploadMissingMedia will retry on next open
+        // Keep permanent URI — reuploadMissingMedia will retry on next open.
       }
     }
 
     if (anyUploaded) {
       setSessionMediaItems(resolved);
-      handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, resolved);
+      // Save R2 URLs using the captured sessionId — not selectedDayRef (which may
+      // be null if the user navigated away while the upload was in progress).
+      const allSessions = await getAllSessions();
+      const sess = allSessions.find(s => s.id === sessionId);
+      if (sess) {
+        const updatedUris = resolved.map(m => m.uri);
+        const updatedTypes = resolved.map(m => m.type);
+        const updated = { ...sess, mediaUris: updatedUris, mediaTypes: updatedTypes, mediaUri: updatedUris[0], mediaType: updatedTypes[0] };
+        await saveSession(updated);
+        if (user) syncSessionToCloud(updated, user.id).catch(() => {});
+        triggerFeedRefresh();
+        const dayUpdater = (d: DaySession): DaySession =>
+          d.sessionId === sessionId ? { ...d, mediaUris: updatedUris, mediaTypes: updatedTypes } : d;
+        setDays(prev => prev.map(dayUpdater));
+        setSelectedDay(prev => prev?.sessionId === sessionId ? dayUpdater(prev) : prev);
+      }
+      // NOW delete permanent copies — after R2 URLs are persisted to local.
+      for (let i = 0; i < permanentItems.length; i++) {
+        if (resolved[startIdx + i]?.uri?.startsWith('http')) {
+          FileSystem.deleteAsync(permanentItems[i].uri, { idempotent: true }).catch(() => {});
+        }
+      }
     }
   }
 
@@ -426,6 +466,7 @@ export default function SessionsScreen() {
   // ── Active Session Card ───────────────────────────────────────────────────────
 
   const SCREEN_WIDTH = Dimensions.get('window').width;
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
 
   function ActiveSessionCard() {
     if (!activeSession) return null;
@@ -918,10 +959,63 @@ export default function SessionsScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
+  const photoViewerModal = (
+    <Modal
+      visible={viewerVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setViewerVisible(false)}
+      statusBarTranslucent
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
+        <TouchableOpacity
+          onPress={() => setViewerVisible(false)}
+          style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
+        </TouchableOpacity>
+        {viewerUris.length > 1 && (
+          <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
+              {viewerIndex + 1} / {viewerUris.length}
+            </Text>
+          </View>
+        )}
+        <ScrollView
+          ref={viewerScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={e => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            setViewerIndex(idx);
+          }}
+          style={{ flex: 1 }}
+        >
+          {viewerUris.map((uri, i) => (
+            <View key={i} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
+              <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }} resizeMode="contain" />
+            </View>
+          ))}
+        </ScrollView>
+        {viewerUris.length > 1 && (
+          <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
+            {viewerUris.map((_, i) => (
+              <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
+            ))}
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+
   if (selectedDay) {
     return (
       <>
         <DetailView day={selectedDay} />
+        {photoViewerModal}
         <LogClimbModal
           visible={logModalVisible}
           onClose={() => { setLogModalVisible(false); setModalSessionId(undefined); setEditingClimb(undefined); }}
@@ -1012,65 +1106,7 @@ export default function SessionsScreen() {
       />
 
       {/* ── Full-screen photo viewer ── */}
-      <Modal
-        visible={viewerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewerVisible(false)}
-        statusBarTranslucent
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
-          {/* Close */}
-          <TouchableOpacity
-            onPress={() => setViewerVisible(false)}
-            style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
-          </TouchableOpacity>
-
-          {/* Counter */}
-          {viewerUris.length > 1 && (
-            <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
-                {viewerIndex + 1} / {viewerUris.length}
-              </Text>
-            </View>
-          )}
-
-          {/* Paged photo strip */}
-          <ScrollView
-            ref={viewerScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            scrollEventThrottle={16}
-            onMomentumScrollEnd={e => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setViewerIndex(idx);
-            }}
-            style={{ flex: 1 }}
-          >
-            {viewerUris.map((uri, i) => (
-              <View key={i} style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Dot indicators */}
-          {viewerUris.length > 1 && (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
-              {viewerUris.map((_, i) => (
-                <View
-                  key={i}
-                  style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }}
-                />
-              ))}
-            </View>
-          )}
-        </View>
-      </Modal>
+      {photoViewerModal}
 
     </View>
   );
