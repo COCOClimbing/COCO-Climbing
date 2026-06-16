@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
-import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh } from './storage';
-import { uploadMedia } from './mediaUpload';
+import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh, getDeletedClimbIds, getDeletedSessionIds, getPendingDeletes, removePendingDelete } from './storage';
+import { uploadMedia, listMediaKeys } from './mediaUpload';
 
 const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
 const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
+const R2_PUBLIC_BASE_URL = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev';
+const R2_ORPHAN_RECOVERY_FLAG = 'coco_r2_recovery_v1';
 
 // Returns true if a URL points to deleted Supabase Storage (bucket was wiped)
 export function isDeadMediaUrl(url: string): boolean {
@@ -157,9 +159,15 @@ export async function mergeData(userId: string): Promise<void> {
   const localClimbIds   = new Set(cleanedLocalClimbs.map(c => c.id));
   const localProjectIds = new Set(localProjects.map(p => p.id));
 
-  // Records that exist in cloud but not locally — pull them in
-  const newSessions = cloudSessions.filter(r => !localSessionIds.has(r.id)).map(rowToSession);
-  const newClimbs   = cloudClimbs.filter(r => !localClimbIds.has(r.id)).map(rowToClimb);
+  // Load tombstones so locally-deleted records aren't re-imported from cloud
+  const [deletedClimbIds, deletedSessionIds] = await Promise.all([
+    getDeletedClimbIds(),
+    getDeletedSessionIds(),
+  ]);
+
+  // Records that exist in cloud but not locally — pull them in (skip tombstoned)
+  const newSessions = cloudSessions.filter(r => !localSessionIds.has(r.id) && !deletedSessionIds.has(r.id)).map(rowToSession);
+  const newClimbs   = cloudClimbs.filter(r => !localClimbIds.has(r.id) && !deletedClimbIds.has(r.id)).map(rowToClimb);
   const newProjects = cloudProjects.filter(r => !localProjectIds.has(r.id)).map(rowToProject);
 
   // For records that exist in both, backfill media URLs from DB into local when
@@ -290,7 +298,21 @@ async function uploadClimbMedia(climb: Climb, userId: string): Promise<void> {
   await supabase.from('climbs').upsert(climbToRow(updatedClimb, userId), { onConflict: 'id' });
 }
 
-export async function deleteClimbFromCloud(id: string): Promise<void> {
+export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
+  const httpUrls = urls.filter(u => u.startsWith('http'));
+  if (!httpUrls.length) return;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  const prefix = `${R2_PUBLIC_BASE_URL}/`;
+  await Promise.all(
+    httpUrls
+      .filter(u => u.startsWith(prefix))
+      .map(u => deleteMedia(u.slice(prefix.length), session.access_token).catch(() => {}))
+  );
+}
+
+export async function deleteClimbFromCloud(id: string, r2Uris?: string[]): Promise<void> {
+  if (r2Uris?.length) await deleteR2MediaUrls(r2Uris);
   await supabase.from('climbs').delete().eq('id', id);
 }
 
@@ -329,6 +351,10 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
   }
 
   const finalUris = mediaUris.filter(u => u.startsWith('http'));
+  // uris.length === 0 means the session has NO media at all (explicitly cleared).
+  // uris.length > 0 but finalUris.length === 0 means upload failed (file:// pending) —
+  // in that case, omit media_uris so the existing DB value (R2 URL) is preserved.
+  const explicitlyNoMedia = uris.length === 0;
   await supabase.from('sessions').upsert({
     id: session.id,
     user_id: userId,
@@ -338,12 +364,11 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
     notes: session.notes ?? null,
     title: session.title ?? null,
     friends: session.friends ?? null,
-    // Omit media_uris when we have none — preserves any R2 URL already in the
-    // DB row rather than overwriting it with null after a failed upload.
-    ...(finalUris.length > 0 ? {
-      media_uris: finalUris,
-      media_types: mediaTypes.filter((_, i) => mediaUris[i]?.startsWith('http')),
-    } : {}),
+    ...(finalUris.length > 0
+      ? { media_uris: finalUris, media_types: mediaTypes.filter((_, i) => mediaUris[i]?.startsWith('http')) }
+      : explicitlyNoMedia
+      ? { media_uris: null, media_types: null }
+      : {}),
     ended_at: session.endedAt ?? null,
   }, { onConflict: 'id' });
 
@@ -355,7 +380,22 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
   }
 }
 
-export async function deleteSessionFromCloud(id: string): Promise<void> {
+export async function deleteSessionFromCloud(
+  id: string,
+  r2Uris?: string[],
+): Promise<void> {
+  // Delete R2 files before removing DB rows
+  if (r2Uris?.length) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const prefix = `${R2_PUBLIC_BASE_URL}/`;
+      await Promise.all(
+        r2Uris
+          .filter(u => u.startsWith(prefix))
+          .map(u => deleteMedia(u.slice(prefix.length), session.access_token).catch(() => {}))
+      );
+    }
+  }
   await Promise.all([
     supabase.from('climbs').delete().eq('session_id', id),
     supabase.from('sessions').delete().eq('id', id),
@@ -627,5 +667,229 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
       };
     });
     await supabase.from('sessions').upsert(rows, { onConflict: 'id' });
+  }
+}
+
+// Cleanup: deletes R2 objects that no longer have a matching DB row.
+// Throttled to once per 24 hours so network-failed deletes don't accumulate.
+const R2_CLEANUP_TS_KEY = 'coco_r2_cleanup_ts';
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
+  const lastRun = await AsyncStorage.getItem(R2_CLEANUP_TS_KEY);
+  if (lastRun && Date.now() - Number(lastRun) < CLEANUP_INTERVAL_MS) return;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+
+  const allKeys = await listMediaKeys(session.access_token);
+  if (allKeys.length === 0) {
+    await AsyncStorage.setItem(R2_CLEANUP_TS_KEY, String(Date.now()));
+    return;
+  }
+
+  // Select both array and singular columns — climbs have a legacy media_uri field
+  const [sessionsRes, climbsRes] = await Promise.all([
+    supabase.from('sessions').select('media_uris').eq('user_id', userId),
+    supabase.from('climbs').select('media_uris, media_uri').eq('user_id', userId),
+  ]);
+
+  const prefix = `${R2_PUBLIC_BASE_URL}/`;
+  const validKeys = new Set<string>();
+
+  (sessionsRes.data ?? []).forEach((row: any) => {
+    (row.media_uris ?? []).forEach((url: string) => {
+      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
+    });
+  });
+
+  (climbsRes.data ?? []).forEach((row: any) => {
+    (row.media_uris ?? []).forEach((url: string) => {
+      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
+    });
+    if (row.media_uri?.startsWith(prefix)) validKeys.add(row.media_uri.slice(prefix.length));
+  });
+
+  const orphaned = allKeys.filter(k => !validKeys.has(k));
+  if (orphaned.length > 0) {
+    await Promise.all(
+      orphaned.map(k => deleteMedia(k, session.access_token).catch(() => {}))
+    );
+  }
+
+  await AsyncStorage.setItem(R2_CLEANUP_TS_KEY, String(Date.now()));
+}
+
+// One-time recovery: finds session photos uploaded to R2 but never linked in local/DB
+// (caused by the race condition fixed in launchSessionMedia). Runs once per install.
+export async function recoverOrphanedR2Media(userId: string): Promise<void> {
+  const done = await AsyncStorage.getItem(R2_ORPHAN_RECOVERY_FLAG);
+  if (done) return;
+
+  const sessions = await getAllSessions();
+  const candidates = sessions.filter(s => {
+    const uris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
+    return uris.length === 0;
+  });
+
+  if (candidates.length === 0) {
+    await AsyncStorage.setItem(R2_ORPHAN_RECOVERY_FLAG, '1');
+    return;
+  }
+
+  // Check R2 in parallel for each session that has no media
+  const results = await Promise.all(
+    candidates.map(async s => {
+      const recovered: string[] = [];
+      for (let slot = 0; slot < 10; slot++) {
+        const url = `${R2_PUBLIC_BASE_URL}/${userId}/session_${s.id}_${slot}.jpg`;
+        try {
+          const res = await fetch(url, { method: 'HEAD' });
+          if (!res.ok) break;
+          recovered.push(url);
+        } catch {
+          break;
+        }
+      }
+      return { session: s, recovered };
+    })
+  );
+
+  const toUpdateLocal = results
+    .filter(r => r.recovered.length > 0)
+    .map(r => ({
+      ...r.session,
+      mediaUris: r.recovered,
+      mediaTypes: r.recovered.map(() => 'photo' as const),
+      mediaUri: r.recovered[0],
+      mediaType: 'photo' as const,
+    }));
+
+  if (toUpdateLocal.length > 0) {
+    await bulkSaveSessions(toUpdateLocal);
+    const dbRows = toUpdateLocal.map(s => ({
+      id: s.id,
+      user_id: userId,
+      media_uris: s.mediaUris,
+      media_types: s.mediaTypes,
+    }));
+    await supabase.from('sessions').upsert(dbRows, { onConflict: 'id' });
+  }
+
+  await AsyncStorage.setItem(R2_ORPHAN_RECOVERY_FLAG, '1');
+}
+
+// Retry any deletes that failed silently (network down, token expired, etc.)
+export async function processPendingDeletes(): Promise<void> {
+  const pending = await getPendingDeletes();
+  if (pending.length === 0) return;
+  for (const item of pending) {
+    try {
+      if (item.type === 'climb') {
+        await deleteClimbFromCloud(item.id, item.r2Uris);
+      } else {
+        await deleteSessionFromCloud(item.id, item.r2Uris);
+      }
+      await removePendingDelete(item.id);
+    } catch {
+      // Leave in queue; will retry next login
+    }
+  }
+}
+
+// Daily cleanup: delete cloud climbs/sessions that no longer exist locally.
+// Runs before mergeData so deleted records don't get re-imported.
+const CLOUD_RECORD_CLEANUP_TS_KEY = 'coco_cloud_record_cleanup_ts';
+
+export async function cleanupOrphanedCloudRecords(userId: string): Promise<void> {
+  const last = await AsyncStorage.getItem(CLOUD_RECORD_CLEANUP_TS_KEY);
+  if (last && Date.now() - Number(last) < 24 * 60 * 60 * 1000) return;
+
+  try {
+    const [localClimbs, localSessions] = await Promise.all([
+      getAllClimbs(),
+      getAllSessions(),
+    ]);
+
+    const localClimbIds = new Set(localClimbs.map(c => c.id));
+    const localSessionIds = new Set(localSessions.map(s => s.id));
+
+    const [climbsRes, sessionsRes] = await Promise.all([
+      supabase.from('climbs').select('id').eq('user_id', userId),
+      supabase.from('sessions').select('id').eq('user_id', userId),
+    ]);
+
+    const orphanClimbIds = (climbsRes.data ?? [])
+      .map((r: { id: string }) => r.id)
+      .filter((id: string) => !localClimbIds.has(id));
+    const orphanSessionIds = (sessionsRes.data ?? [])
+      .map((r: { id: string }) => r.id)
+      .filter((id: string) => !localSessionIds.has(id));
+
+    if (orphanClimbIds.length > 0) {
+      await supabase.from('climbs').delete().in('id', orphanClimbIds).eq('user_id', userId);
+    }
+    if (orphanSessionIds.length > 0) {
+      await supabase.from('sessions').delete().in('id', orphanSessionIds).eq('user_id', userId);
+    }
+
+    await AsyncStorage.setItem(CLOUD_RECORD_CLEANUP_TS_KEY, String(Date.now()));
+  } catch (e) {
+    console.warn('Cloud record cleanup failed:', e);
+  }
+}
+
+// One-time cleanup: delete local climbs/sessions that no longer exist in Supabase.
+// Safe to run after mergeData — anything cloud-only has already been pulled local,
+// so local-only records at this point were either never synced or deleted from cloud.
+// Only removes records older than 1 hour to protect freshly-logged offline climbs.
+const LOCAL_ORPHAN_CLEANUP_FLAG = 'coco_local_orphan_cleanup_v1';
+
+export async function cleanupOrphanedLocalRecords(userId: string): Promise<void> {
+  const done = await AsyncStorage.getItem(LOCAL_ORPHAN_CLEANUP_FLAG);
+  if (done) return;
+
+  try {
+    const [localClimbs, localSessions] = await Promise.all([
+      getAllClimbs(),
+      getAllSessions(),
+    ]);
+
+    const [climbsRes, sessionsRes] = await Promise.all([
+      supabase.from('climbs').select('id').eq('user_id', userId),
+      supabase.from('sessions').select('id').eq('user_id', userId),
+    ]);
+
+    const cloudClimbIds = new Set((climbsRes.data ?? []).map((r: { id: string }) => r.id));
+    const cloudSessionIds = new Set((sessionsRes.data ?? []).map((r: { id: string }) => r.id));
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+    const orphanClimbs = localClimbs.filter(c => {
+      if (cloudClimbIds.has(c.id)) return false;
+      const createdAt = new Date(c.date).getTime();
+      return createdAt < oneHourAgo;
+    });
+    const orphanSessions = localSessions.filter(s => {
+      if (cloudSessionIds.has(s.id)) return false;
+      const createdAt = new Date(s.startedAt ?? s.date).getTime();
+      return createdAt < oneHourAgo;
+    });
+
+    if (orphanClimbs.length > 0 || orphanSessions.length > 0) {
+      const orphanClimbIds = new Set(orphanClimbs.map(c => c.id));
+      const orphanSessionIds = new Set(orphanSessions.map(s => s.id));
+      const allClimbs = await getAllClimbs();
+      const allSessions = await getAllSessions();
+      await AsyncStorage.setItem('coco_climbs', JSON.stringify(
+        allClimbs.filter(c => !orphanClimbIds.has(c.id))
+      ));
+      await AsyncStorage.setItem('coco_sessions', JSON.stringify(
+        allSessions.filter(s => !orphanSessionIds.has(s.id))
+      ));
+    }
+
+    await AsyncStorage.setItem(LOCAL_ORPHAN_CLEANUP_FLAG, '1');
+  } catch (e) {
+    console.warn('Local orphan cleanup failed:', e);
   }
 }

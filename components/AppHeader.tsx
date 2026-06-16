@@ -19,7 +19,7 @@ const SCREEN_TITLES: Partial<Record<ScreenId, string>> = {
 export default function AppHeader() {
   const { colors } = useTheme();
   const { screen, navigate, openSettings, openFriends } = useNav();
-  const { pendingRequestCount, avatarUrl, profileName } = useAuth();
+  const { pendingRequestCount, avatarUrl, localAvatarUri, profileName } = useAuth();
   const initials = profileName
     ? profileName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?';
@@ -31,8 +31,8 @@ export default function AppHeader() {
         <View style={styles.leftGroup}>
           <TouchableOpacity onPress={() => navigate('account')} activeOpacity={0.7}>
             <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              {(localAvatarUri ?? avatarUrl) ? (
+                <Image source={{ uri: localAvatarUri ?? avatarUrl! }} style={styles.avatarImage} />
               ) : (
                 <Text style={[styles.avatarInitials, { color: colors.accent }]}>{initials}</Text>
               )}

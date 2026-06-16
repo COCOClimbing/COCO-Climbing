@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
@@ -118,55 +118,76 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
 
 export default function StatsScreen() {
   const { colors } = useTheme();
-  const { screen } = useNav();
+  const { screen, navigateToSession } = useNav();
   const [climbs, setClimbs] = useState<Climb[]>([]);
   const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>({});
   const [sessionCount, setSessionCount] = useState(0);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    // Pull fresh data from Supabase so stats always reflect the latest cloud state
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const userId = session.user.id;
-      const [climbsRes, sessionsRes] = await Promise.all([
-        supabase.from('climbs').select('*').eq('user_id', userId),
-        supabase.from('sessions').select('*').eq('user_id', userId),
-      ]);
-      if (climbsRes.data) {
-        const mapped: Climb[] = climbsRes.data.map((r: any) => ({
-          id: r.id, date: r.date, sessionId: r.session_id,
-          type: r.type, outcome: r.outcome, styles: r.styles ?? [],
-          environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
-          routeName: r.route_name ?? undefined, location: r.location ?? undefined,
-          notes: r.notes ?? undefined, attempts: r.attempts ?? 1,
-          projectId: r.project_id ?? undefined, projectName: r.project_name ?? undefined,
-          mediaUri: r.media_uri ?? undefined, mediaType: r.media_type ?? undefined,
-          mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
-        }));
-        await bulkSaveClimbs(mapped);
+    setLoading(true);
+    let cloudClimbs: Climb[] | null = null;
+    let cloudSessionCount: number | null = null;
+    let cloudSessionMap: Record<string, string> | null = null;
+
+    try {
+      // Pull fresh data from Supabase so stats always reflect the latest cloud state
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const userId = session.user.id;
+        const [climbsRes, sessionsRes] = await Promise.all([
+          supabase.from('climbs').select('*').eq('user_id', userId),
+          supabase.from('sessions').select('*').eq('user_id', userId),
+        ]);
+        if (climbsRes.data) {
+          const mapped: Climb[] = climbsRes.data.map((r: any) => ({
+            id: r.id, date: r.date, sessionId: r.session_id,
+            type: r.type, outcome: r.outcome, styles: r.styles ?? [],
+            environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
+            routeName: r.route_name ?? undefined, location: r.location ?? undefined,
+            notes: r.notes ?? undefined, attempts: r.attempts ?? 1,
+            projectId: r.project_id ?? undefined, projectName: r.project_name ?? undefined,
+            mediaUri: r.media_uri ?? undefined, mediaType: r.media_type ?? undefined,
+            mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
+          }));
+          await bulkSaveClimbs(mapped);
+          cloudClimbs = mapped;
+        }
+        if (sessionsRes.data) {
+          const mapped = sessionsRes.data.map((r: any) => ({
+            id: r.id, date: r.date, environment: r.environment,
+            location: r.location ?? undefined, notes: r.notes ?? undefined,
+            title: r.title ?? undefined,
+            startedAt: r.started_at ?? undefined, endedAt: r.ended_at ?? undefined,
+            lastClimbAt: r.last_climb_at ?? undefined, friends: r.friends ?? undefined,
+            mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
+            mediaUri: r.media_uris?.[0] ?? undefined, mediaType: r.media_types?.[0] ?? undefined,
+          }));
+          await bulkSaveSessions(mapped);
+          cloudSessionCount = mapped.length;
+          cloudSessionMap = {};
+          mapped.forEach((s: any) => { cloudSessionMap![s.id] = s.date; });
+        }
       }
-      if (sessionsRes.data) {
-        const mapped = sessionsRes.data.map((r: any) => ({
-          id: r.id, date: r.date, environment: r.environment,
-          location: r.location ?? undefined, notes: r.notes ?? undefined,
-          title: r.title ?? undefined,
-          startedAt: r.started_at ?? undefined, endedAt: r.ended_at ?? undefined,
-          lastClimbAt: r.last_climb_at ?? undefined, friends: r.friends ?? undefined,
-          mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
-          mediaUri: r.media_uris?.[0] ?? undefined, mediaType: r.media_types?.[0] ?? undefined,
-        }));
-        await bulkSaveSessions(mapped);
-      }
+    } catch {
+      // Network unavailable — fall through to local storage below
     }
 
-    const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
-    setClimbs(allClimbs);
-    setSessionCount(allSessions.length);
-    const map: Record<string, string> = {};
-    allSessions.forEach(s => { map[s.id] = s.date; });
-    setSessionDateMap(map);
+    if (cloudClimbs !== null) {
+      setClimbs(cloudClimbs);
+      if (cloudSessionCount !== null) setSessionCount(cloudSessionCount);
+      if (cloudSessionMap !== null) setSessionDateMap(cloudSessionMap);
+    } else {
+      const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+      setClimbs(allClimbs);
+      setSessionCount(allSessions.length);
+      const map: Record<string, string> = {};
+      allSessions.forEach(s => { map[s.id] = s.date; });
+      setSessionDateMap(map);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -296,6 +317,14 @@ export default function StatsScreen() {
     };
   }, [climbs, sessionDateMap, sessionCount]);
 
+  if (loading) {
+    return (
+      <View style={[ss.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
   if (!computed) {
     return (
       <View style={[ss.container, { backgroundColor: colors.bg }]}>
@@ -408,7 +437,9 @@ export default function StatsScreen() {
             const hasData = !!best;
             const fontSize = size > 130 ? 28 : size > 90 ? FONTS.sizes.xl : FONTS.sizes.md;
             return (
-              <View
+              <TouchableOpacity
+                onPress={() => { if (best?.sessionId) navigateToSession(best.sessionId); }}
+                activeOpacity={hasData ? 0.7 : 1}
                 style={[ss.hardestSquare, {
                   width: size, height: size,
                   borderColor: hasData ? colors.accent + '66' : colors.border,
@@ -419,7 +450,7 @@ export default function StatsScreen() {
                   {hasData ? best.grade : 'NA'}
                 </Text>
                 <Text style={[ss.hardestSys, { color: colors.textMuted, fontSize: size > 100 ? FONTS.sizes.xs : 9 }]}>{label}</Text>
-              </View>
+              </TouchableOpacity>
             );
           }
 

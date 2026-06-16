@@ -536,14 +536,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: SPACING.lg,
   },
-  backToLoginButton: {
-    alignItems: 'center',
-    marginTop: SPACING.lg,
-  },
-  backToLoginText: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.medium,
-  },
   resetSuccessContainer: {
     alignItems: 'center',
     paddingVertical: SPACING.lg,

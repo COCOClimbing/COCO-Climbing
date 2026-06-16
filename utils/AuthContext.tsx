@@ -2,10 +2,14 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Alert, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
-import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls } from './cloudSync';
+import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls, recoverOrphanedR2Media, cleanupOrphanedR2Media, cleanupOrphanedCloudRecords, cleanupOrphanedLocalRecords, processPendingDeletes } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
 import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const LOCAL_AVATAR_FILE = FileSystem.documentDirectory + 'avatar_cache.jpg';
+const CACHED_AVATAR_URL_KEY = 'coco_cached_avatar_url';
 
 interface AuthContextType {
   user: User | null;
@@ -13,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   profileName: string | null;
   avatarUrl: string | null;
+  localAvatarUri: string | null;
   username: string | null;
   hometown: string | null;
   bio: string | null;
@@ -40,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileName, setProfileName] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [hometown, setHometown] = useState<string | null>(null);
   const [bio, setBio] = useState<string | null>(null);
@@ -47,6 +53,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const syncedRef = useRef(false);
+
+  // Restore locally cached avatar immediately on mount so it shows even offline
+  useEffect(() => {
+    FileSystem.getInfoAsync(LOCAL_AVATAR_FILE)
+      .then(info => { if (info.exists) setLocalAvatarUri(LOCAL_AVATAR_FILE); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -121,6 +134,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setBio(data.bio ?? null);
       setIsPrivate(data.is_private ?? false);
       if (data.name) supabase.auth.updateUser({ data: { display_name: data.name } });
+
+      // Cache avatar locally so it shows when offline
+      if (data.avatar_url) {
+        try {
+          const cachedUrl = await AsyncStorage.getItem(CACHED_AVATAR_URL_KEY);
+          if (cachedUrl !== data.avatar_url) {
+            await FileSystem.downloadAsync(data.avatar_url, LOCAL_AVATAR_FILE);
+            await AsyncStorage.setItem(CACHED_AVATAR_URL_KEY, data.avatar_url);
+          }
+          setLocalAvatarUri(LOCAL_AVATAR_FILE);
+        } catch {
+          // Network unavailable — local cache (if any) is already set from mount
+        }
+      }
     }
   }
 
@@ -154,7 +181,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         triggerFeedRefresh();
       }
       await reuploadMissingMedia(userId);
+      await processPendingDeletes();
+      await recoverOrphanedR2Media(userId);
+      await cleanupOrphanedR2Media(userId);
+      await cleanupOrphanedCloudRecords(userId);
       await mergeData(userId);
+      await cleanupOrphanedLocalRecords(userId);
       // Always refresh the feed after full sync so the activity feed picks up
       // any data that mergeData pulled from the cloud into local storage
       triggerFeedRefresh();
@@ -186,6 +218,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'coco_climbs',
       'coco_sessions',
       'coco_named_projects',
+      'coco_deleted_climb_ids',
+      'coco_deleted_session_ids',
+      'coco_pending_deletes',
       '@coco_onboarding_prefs',
     ]);
 
@@ -222,13 +257,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'coco_climbs',
       'coco_sessions',
       'coco_named_projects',
+      'coco_deleted_climb_ids',
+      'coco_deleted_session_ids',
+      'coco_pending_deletes',
       'coco_theme_mode',
       'coco_theme_accent',
       'coco_grade_system',
       'coco_preferred_display_grades',
       'coco_last_climb_type',
       '@coco_onboarding_prefs',
+      CACHED_AVATAR_URL_KEY,
     ]);
+    FileSystem.deleteAsync(LOCAL_AVATAR_FILE, { idempotent: true }).catch(() => {});
+    setLocalAvatarUri(null);
     await supabase.auth.signOut();
   }
 
@@ -263,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       profileName,
       avatarUrl,
+      localAvatarUri,
       username,
       hometown,
       bio,

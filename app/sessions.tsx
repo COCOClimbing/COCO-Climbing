@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, PanResponder, TextInput, Modal, Linking, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../utils/supabase';
 import ShareModal from '../components/ShareModal';
 import LocationPicker from '../components/LocationPicker';
@@ -14,7 +14,7 @@ import {
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
   setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession,
-  triggerFeedRefresh,
+  triggerFeedRefresh, triggerStatsRefresh,
 } from '../utils/storage';
 import { gradeToNum } from '../utils/gradeUtils';
 import FriendPicker from '../components/FriendPicker';
@@ -26,7 +26,7 @@ import SwipeToDelete from '../components/SwipeToDelete';
 import MiniCalendar from '../components/MiniCalendar';
 import { format, parseISO } from 'date-fns';
 import { useNav } from '../utils/NavigationContext';
-import { syncSessionToCloud } from '../utils/cloudSync';
+import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 
 interface DaySession {
@@ -99,11 +99,27 @@ function formatSessionLabel(s: DaySession): { top: string; bottom: string } {
 export default function SessionsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { tabResetCount } = useNav();
+  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, returnTo, setReturnTo, navigate } = useNav();
+
+  // Keep refs current so load() (stable useCallback with [] deps) can read
+  // the latest navPendingSessionId without a stale closure
+  const navPendingRef = useRef(navPendingSessionId);
+  navPendingRef.current = navPendingSessionId;
+  const clearNavPendingRef = useRef(clearPendingSessionId);
+  clearNavPendingRef.current = clearPendingSessionId;
 
   useEffect(() => {
     if (tabResetCount['sessions']) setSelectedDay(null);
   }, [tabResetCount['sessions']]);
+
+  useEffect(() => {
+    if (!navPendingSessionId) return;
+    const target = days.find(d => d.sessionId === navPendingSessionId);
+    if (target) {
+      setSelectedDay(target);
+      clearPendingSessionId();
+    }
+  }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [logModalVisible, setLogModalVisible] = useState(false);
@@ -144,6 +160,15 @@ export default function SessionsScreen() {
     setEditingNotes(false);
     setEditingTitle(false);
   }, [selectedDay?.sessionId]);
+
+  function goBackToList() {
+    _detailScrollY = 0;
+    setSelectedDay(null);
+    if (returnTo) {
+      setReturnTo(null);
+      navigate(returnTo);
+    }
+  }
 
   // Scroll photo viewer to the tapped photo once the modal has laid out
   useEffect(() => {
@@ -192,6 +217,18 @@ export default function SessionsScreen() {
 
     _cachedDays = result;
     setDays(result);
+
+    // Handle cross-tab deep-link (e.g. stats → this session) when the sessions
+    // screen wasn't mounted yet and days was empty when the effect first fired
+    const navId = navPendingRef.current;
+    if (navId) {
+      const navTarget = result.find(d => d.sessionId === navId);
+      if (navTarget) {
+        setSelectedDay(navTarget);
+        clearNavPendingRef.current();
+        return;
+      }
+    }
 
     // Navigate into a newly-created past session after saving
     if (pendingSessionId.current) {
@@ -298,8 +335,9 @@ export default function SessionsScreen() {
     // Copy each picked file to permanent document storage so the URI survives
     // iOS clearing the ImagePicker temp directory if the app is closed mid-upload.
     const mediaDir = `${FileSystem.documentDirectory}coco_media/`;
-    await FileSystem.makeDirectoryAsync(mediaDir, { intermediates: true }).catch(() => {});
+    try { await FileSystem.makeDirectoryAsync(mediaDir, { intermediates: true }); } catch {}
     const permanentItems: { uri: string; type: 'photo' | 'video' }[] = [];
+    const isPermanentCopy: boolean[] = [];
     for (let i = 0; i < result.assets.length; i++) {
       const asset = result.assets[i];
       const ext = 'jpg';
@@ -307,20 +345,36 @@ export default function SessionsScreen() {
       try {
         await FileSystem.copyAsync({ from: asset.uri, to: destUri });
         permanentItems.push({ uri: destUri, type: 'photo' });
-      } catch {
+        isPermanentCopy.push(true);
+      } catch (copyErr: any) {
+        console.warn('[launchSessionMedia] copy to permanent storage failed:', copyErr);
+        // Fall back to temp URI so the photo appears immediately; upload will
+        // still be attempted below, and if it succeeds the R2 URL persists.
         permanentItems.push({ uri: asset.uri, type: 'photo' });
+        isPermanentCopy.push(false);
       }
     }
 
-    // Save with permanent URIs immediately so the UI updates and the path
-    // survives a forced-quit / relaunch (reuploadMissingMedia can then retry).
+    // Show the photo in the UI immediately (may include temp URIs).
     const withLocal = [...sessionMediaItems, ...permanentItems];
     setSessionMediaItems(withLocal);
-    handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, withLocal);
+
+    // Only persist items that were copied to permanent storage — temp URIs
+    // will not survive an app restart so saving them to AsyncStorage is
+    // misleading (they'd be found as stale file:// paths and dropped).
+    const permanentOnly = permanentItems.filter((_, i) => isPermanentCopy[i]);
+    if (permanentOnly.length > 0) {
+      const withPermanent = [...sessionMediaItems, ...permanentOnly];
+      // Await so file:// paths are persisted before upload (and possible deletion).
+      await handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, withPermanent);
+    }
 
     // Upload to R2 in the foreground.
     const { data: { session: authSession } } = await supabase.auth.getSession();
-    if (!authSession) return;
+    if (!authSession) {
+      console.warn('[launchSessionMedia] no auth session — upload skipped, file:// saved for retry');
+      return;
+    }
 
     const resolved = [...withLocal];
     let anyUploaded = false;
@@ -334,7 +388,8 @@ export default function SessionsScreen() {
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
         // Permanent copy deleted AFTER the R2 URL is saved to local (below).
-      } catch {
+      } catch (uploadErr: any) {
+        console.warn('[launchSessionMedia] R2 upload failed for slot', slot, ':', uploadErr);
         // Keep permanent URI — reuploadMissingMedia will retry on next open.
       }
     }
@@ -359,7 +414,7 @@ export default function SessionsScreen() {
       }
       // NOW delete permanent copies — after R2 URLs are persisted to local.
       for (let i = 0; i < permanentItems.length; i++) {
-        if (resolved[startIdx + i]?.uri?.startsWith('http')) {
+        if (isPermanentCopy[i] && resolved[startIdx + i]?.uri?.startsWith('http')) {
           FileSystem.deleteAsync(permanentItems[i].uri, { idempotent: true }).catch(() => {});
         }
       }
@@ -371,9 +426,13 @@ export default function SessionsScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: () => {
+          const removedUri = sessionMediaItems[index]?.uri;
           const updated = sessionMediaItems.filter((_, i) => i !== index);
           setSessionMediaItems(updated);
           handleSaveSessionMeta(sessionNotes, sessionFriends, sessionLocation, updated);
+          if (removedUri?.startsWith('http')) {
+            deleteR2MediaUrls([removedUri]).catch(() => {});
+          }
         },
       },
     ]);
@@ -397,6 +456,9 @@ export default function SessionsScreen() {
             updatedClimb = { ...climb, mediaUri: undefined, mediaType: undefined };
           }
           await saveClimb(updatedClimb);
+          if (uri.startsWith('http')) {
+            deleteR2MediaUrls([uri]).catch(() => {});
+          }
           load();
         },
       },
@@ -582,7 +644,7 @@ export default function SessionsScreen() {
     const swipeBack = useRef(
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) => g.dx > 20 && Math.abs(g.dy) < 60,
-        onPanResponderRelease: (_, g) => { if (g.dx > 60) { _detailScrollY = 0; setSelectedDay(null); } },
+        onPanResponderRelease: (_, g) => { if (g.dx > 60) goBackToList(); },
       })
     ).current;
 
@@ -618,7 +680,7 @@ export default function SessionsScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
         {/* Back bar */}
         <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => { _detailScrollY = 0; setSelectedDay(null); }} style={styles.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={goBackToList} style={styles.backBtn} activeOpacity={0.7}>
             <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
         </View>
@@ -706,7 +768,7 @@ export default function SessionsScreen() {
           {displayClimbs.length === 0
             ? <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
             : displayClimbs.map(c => (
-              <SwipeToDelete key={c.id} onDelete={async () => { await deleteClimb(c.id); load(); }}>
+              <SwipeToDelete key={c.id} onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}>
                 <ClimbCard
                   climb={c}
                   compact
@@ -913,6 +975,7 @@ export default function SessionsScreen() {
         onDelete={async () => {
           for (const c of item.climbs) await deleteClimb(c.id);
           await deleteSession(item.sessionId);
+          triggerStatsRefresh();
           await load();
         }}
       >
@@ -1011,84 +1074,65 @@ export default function SessionsScreen() {
     </Modal>
   );
 
-  if (selectedDay) {
-    return (
-      <>
-        <DetailView day={selectedDay} />
-        {photoViewerModal}
-        <LogClimbModal
-          visible={logModalVisible}
-          onClose={() => { setLogModalVisible(false); setModalSessionId(undefined); setEditingClimb(undefined); }}
-          onSaved={load}
-          defaultSessionId={modalSessionId}
-          existingClimb={editingClimb}
-        />
-        <ClimbDetailModal
-          visible={!!detailClimb}
-          climb={detailClimb}
-          onClose={() => setDetailClimb(null)}
-          onEdit={() => { setEditingClimb(detailClimb ?? undefined); setDetailClimb(null); setLogModalVisible(true); }}
-        />
-        <MiniCalendar
-          visible={changeDateSession !== null}
-          onClose={() => setChangeDateSession(null)}
-          activeDates={activeDates}
-          onSelectDate={(date) => changeDateSession && handleChangeSessionDate(changeDateSession, date)}
-          mode="pick"
-        />
-        <ShareModal
-          visible={!!shareDay}
-          data={shareDay ? {
-            date: shareDay.date,
-            climbs: shareDay.climbs,
-            location: shareDay.location,
-            title: shareDay.title,
-            climbingWith: shareDay.friends?.map((f: any) => f?.name ?? f),
-          } : null}
-          accentColor={colors.accent}
-          onDismiss={() => setShareDay(null)}
-        />
-      </>
-    );
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Header */}
-      <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.addSessionBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
-          onPress={handleNewSession}
-        >
-          <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
-          <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
-        </TouchableOpacity>
+
+      {/* List view — always mounted so FlatList never loses its scroll position */}
+      <View style={{ flex: 1, display: selectedDay ? 'none' : 'flex' }}>
+        <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.addSessionBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
+            onPress={handleNewSession}
+          >
+            <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
+            <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          ref={listRef}
+          data={listDays}
+          keyExtractor={item => item.sessionId}
+          renderItem={renderDay}
+          contentContainerStyle={styles.list}
+          onScrollToIndexFailed={() => {}}
+          ListHeaderComponent={<ActiveSessionCard />}
+          ListEmptyComponent={
+            !activeSession
+              ? <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
+              : null
+          }
+        />
+
+        <MiniCalendar
+          visible={calendarVisible}
+          onClose={() => setCalendarVisible(false)}
+          activeDates={activeDates}
+          onSelectDate={handleCalendarSelect}
+          selectedDate={selectedCalDate}
+          mode="view"
+        />
       </View>
 
-      <FlatList
-        ref={listRef}
-        data={listDays}
-        keyExtractor={item => item.sessionId}
-        renderItem={renderDay}
-        contentContainerStyle={styles.list}
-        onScrollToIndexFailed={() => {}}
-        ListHeaderComponent={<ActiveSessionCard />}
-        ListEmptyComponent={
-          !activeSession
-            ? <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
-            : null
-        }
-      />
+      {/* Detail view */}
+      {selectedDay && <DetailView day={selectedDay} />}
 
-      <MiniCalendar
-        visible={calendarVisible}
-        onClose={() => setCalendarVisible(false)}
-        activeDates={activeDates}
-        onSelectDate={handleCalendarSelect}
-        selectedDate={selectedCalDate}
-        mode="view"
+      {/* Shared modals — used by both list and detail contexts */}
+      {photoViewerModal}
+      <LogClimbModal
+        visible={logModalVisible}
+        onClose={() => { setLogModalVisible(false); setModalSessionId(undefined); setEditingClimb(undefined); }}
+        onSaved={load}
+        defaultSessionId={modalSessionId}
+        existingClimb={editingClimb}
+      />
+      <ClimbDetailModal
+        visible={!!detailClimb}
+        climb={detailClimb}
+        onClose={() => setDetailClimb(null)}
+        onEdit={() => { setEditingClimb(detailClimb ?? undefined); setDetailClimb(null); setLogModalVisible(true); }}
       />
       <MiniCalendar
         visible={changeDateSession !== null}
@@ -1097,16 +1141,18 @@ export default function SessionsScreen() {
         onSelectDate={(date) => changeDateSession && handleChangeSessionDate(changeDateSession, date)}
         mode="pick"
       />
-
-      <LogClimbModal
-        visible={logModalVisible}
-        onClose={() => { setLogModalVisible(false); setModalSessionId(undefined); }}
-        onSaved={load}
-        defaultSessionId={modalSessionId}
+      <ShareModal
+        visible={!!shareDay}
+        data={shareDay ? {
+          date: shareDay.date,
+          climbs: shareDay.climbs,
+          location: shareDay.location,
+          title: shareDay.title,
+          climbingWith: shareDay.friends?.map((f: any) => f?.name ?? f),
+        } : null}
+        accentColor={colors.accent}
+        onDismiss={() => setShareDay(null)}
       />
-
-      {/* ── Full-screen photo viewer ── */}
-      {photoViewerModal}
 
     </View>
   );

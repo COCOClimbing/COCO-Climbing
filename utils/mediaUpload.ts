@@ -28,3 +28,16 @@ export async function deleteMedia(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
+
+export async function listMediaKeys(accessToken: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${WORKER_URL}/list`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return [];
+    const { keys } = await res.json();
+    return Array.isArray(keys) ? keys : [];
+  } catch {
+    return [];
+  }
+}

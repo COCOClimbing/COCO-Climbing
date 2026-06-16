@@ -20,6 +20,7 @@ interface NavContextType {
   navCount: number;
   tabResetCount: Record<string, number>;
   pendingFriendProfile: PendingFriendProfile | null;
+  pendingSessionId: string | null;
   navigate: (screen: ScreenId) => void;
   openDrawer: () => void;
   closeDrawer: () => void;
@@ -30,6 +31,8 @@ interface NavContextType {
   closeFriends: () => void;
   viewFriendProfile: (profile: PendingFriendProfile) => void;
   clearPendingFriendProfile: () => void;
+  navigateToSession: (sessionId: string) => void;
+  clearPendingSessionId: () => void;
 }
 
 const NavContext = createContext<NavContextType>({
@@ -41,6 +44,7 @@ const NavContext = createContext<NavContextType>({
   navCount: 0,
   tabResetCount: {},
   pendingFriendProfile: null,
+  pendingSessionId: null,
   navigate: () => {},
   openDrawer: () => {},
   closeDrawer: () => {},
@@ -51,6 +55,8 @@ const NavContext = createContext<NavContextType>({
   closeFriends: () => {},
   viewFriendProfile: () => {},
   clearPendingFriendProfile: () => {},
+  navigateToSession: () => {},
+  clearPendingSessionId: () => {},
 });
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
@@ -62,6 +68,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [navCount, setNavCount] = useState(0);
   const [tabResetCount, setTabResetCount] = useState<Record<string, number>>({});
   const [pendingFriendProfile, setPendingFriendProfile] = useState<PendingFriendProfile | null>(null);
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
 
   function navigate(s: ScreenId) {
     if (s === screen) {
@@ -92,6 +99,18 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     setPendingFriendProfile(null);
   }
 
+  function navigateToSession(sessionId: string) {
+    setPendingSessionId(sessionId);
+    setReturnTo(screen);
+    setScreen('sessions');
+    setDrawerOpen(false);
+    setNavCount(c => c + 1);
+  }
+
+  function clearPendingSessionId() {
+    setPendingSessionId(null);
+  }
+
   return (
     <NavContext.Provider value={{
       screen,
@@ -102,6 +121,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       navCount,
       tabResetCount,
       pendingFriendProfile,
+      pendingSessionId,
       navigate,
       openDrawer: () => setDrawerOpen(true),
       closeDrawer: () => setDrawerOpen(false),
@@ -112,6 +132,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       closeFriends,
       viewFriendProfile,
       clearPendingFriendProfile,
+      navigateToSession,
+      clearPendingSessionId,
     }}>
       {children}
     </NavContext.Provider>

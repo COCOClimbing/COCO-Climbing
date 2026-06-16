@@ -56,6 +56,9 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
           {climb.notes}
         </Text>
       ) : null}
+      {climb.location ? (
+        <Text style={[styles.location, { color: colors.textMuted }]} numberOfLines={1}>{climb.location}</Text>
+      ) : null}
       <View style={styles.bottomRow}>
         <Text style={[styles.date, { color: colors.textMuted }]}>{dateStr}</Text>
         <View style={styles.metaRight}>
@@ -74,9 +77,6 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
             >
               <Text style={[styles.incrementBtnText, { color: colors.textMuted }]}>+</Text>
             </TouchableOpacity>
-          )}
-          {climb.location && (
-            <Text style={[styles.location, { color: colors.textMuted }]} numberOfLines={1}>{climb.location}</Text>
           )}
         </View>
       </View>
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   notes: { fontSize: FONTS.sizes.sm, marginBottom: SPACING.xs, lineHeight: 18 },
   attempts: { fontSize: FONTS.sizes.xs },
-  location: { fontSize: FONTS.sizes.xs, maxWidth: 140 },
+  location: { fontSize: FONTS.sizes.xs, maxWidth: 200, marginBottom: 2 },
   incrementBtn: {
     width: 22,
     height: 22,

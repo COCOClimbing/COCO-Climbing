@@ -30,7 +30,7 @@ import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredD
 export default function AccountScreen() {
   const { colors, mode, accentId, setMode, setAccent } = useTheme();
   const { settingsOpen, closeSettings, navigate, screen, friendsOpen, viewFriendProfile } = useNav();
-  const { user, profileName, avatarUrl, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
+  const { user, profileName, avatarUrl, localAvatarUri, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
 
   const [friendCounts, setFriendCounts] = useState<{ followers: number; following: number } | null>(null);
   const [followListModal, setFollowListModal] = useState<'following' | 'followers' | null>(null);
@@ -437,8 +437,8 @@ export default function AccountScreen() {
         <View style={styles.profileTop}>
           <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8}>
             <View style={[styles.avatarCircle, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              {(localAvatarUri ?? avatarUrl) ? (
+                <Image source={{ uri: localAvatarUri ?? avatarUrl! }} style={styles.avatarImage} />
               ) : (
                 <Text style={[styles.avatarInitials, { color: colors.accent }]}>{initials}</Text>
               )}

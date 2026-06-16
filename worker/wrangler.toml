@@ -8,3 +8,5 @@ bucket_name = "coco-media"
 
 [vars]
 R2_PUBLIC_BASE_URL = "https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev"
+SUPABASE_URL = "https://oexaqytotrxqbxmzqabu.supabase.co"
+SUPABASE_ANON_KEY = "sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT"

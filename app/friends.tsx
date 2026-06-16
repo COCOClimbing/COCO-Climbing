@@ -25,7 +25,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
-import { FONTS, SPACING, V_GRADES, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
+import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
@@ -592,7 +592,8 @@ const detailStyles = StyleSheet.create({
 export default function FriendsScreen() {
   const { colors } = useTheme();
   const { navigate, screen, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile } = useNav();
-  const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, username } = useAuth();
+  const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
+  const myAvatar = localAvatarUri ?? avatarUrl;
   const insets = useSafeAreaInsets();
   const tabBarHeight = 70 + (insets.bottom || 0);
 
@@ -696,6 +697,7 @@ export default function FriendsScreen() {
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollY = useRef(0);
   const SCREEN_WIDTH = Dimensions.get('window').width;
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -769,7 +771,7 @@ export default function FriendsScreen() {
       const cutoff = fourteenDaysAgo.toISOString().slice(0, 10);
       const activeSessionId = getActiveSessionId();
       const recentSessions = allSessions.filter(s => normDate(s.date) >= cutoff && s.id !== activeSessionId);
-      const selfProfile = { id: user.id, name: 'You', username: username ?? '', avatar_url: avatarUrl };
+      const selfProfile = { id: user.id, name: 'You', username: username ?? '', avatar_url: myAvatar };
 
       // Fetch own session/climb media from DB — guaranteed R2 URLs, bypasses stale local cache
       const recentSessionIds = recentSessions.map(s => s.id);
@@ -1489,6 +1491,52 @@ export default function FriendsScreen() {
     );
   }
 
+  const photoViewerModal = (
+    <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
+        <TouchableOpacity
+          onPress={() => setViewerVisible(false)}
+          style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
+        </TouchableOpacity>
+        {viewerPhotos.length > 1 && (
+          <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
+              {viewerIndex + 1} / {viewerPhotos.length}
+            </Text>
+          </View>
+        )}
+        <ScrollView
+          ref={viewerScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={e => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            setViewerIndex(idx);
+          }}
+          style={{ flex: 1 }}
+        >
+          {viewerPhotos.map((uri, i) => (
+            <View key={i} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
+              <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }} resizeMode="contain" />
+            </View>
+          ))}
+        </ScrollView>
+        {viewerPhotos.length > 1 && (
+          <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
+            {viewerPhotos.map((_, i) => (
+              <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
+            ))}
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+
   // Show session detail full-screen
   if (viewingSession) {
     const { entry, climbs } = viewingSession;
@@ -1515,7 +1563,7 @@ export default function FriendsScreen() {
           <View style={styles.detailHeader}>
             <ProfileAvatar
               name={entry.friend.name}
-              avatarUrl={entry.friend.id === user?.id ? (avatarUrl ?? null) : (entry.friend.avatar_url ?? null)}
+              avatarUrl={entry.friend.id === user?.id ? (myAvatar ?? null) : (entry.friend.avatar_url ?? null)}
               size={44}
               colors={colors}
             />
@@ -1553,12 +1601,26 @@ export default function FriendsScreen() {
               </>
             )}
           </View>
+          {/* Photos */}
+          {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+              contentContainerStyle={styles.photoStripContent}
+            >
+              {entry.sessionPhotos.map((uri, i) => (
+                <NaturalPhoto key={i} uri={uri} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+              ))}
+            </ScrollView>
+          )}
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
             : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact />)
           }
         </ScrollView>
+        {photoViewerModal}
       </View>
     );
   }
@@ -1604,7 +1666,7 @@ export default function FriendsScreen() {
                   <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 }} onPress={() => openFriendProfile(entry.friend, 'activity')} activeOpacity={0.75}>
                     <ProfileAvatar
                       name={entry.friend.name}
-                      avatarUrl={entry.friend.id === user?.id ? (avatarUrl ?? null) : (entry.friend.avatar_url ?? null)}
+                      avatarUrl={entry.friend.id === user?.id ? (myAvatar ?? null) : (entry.friend.avatar_url ?? null)}
                       size={44}
                       colors={colors}
                     />
@@ -1732,7 +1794,7 @@ export default function FriendsScreen() {
                             <View style={styles.likeCountRow}>
                               <View style={styles.avatarStack}>
                                 {likes.slice(0, 3).map((l, i) => {
-                                  const url = l.user_id === user?.id ? avatarUrl : l.profile?.avatar_url;
+                                  const url = l.user_id === user?.id ? myAvatar : l.profile?.avatar_url;
                                   const onPress = l.user_id !== user?.id ? () => openFriendProfile({ id: l.user_id, name: l.profile?.name ?? 'Unknown', username: '', avatar_url: l.profile?.avatar_url ?? null }, 'activity') : undefined;
                                   const likeKey = l.id ?? l.user_id ?? String(i);
                                   return url
@@ -1817,7 +1879,7 @@ export default function FriendsScreen() {
                                       openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
                                     }}
                                     colors={colors}
-                                    commentAvatarUrl={c.user_id === user?.id ? avatarUrl : (c.profile?.avatar_url ?? null)}
+                                    commentAvatarUrl={c.user_id === user?.id ? myAvatar : (c.profile?.avatar_url ?? null)}
                                     likedByUserIds={commentLikesMap[c.id] ?? []}
                                     currentUserId={user?.id ?? ''}
                                   />
@@ -1857,8 +1919,8 @@ export default function FriendsScreen() {
         };
         return (
           <View style={[styles.stickyCommentBar, { borderTopColor: colors.border, backgroundColor: colors.bg }]}>
-            {avatarUrl
-              ? <Image source={{ uri: avatarUrl }} style={styles.commentAvatar} />
+            {myAvatar
+              ? <Image source={{ uri: myAvatar }} style={styles.commentAvatar} />
               : <View style={[styles.commentAvatar, { backgroundColor: colors.border }]} />
             }
             <View style={[styles.commentInput, { borderColor: colors.border, backgroundColor: colors.bgCard, flex: 1 }]}>
@@ -1882,56 +1944,7 @@ export default function FriendsScreen() {
       })()}
 
       {/* ── Photo viewer ── */}
-      <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)} statusBarTranslucent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
-          {/* Close */}
-          <TouchableOpacity
-            onPress={() => setViewerVisible(false)}
-            style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
-          </TouchableOpacity>
-
-          {/* Counter */}
-          {viewerPhotos.length > 1 && (
-            <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
-                {viewerIndex + 1} / {viewerPhotos.length}
-              </Text>
-            </View>
-          )}
-
-          {/* Paged photo strip */}
-          <ScrollView
-            ref={viewerScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            scrollEventThrottle={16}
-            onMomentumScrollEnd={e => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setViewerIndex(idx);
-            }}
-            style={{ flex: 1 }}
-          >
-            {viewerPhotos.map((uri, i) => (
-              <View key={i} style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: '80%' }} resizeMode="contain" />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Dot indicators */}
-          {viewerPhotos.length > 1 && (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
-              {viewerPhotos.map((_, i) => (
-                <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
-              ))}
-            </View>
-          )}
-        </View>
-      </Modal>
+      {photoViewerModal}
 
       {/* ── Share Modal ── */}
       <ShareModal
