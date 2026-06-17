@@ -44,7 +44,6 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
   const [cardIndex, setCardIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<(ViewShot | null)[]>([]);
-  const pendingUri = useRef<string | null>(null);
 
   async function handleShare() {
     const ref = cardRefs.current[cardIndex];
@@ -53,30 +52,20 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
       return;
     }
     try {
-      // Capture while modal is still visible (ViewShot needs the rendered view).
-      // Then dismiss — iOS fires onDismiss on the Modal after the animation
-      // completes, at which point we present the share sheet from the root VC.
-      pendingUri.current = await (ref as any).capture();
+      const uri = await (ref as any).capture();
+      // Dismiss the modal first — the share sheet must be presented from the
+      // root VC, and iOS blocks that while a Modal VC is still on screen.
+      // We hold `uri` in this async closure and wait for the fade to finish.
       onDismiss();
-      // Android doesn't fire Modal onDismiss — use a short timeout instead.
-      if (Platform.OS === 'android') {
-        setTimeout(presentShare, 300);
-      }
+      await new Promise(resolve => setTimeout(resolve, 600));
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
     } catch (e: any) {
       Alert.alert('Share Error', String(e?.message ?? e));
     }
   }
 
-  function presentShare() {
-    const uri = pendingUri.current;
-    if (!uri) return;
-    pendingUri.current = null;
-    Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' })
-      .catch((e: any) => Alert.alert('Share Error', String(e?.message ?? e)));
-  }
-
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} onDismiss={presentShare}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.overlay}>
         <ScrollView
           ref={scrollRef}
@@ -154,7 +143,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
 
         <View style={styles.buttons}>
           <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: accentColor }]} onPress={handleShare} activeOpacity={0.8}>
-            <Text style={styles.confirmText}>Share...</Text>
+            <Text style={styles.confirmText}>Share</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss} activeOpacity={0.7}>
             <Text style={styles.cancelText}>Cancel</Text>
