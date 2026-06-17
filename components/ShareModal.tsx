@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  ScrollView, Alert, Dimensions,
+  ScrollView, Alert, Dimensions, Platform,
 } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -44,6 +44,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
   const [cardIndex, setCardIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<(ViewShot | null)[]>([]);
+  const pendingUri = useRef<string | null>(null);
 
   async function handleShare() {
     const ref = cardRefs.current[cardIndex];
@@ -52,17 +53,30 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
       return;
     }
     try {
-      const uri = await (ref as any).capture();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
+      // Capture while modal is still visible (ViewShot needs the rendered view).
+      // Then dismiss — iOS fires onDismiss on the Modal after the animation
+      // completes, at which point we present the share sheet from the root VC.
+      pendingUri.current = await (ref as any).capture();
+      onDismiss();
+      // Android doesn't fire Modal onDismiss — use a short timeout instead.
+      if (Platform.OS === 'android') {
+        setTimeout(presentShare, 300);
+      }
     } catch (e: any) {
       Alert.alert('Share Error', String(e?.message ?? e));
-    } finally {
-      onDismiss();
     }
   }
 
+  function presentShare() {
+    const uri = pendingUri.current;
+    if (!uri) return;
+    pendingUri.current = null;
+    Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' })
+      .catch((e: any) => Alert.alert('Share Error', String(e?.message ?? e)));
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} onDismiss={presentShare}>
       <View style={styles.overlay}>
         <ScrollView
           ref={scrollRef}
