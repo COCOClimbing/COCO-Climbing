@@ -54,8 +54,8 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
     try {
       const uri = await (ref as any).capture();
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
-    } catch {
-      Alert.alert('Error', 'Could not share this card.');
+    } catch (e: any) {
+      Alert.alert('Share Error', String(e?.message ?? e));
     } finally {
       onDismiss();
     }
