@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  ScrollView, Alert, Dimensions,
+  ScrollView, Alert, Dimensions, InteractionManager,
 } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -53,11 +53,15 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
     }
     try {
       const uri = await (ref as any).capture();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
+      // iOS can't present the share sheet from inside a Modal — dismiss first,
+      // then wait for the dismiss animation to finish before sharing.
+      onDismiss();
+      InteractionManager.runAfterInteractions(() => {
+        Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' })
+          .catch(() => Alert.alert('Error', 'Could not share this card.'));
+      });
     } catch {
       Alert.alert('Error', 'Could not share this card.');
-    } finally {
-      onDismiss();
     }
   }
 
