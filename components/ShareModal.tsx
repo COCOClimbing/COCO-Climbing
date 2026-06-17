@@ -57,6 +57,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
       // root VC, and iOS blocks that while a Modal VC is still on screen.
       // We hold `uri` in this async closure and wait for the fade to finish.
       onDismiss();
+      await new Promise(resolve => setTimeout(resolve, 300));
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
     } catch (e: any) {
       Alert.alert('Share Error', String(e?.message ?? e));
@@ -64,7 +65,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
   }
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
       <View style={styles.overlay}>
         <ScrollView
           ref={scrollRef}
