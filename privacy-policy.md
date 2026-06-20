@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated: April 12, 2026**
+**Last updated: June 20, 2026**
 
 COCO ("we", "our", or "us") is committed to protecting your privacy. This policy explains what data we collect, how we use it, and your rights.
 
@@ -36,5 +36,5 @@ Your data is stored securely using Supabase. All data is protected by Row Level 
 ## Contact
 
 If you have questions about this policy, contact us at:
-**jackinho1999@icloud.com**
+**jackson@intellisportanalytics.com**
 
