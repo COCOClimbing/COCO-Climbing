@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#C13584',
+    backgroundColor: '#FF0000',
   },
   cancelBtn: {
     borderRadius: 12,
