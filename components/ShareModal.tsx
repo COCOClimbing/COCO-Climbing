@@ -1,13 +1,17 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  ScrollView, Alert, Dimensions, Platform,
+  ScrollView, Alert, Dimensions,
 } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+let RNShare: any = null;
+try { RNShare = require('react-native-share').default; } catch (_) {}
+
 import SessionShareCard from './SessionShareCard';
 import SessionShareCardVertical from './SessionShareCardVertical';
 import SessionShareCardStrava from './SessionShareCardStrava';
+import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb } from '../utils/theme';
 
 export interface ShareData {
@@ -31,11 +35,13 @@ interface Props {
   onDismiss: () => void;
 }
 
+const FACEBOOK_APP_ID = '2188945488595075';
+
 const SHARE_CARDS = [
-  { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false },
-  { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false },
-  { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true  },
-  { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false },
+  { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false, instagramMode: 'background' as const },
+  { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false, instagramMode: 'sticker' as const },
+  { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true,  instagramMode: 'sticker' as const },
+  { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false, instagramMode: 'sticker' as const },
 ];
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -44,20 +50,56 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
   const [cardIndex, setCardIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<(ViewShot | null)[]>([]);
+  const preCapturedUri = useRef<string | null>(null);
 
-  async function handleShare() {
-    const ref = cardRefs.current[cardIndex];
-    if (!ref) {
-      Alert.alert('Error', 'Card not ready yet. Try again.');
+  // Pre-capture the current card in the background after the modal finishes opening,
+  // so tapping Share doesn't have to wait for capture on the critical path.
+  useEffect(() => {
+    if (!visible) {
+      preCapturedUri.current = null;
       return;
     }
+    preCapturedUri.current = null;
+    const timer = setTimeout(async () => {
+      const ref = cardRefs.current[cardIndex];
+      if (ref) {
+        try {
+          preCapturedUri.current = await (ref as any).capture();
+        } catch {}
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [visible, cardIndex]);
+
+  async function handleShareToInstagram() {
     try {
-      const uri = await (ref as any).capture();
-      // Dismiss the modal first — the share sheet must be presented from the
-      // root VC, and iOS blocks that while a Modal VC is still on screen.
-      // We hold `uri` in this async closure and wait for the fade to finish.
-      onDismiss();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const ref = cardRefs.current[cardIndex];
+      const uri = preCapturedUri.current ?? await (ref as any)?.capture();
+      if (!uri) { Alert.alert('Error', 'Card not ready yet. Try again.'); return; }
+      const mode = SHARE_CARDS[cardIndex].instagramMode;
+      await RNShare.shareSingle({
+        social: RNShare.Social.INSTAGRAM_STORIES,
+        appId: FACEBOOK_APP_ID,
+        backgroundImage: mode === 'background' ? uri : undefined,
+        stickerImage: mode === 'sticker' ? uri : undefined,
+        backgroundTopColor: '#0A0A0A',
+        backgroundBottomColor: '#0A0A0A',
+        attributionURL: 'https://apps.apple.com/app/id6762497120',
+      } as any);
+    } catch (e: any) {
+      if (String(e?.message ?? e).toLowerCase().includes('cancel')) return;
+      Alert.alert('Instagram not available', 'Make sure Instagram is installed and try again.');
+    }
+  }
+
+  async function handleShare() {
+    try {
+      const ref = cardRefs.current[cardIndex];
+      const uri = preCapturedUri.current ?? await (ref as any)?.capture();
+      if (!uri) {
+        Alert.alert('Error', 'Card not ready yet. Try again.');
+        return;
+      }
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Session' });
     } catch (e: any) {
       Alert.alert('Share Error', String(e?.message ?? e));
@@ -130,7 +172,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
                 ))}
               </ViewShot>
               <Text style={styles.cardLabel}>{card.label}</Text>
-              {card.hint ? <Text style={styles.cardHint}>{card.hint}</Text> : null}
+              <Text style={styles.cardHint}>{card.hint ?? ''}</Text>
             </View>
           ))}
         </ScrollView>
@@ -142,9 +184,16 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
         </View>
 
         <View style={styles.buttons}>
-          <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: accentColor }]} onPress={handleShare} activeOpacity={0.8}>
-            <Text style={styles.confirmText}>Share</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: SPACING.md }}>
+            <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: accentColor, flex: 1 }]} onPress={handleShare} activeOpacity={0.8}>
+              <Text style={styles.confirmText}>Share</Text>
+            </TouchableOpacity>
+            {RNShare && (
+              <TouchableOpacity style={styles.instagramIconBtn} onPress={handleShareToInstagram} activeOpacity={0.8}>
+                <Ionicons name="logo-instagram" size={26} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss} activeOpacity={0.7}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
@@ -209,6 +258,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.bold,
+  },
+  instagramIconBtn: {
+    borderRadius: 12,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#C13584',
   },
   cancelBtn: {
     borderRadius: 12,
