@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { getGradeDifficulty } from './theme';
+import { isDeadMediaUrl } from './cloudSync';
 
 export interface FriendProfile {
   id: string;
@@ -40,6 +42,15 @@ export async function searchByUsername(query: string, currentUserId: string, exc
   const { data, error } = await q.limit(10);
   if (error || !data) return [];
   return data as FriendProfile[];
+}
+
+export async function getProfileById(id: string): Promise<FriendProfile | null> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, name, username, avatar_url, hometown, is_private')
+    .eq('id', id)
+    .single();
+  return data ?? null;
 }
 
 // Follow a user. Public profiles are auto-accepted; private profiles create a pending request.
@@ -380,4 +391,90 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
     .limit(1);
   if (error) throw new Error(error.message);
   return !data || data.length === 0;
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+// Fetch a single session by id (regardless of the viewer's friendship graph —
+// access is already implied because the notification was only sent to someone
+// who was tagged in it, or because it's their own session that got a like/comment/tag).
+// Builds the same SessionSummary-shaped object and camelCase climb array the
+// activity feed already uses elsewhere in the app.
+export async function getSessionForNotification(sessionId: string): Promise<{ entry: any; climbs: any[] } | null> {
+  const { data: s } = await supabase.from('sessions').select('*').eq('id', sessionId).single();
+  if (!s) return null;
+
+  const profile = await getProfileById(s.user_id);
+  if (!profile) return null;
+
+  const { data: rawClimbs } = await supabase.from('climbs').select('*').eq('session_id', sessionId);
+  const dbClimbs = rawClimbs ?? [];
+
+  const climbs = dbClimbs.map((c: any) => ({
+    id: c.id, date: c.date, sessionId: c.session_id,
+    type: c.type, outcome: c.outcome, styles: c.styles ?? [],
+    environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
+    routeName: c.route_name, location: c.location, notes: c.notes,
+    attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
+    mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
+    mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),
+    projectId: c.project_id, projectName: c.project_name,
+  }));
+
+  const sends = dbClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+  const flashes = dbClimbs.filter((c: any) => c.outcome === 'flash').length;
+  const gradedClimbs = dbClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
+  let hardestGrade: string | null = null;
+  let hardestGradeSystem: string | null = null;
+  if (gradedClimbs.length > 0) {
+    gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
+    hardestGrade = gradedClimbs[0].grade;
+    hardestGradeSystem = gradedClimbs[0].grade_system;
+  }
+
+  const sessionPhotos = [
+    ...((s.media_uris ?? []) as string[]).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u)),
+    ...dbClimbs.flatMap((c: any) => (c.media_uris ?? (c.media_uri ? [c.media_uri] : [])) as string[]).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u)),
+  ];
+
+  const rawFriends: { id: string; name: string }[] = s.friends ?? [];
+  const partnerIds = rawFriends.map((f: any) => f.id).filter((id: string) => id !== s.user_id);
+  let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
+  if (partnerIds.length > 0) {
+    const { data: partnerProfiles } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .in('id', partnerIds);
+    const profileMap = new Map((partnerProfiles ?? []).map((p: any) => [p.id, p]));
+    partners = rawFriends.map((f: any) => ({
+      id: f.id,
+      name: profileMap.get(f.id)?.name ?? f.name,
+      avatar_url: profileMap.get(f.id)?.avatar_url ?? null,
+    }));
+  }
+
+  const entry = {
+    friend: profile,
+    sessionDate: (s.date ?? '').slice(0, 10),
+    sessionTime: s.started_at ?? undefined,
+    climbCount: dbClimbs.reduce((sum: number, c: any) => {
+      if (c.type === 'hangboard' || c.type === 'lift') return sum;
+      if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1;
+      return sum + (c.attempts ?? 1);
+    }, 0),
+    sends,
+    flashes,
+    hardestGrade,
+    hardestGradeSystem,
+    environment: s.environment ?? 'indoor',
+    climbType: dbClimbs[0]?.type ?? undefined,
+    sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined,
+    sessionId: s.id,
+    partners,
+    notes: s.notes ?? undefined,
+    title: s.title ?? undefined,
+    location: s.location ?? undefined,
+  };
+
+  return { entry, climbs };
 }
