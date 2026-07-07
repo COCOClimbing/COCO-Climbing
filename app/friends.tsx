@@ -42,6 +42,7 @@ import {
   getPendingRequests,
   getAcceptedFriends,
   getFollowing,
+  getFollowers,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
@@ -193,21 +194,27 @@ type DayGroup = { date: string; climbs: any[] };
 
 const PHOTO_HEIGHT = 220;
 
-function NaturalPhoto({ uri, onPress }: { uri: string; onPress: () => void }) {
-  const [imgWidth, setImgWidth] = useState<number | null>(null);
+function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidth?: number; onPress: () => void }) {
+  const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
   const [failed, setFailed] = useState(false);
-  if (failed) return null;
+
+  useEffect(() => {
+    if (initialWidth) return;
+    Image.getSize(
+      uri,
+      (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)),
+      () => setFailed(true),
+    );
+  }, [uri, initialWidth]);
+
+  if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View style={{ width: imgWidth ?? PHOTO_HEIGHT * 0.75, height: PHOTO_HEIGHT, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+      <View style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
         <Image
           source={{ uri }}
-          style={{ width: imgWidth ?? PHOTO_HEIGHT * 0.75, height: PHOTO_HEIGHT }}
+          style={{ width: imgWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
-          onLoad={e => {
-            const { width: w, height: h } = e.nativeEvent.source;
-            setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
-          }}
           onError={() => setFailed(true)}
         />
       </View>
@@ -251,6 +258,12 @@ function FriendDetailView({
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [friendStatus, setFriendStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [listSheetOpen, setListSheetOpen] = useState(false);
+  const [listSheetTab, setListSheetTab] = useState<'following' | 'followers'>('following');
+  const [listSheetFollowing, setListSheetFollowing] = useState<FriendProfile[]>([]);
+  const [listSheetFollowers, setListSheetFollowers] = useState<FriendProfile[]>([]);
+  const [listSheetLoading, setListSheetLoading] = useState(false);
+  const [listSheetProfile, setListSheetProfile] = useState<FriendProfile | null>(null);
 
   useEffect(() => {
     Promise.all([loadClimbs(), loadCounts(), loadFriendStatus()]).catch(() => {});
@@ -269,6 +282,20 @@ function FriendDetailView({
   async function loadFriendStatus() {
     if (!user) return;
     try { setFriendStatus(await getFriendshipStatus(user.id, friend.id)); } catch {}
+  }
+
+  async function openListSheet(type: 'following' | 'followers') {
+    setListSheetTab(type);
+    setListSheetOpen(true);
+    setListSheetLoading(true);
+    setListSheetFollowing([]);
+    setListSheetFollowers([]);
+    try {
+      const [following, followers] = await Promise.all([getFollowing(friend.id), getFollowers(friend.id)]);
+      setListSheetFollowing(following);
+      setListSheetFollowers(followers);
+    } catch {}
+    setListSheetLoading(false);
   }
 
   async function handleFriendAction() {
@@ -416,14 +443,14 @@ function FriendDetailView({
           {/* Following / Followers + friend action button */}
           <View style={detailStyles.profileBottom}>
             <View style={detailStyles.countsRow}>
-              <View style={detailStyles.countItem}>
+              <TouchableOpacity style={detailStyles.countItem} activeOpacity={friendStatus === 'accepted' ? 0.7 : 1} onPress={() => friendStatus === 'accepted' && openListSheet('following')}>
                 <Text style={[detailStyles.countLabel, { color: colors.textMuted }]}>Following</Text>
-                <Text style={[detailStyles.countNumber, { color: colors.textPrimary }]}>{counts.following}</Text>
-              </View>
-              <View style={detailStyles.countItem}>
+                <Text style={[detailStyles.countNumber, { color: friendStatus === 'accepted' ? colors.accent : colors.textPrimary }]}>{counts.following}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={detailStyles.countItem} activeOpacity={friendStatus === 'accepted' ? 0.7 : 1} onPress={() => friendStatus === 'accepted' && openListSheet('followers')}>
                 <Text style={[detailStyles.countLabel, { color: colors.textMuted }]}>Followers</Text>
-                <Text style={[detailStyles.countNumber, { color: colors.textPrimary }]}>{counts.followers}</Text>
-              </View>
+                <Text style={[detailStyles.countNumber, { color: friendStatus === 'accepted' ? colors.accent : colors.textPrimary }]}>{counts.followers}</Text>
+              </TouchableOpacity>
             </View>
             {user && user.id !== friend.id && (
               <TouchableOpacity
@@ -504,6 +531,11 @@ function FriendDetailView({
               dayGroups.map(day => {
                 const isExpanded = expandedDate === day.date;
                 const daySends = day.climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
+                const dayClimbCount = day.climbs.reduce((s: number, c: any) => {
+                  if (c.type === 'hangboard' || c.type === 'lift') return s;
+                  if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1;
+                  return s + (c.attempts ?? 1);
+                }, 0);
                 const date = parseISO(day.date);
                 return (
                   <View key={day.date} style={[detailStyles.sessionBlock, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
@@ -511,7 +543,7 @@ function FriendDetailView({
                       <View>
                         <Text style={[detailStyles.sessionDate, { color: colors.textPrimary }]}>{format(date, 'EEE, MMM d, yyyy')}</Text>
                         <Text style={[detailStyles.sessionSub, { color: colors.textMuted }]}>
-                          {day.climbs.length} climb{day.climbs.length !== 1 ? 's' : ''} · {daySends} send{daySends !== 1 ? 's' : ''}
+                          {dayClimbCount} climb{dayClimbCount !== 1 ? 's' : ''} · {daySends} send{daySends !== 1 ? 's' : ''}
                         </Text>
                       </View>
                       <Text style={[detailStyles.chevron, isExpanded && detailStyles.chevronOpen, { color: colors.textMuted }]}>›</Text>
@@ -530,6 +562,65 @@ function FriendDetailView({
           </View>
         )}
       </ScrollView>
+
+      {/* Followers / Following list sheet */}
+      <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
+        <View style={[detailStyles.container, { backgroundColor: colors.bg }]}>
+          {listSheetProfile ? (
+            <FriendDetailView
+              friend={listSheetProfile}
+              onBack={() => setListSheetProfile(null)}
+              colors={colors}
+            />
+          ) : (
+            <>
+              <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, borderBottomWidth: 1 }, { borderBottomColor: colors.border }]}>
+                <View style={{ flexDirection: 'row' }}>
+                  {(['following', 'followers'] as const).map(tab => (
+                    <TouchableOpacity key={tab} onPress={() => setListSheetTab(tab)} activeOpacity={0.7} style={{ paddingVertical: SPACING.md, marginRight: SPACING.xl }}>
+                      <Text style={{ color: listSheetTab === tab ? colors.textPrimary : colors.textMuted, fontFamily: listSheetTab === tab ? FONTS.family.bold : FONTS.family.regular, fontSize: 15 }}>
+                        {tab === 'following' ? 'Following' : 'Followers'}
+                      </Text>
+                      {listSheetTab === tab && <View style={{ height: 2, backgroundColor: colors.accent, borderRadius: 1, marginTop: 4 }} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity onPress={() => { setListSheetOpen(false); setListSheetProfile(null); }} activeOpacity={0.7}>
+                  <Text style={{ color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: 15 }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+
+              {listSheetLoading ? (
+                <ActivityIndicator color={colors.accent} style={{ marginTop: SPACING.xl }} />
+              ) : (() => {
+                const list = listSheetTab === 'following' ? listSheetFollowing : listSheetFollowers;
+                const emptyText = listSheetTab === 'following' ? 'Not following anyone yet.' : 'No followers yet.';
+                return list.length === 0 ? (
+                  <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: SPACING.xl }}>{emptyText}</Text>
+                ) : (
+                  <ScrollView contentContainerStyle={{ paddingHorizontal: SPACING.lg }}>
+                    {list.map(u => (
+                      <TouchableOpacity
+                        key={u.id}
+                        onPress={() => setListSheetProfile(u)}
+                        activeOpacity={0.75}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                      >
+                        <ProfileAvatar name={u.name} avatarUrl={u.avatar_url} size={44} colors={colors} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.textPrimary, fontFamily: FONTS.family.semibold, fontSize: 15 }}>{u.name}</Text>
+                          {u.username ? <Text style={{ color: colors.textMuted, fontSize: 13 }}>@{u.username}</Text> : null}
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                );
+              })()}
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -612,6 +703,7 @@ export default function FriendsScreen() {
     climbType?: string;
     partners?: { id: string; name: string; avatar_url?: string | null }[];
     sessionPhotos?: string[];
+    photoWidths?: Record<string, number>;
     notes?: string;
     title?: string;
     location?: string;
@@ -918,7 +1010,13 @@ export default function FriendsScreen() {
             const sessionStartedAtMap = new Map<string, string>(
               friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
             );
-            if (climbs.length === 0) return;
+
+            // friendSessions only contains sessions with ended_at set. Climbs whose
+            // session_id isn't in that set belong to a session still in progress —
+            // exclude them so open sessions don't leak into the activity feed.
+            const endedSessionIds = new Set(friendSessions.map((s: any) => s.id));
+            const eligibleClimbs = climbs.filter((c: any) => !c.session_id || endedSessionIds.has(c.session_id));
+            if (eligibleClimbs.length === 0) return;
 
             // Build a date→sessionId lookup from the fetched sessions so climbs
             // that are missing session_id can still be bucketed into the right session.
@@ -927,7 +1025,7 @@ export default function FriendsScreen() {
             );
 
             const sessionGroups = new Map<string, any[]>();
-            for (const c of climbs) {
+            for (const c of eligibleClimbs) {
               const key = c.session_id ?? sessionIdByDate.get(normDate(c.date)) ?? normDate(c.date);
               if (!sessionGroups.has(key)) sessionGroups.set(key, []);
               sessionGroups.get(key)!.push(c);
@@ -982,8 +1080,19 @@ export default function FriendsScreen() {
         seen.add(k);
         return true;
       });
-      setActivityFeed(deduped);
-
+      // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size immediately
+      const allUris = [...new Set(deduped.flatMap(e => e.sessionPhotos ?? []))];
+      const widthCache: Record<string, number> = {};
+      await Promise.all(
+        allUris.map(uri => new Promise<void>(resolve => {
+          Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
+        }))
+      );
+      const dedupedWithWidths = deduped.map(e => ({
+        ...e,
+        photoWidths: e.sessionPhotos ? Object.fromEntries(e.sessionPhotos.filter(u => widthCache[u]).map(u => [u, widthCache[u]])) : undefined,
+      }));
+      setActivityFeed(dedupedWithWidths);
 
       // Load likes & comments for sessions that have an ID
       deduped.forEach(e => {
@@ -1610,7 +1719,7 @@ export default function FriendsScreen() {
               contentContainerStyle={styles.photoStripContent}
             >
               {entry.sessionPhotos.map((uri, i) => (
-                <NaturalPhoto key={i} uri={uri} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
             </ScrollView>
           )}
@@ -1764,7 +1873,7 @@ export default function FriendsScreen() {
                     contentContainerStyle={styles.photoStripContent}
                   >
                     {entry.sessionPhotos.map((uri, i) => (
-                      <NaturalPhoto key={i} uri={uri} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+                      <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
                   </ScrollView>
                 )}
