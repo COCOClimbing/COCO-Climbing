@@ -144,6 +144,7 @@ export default function SessionsScreen() {
   const viewerScrollRef = useRef<ScrollView>(null);
   const notesInputValue = useRef('');
   const listRef = useRef<FlatList>(null);
+  const [listScrollEnabled, setListScrollEnabled] = useState(true);
   const pendingSessionId = useRef<string | null>(null);
 
   // Sync editing state when a different session is opened
@@ -643,12 +644,15 @@ export default function SessionsScreen() {
 
     const swipeBack = useRef(
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => g.dx > 20 && Math.abs(g.dy) < 60,
+        // Only activate if the touch started in the top 160px (header/stats area),
+        // so climb cards below can handle their own swipe gestures freely.
+        onMoveShouldSetPanResponder: (e, g) => e.nativeEvent.pageY < 320 && g.dx > 20 && Math.abs(g.dy) < 60,
         onPanResponderRelease: (_, g) => { if (g.dx > 60) goBackToList(); },
       })
     ).current;
 
     const detailScrollRef = useRef<ScrollView>(null);
+    const [detailScrollEnabled, setDetailScrollEnabled] = useState(true);
     const friendsCardY = useRef(0);
     const notesCardY = useRef(0);
     const notesCardRef = useRef<View>(null);
@@ -691,6 +695,7 @@ export default function SessionsScreen() {
           onScroll={e => { _detailScrollY = e.nativeEvent.contentOffset.y; }}
           contentContainerStyle={styles.detailContent}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={detailScrollEnabled}
         >
           {/* Session header */}
           <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: isActive ? colors.accent : colors.border, borderWidth: isActive ? 2 : 1 }]}>
@@ -768,7 +773,21 @@ export default function SessionsScreen() {
           {displayClimbs.length === 0
             ? <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
             : displayClimbs.map(c => (
-              <SwipeToDelete key={c.id} onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}>
+              <SwipeToDelete
+                key={c.id}
+                onSwipeStart={() => setDetailScrollEnabled(false)}
+                onSwipeEnd={() => setDetailScrollEnabled(true)}
+                onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
+                rightAction={isActive && c.outcome === 'attempt' ? {
+                  label: 'Send',
+                  color: colors.accentGreen,
+                  onPress: async () => {
+                    await saveClimb({ ...c, outcome: 'send', attempts: (c.attempts ?? 1) + 1 });
+                    triggerStatsRefresh();
+                    load();
+                  },
+                } : undefined}
+              >
                 <ClimbCard
                   climb={c}
                   compact
@@ -972,6 +991,8 @@ export default function SessionsScreen() {
       <SwipeToDelete
         key={item.sessionId}
         heightOffset={0}
+        onSwipeStart={() => setListScrollEnabled(false)}
+        onSwipeEnd={() => setListScrollEnabled(true)}
         onDelete={async () => {
           for (const c of item.climbs) await deleteClimb(c.id);
           await deleteSession(item.sessionId);
@@ -1097,6 +1118,7 @@ export default function SessionsScreen() {
           keyExtractor={item => item.sessionId}
           renderItem={renderDay}
           contentContainerStyle={styles.list}
+          scrollEnabled={listScrollEnabled}
           onScrollToIndexFailed={() => {}}
           ListHeaderComponent={<ActiveSessionCard />}
           ListEmptyComponent={
