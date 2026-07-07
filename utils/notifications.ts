@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { useNav } from './NavigationContext';
@@ -151,6 +151,8 @@ const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like
 
 export function useNotificationTapRouting(): void {
   const nav = useNav();
+  const navRef = useRef(nav);
+  navRef.current = nav;
 
   useEffect(() => {
     function routeTap(data: any) {
@@ -160,19 +162,24 @@ export function useNotificationTapRouting(): void {
         const id = data.senderId ?? data.followerId;
         if (!id) return;
         getProfileById(id).then(profile => {
-          if (profile) nav.viewFriendProfile(profile);
-        }).catch(() => {});
+          if (profile) navRef.current.viewFriendProfile(profile);
+        }).catch(err => {
+          console.error('[notifications] Failed to resolve profile for tap routing:', err);
+        });
         return;
       }
 
       if (SESSION_NOTIFICATION_TYPES.has(data.type) && data.sessionId) {
-        nav.viewActivitySession(data.sessionId);
+        navRef.current.viewActivitySession(data.sessionId);
       }
     }
 
     // Cold start: the app was launched by tapping a notification while fully closed.
     Notifications.getLastNotificationResponseAsync().then(response => {
-      if (response) routeTap(response.notification.request.content.data);
+      if (response) {
+        routeTap(response.notification.request.content.data);
+        Notifications.clearLastNotificationResponseAsync();
+      }
     });
 
     // Tap while the app is already running (foreground or backgrounded).
@@ -180,5 +187,5 @@ export function useNotificationTapRouting(): void {
       routeTap(response.notification.request.content.data);
     });
     return () => sub.remove();
-  }, [nav]);
+  }, []);
 }
