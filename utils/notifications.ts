@@ -1,7 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
+import { useNav } from './NavigationContext';
+import { getProfileById } from './friendsApi';
 
 const NOTIFIED_CACHE_PREFIX = 'tag_notif_sent:';
 const EAS_PROJECT_ID = '4e4e63a8-46b2-4df5-9a79-53ebe1b594c5';
@@ -141,4 +144,41 @@ export async function sendFollowRequestAcceptedNotification(requesterId: string,
 export async function sendCommentLikeNotification(commentAuthorId: string, likerId: string, sessionId: string): Promise<void> {
   if (likerId === commentAuthorId) return;
   await sendNotification('comment_like', commentAuthorId, likerId, { sessionId });
+}
+
+const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request', 'follow_request_accepted']);
+const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like', 'comment']);
+
+export function useNotificationTapRouting(): void {
+  const nav = useNav();
+
+  useEffect(() => {
+    function routeTap(data: any) {
+      if (!data || typeof data.type !== 'string') return;
+
+      if (PROFILE_NOTIFICATION_TYPES.has(data.type)) {
+        const id = data.senderId ?? data.followerId;
+        if (!id) return;
+        getProfileById(id).then(profile => {
+          if (profile) nav.viewFriendProfile(profile);
+        }).catch(() => {});
+        return;
+      }
+
+      if (SESSION_NOTIFICATION_TYPES.has(data.type) && data.sessionId) {
+        nav.viewActivitySession(data.sessionId);
+      }
+    }
+
+    // Cold start: the app was launched by tapping a notification while fully closed.
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) routeTap(response.notification.request.content.data);
+    });
+
+    // Tap while the app is already running (foreground or backgrounded).
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      routeTap(response.notification.request.content.data);
+    });
+    return () => sub.remove();
+  }, [nav]);
 }
