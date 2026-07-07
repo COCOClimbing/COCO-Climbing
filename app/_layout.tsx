@@ -37,7 +37,7 @@ import FriendsScreen from './friends';
 import WelcomeScreen, { hasSeenWelcome } from './welcome';
 import OnboardingScreen, { getOnboardingPrefs } from './onboarding';
 import { getCloudProfile } from '../utils/cloudSync';
-import { registerForPushNotifications } from '../utils/notifications';
+import { registerForPushNotifications, useNotificationTapRouting } from '../utils/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,14 +58,16 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const { colors, mode } = useTheme();
   const { screen, navigate } = useNav();
   const { user, loading, isPasswordRecovery } = useAuth();
+  useNotificationTapRouting();
 
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const readyCalled = React.useRef(false);
 
-  // Check for OTA update after mount
+  // Check for OTA update 3s after mount to avoid any startup conflicts
   useEffect(() => {
-    checkAndApplyUpdate();
+    const t = setTimeout(checkAndApplyUpdate, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   // Load welcome flag once on mount
