@@ -760,6 +760,8 @@ export default function FriendsScreen() {
   }, [pendingFriendProfile, screen]);
 
   // Open a session requested externally (e.g. tapping a notification)
+  const pendingActivitySessionIdRef = useRef(pendingActivitySessionId);
+  pendingActivitySessionIdRef.current = pendingActivitySessionId;
   useEffect(() => {
     if (!pendingActivitySessionId || screen !== 'friends') return;
     const sessionId = pendingActivitySessionId;
@@ -774,6 +776,10 @@ export default function FriendsScreen() {
     // than the feed's 14-day window) — fetch it directly instead.
     (async () => {
       const result = await getSessionForNotification(sessionId);
+      // Bail if a newer request has since superseded this one (e.g. the
+      // feed loaded in the meantime and took the fast path instead, or
+      // another notification tap arrived while this fetch was in flight).
+      if (pendingActivitySessionIdRef.current !== sessionId) return;
       if (result) {
         setViewingSession(result);
         loadLikesAndComments(`sid-${sessionId}`, sessionId);
