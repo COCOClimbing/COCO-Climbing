@@ -61,6 +61,7 @@ import {
   getCommentLikes,
   likeComment,
   unlikeComment,
+  getSessionForNotification,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -682,7 +683,7 @@ const detailStyles = StyleSheet.create({
 
 export default function FriendsScreen() {
   const { colors } = useTheme();
-  const { navigate, screen, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile } = useNav();
+  const { navigate, screen, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
   const myAvatar = localAvatarUri ?? avatarUrl;
   const insets = useSafeAreaInsets();
@@ -757,6 +758,29 @@ export default function FriendsScreen() {
       clearPendingFriendProfile();
     }
   }, [pendingFriendProfile, screen]);
+
+  // Open a session requested externally (e.g. tapping a notification)
+  useEffect(() => {
+    if (!pendingActivitySessionId || screen !== 'friends') return;
+    const sessionId = pendingActivitySessionId;
+    const existing = activityFeed.find(e => e.sessionId === sessionId);
+    if (existing) {
+      handleOpenSession(existing);
+      clearPendingActivitySessionId();
+      return;
+    }
+    // Not in the currently loaded feed (e.g. app was cold-started by the
+    // notification tap before loadFeed() finished, or the session is older
+    // than the feed's 14-day window) — fetch it directly instead.
+    (async () => {
+      const result = await getSessionForNotification(sessionId);
+      if (result) {
+        setViewingSession(result);
+        loadLikesAndComments(`sid-${sessionId}`, sessionId);
+      }
+      clearPendingActivitySessionId();
+    })();
+  }, [pendingActivitySessionId, screen, activityFeed]);
 
   // Tapping Activity tab while already on it returns to main feed
   useEffect(() => {
