@@ -14,16 +14,26 @@ interface Props {
   onDelete: () => void;
   disabled?: boolean;
   heightOffset?: number;
+  onSwipeStart?: () => void;
+  onSwipeEnd?: () => void;
+  rightAction?: { label: string; color: string; onPress: () => void };
 }
 
-export default function SwipeToDelete({ children, onDelete, disabled, heightOffset = SPACING.md }: Props) {
+export default function SwipeToDelete({ children, onDelete, disabled, heightOffset = SPACING.md, onSwipeStart, onSwipeEnd, rightAction }: Props) {
   const { colors } = useTheme();
   const translateX = useRef(new Animated.Value(0)).current;
   const [cardHeight, setCardHeight] = useState(0);
+  // Tracks the committed position so subsequent gestures start from the right place
+  const currentX = useRef(0);
+  // Refs so the PanResponder closure always sees the latest callbacks
+  const onSwipeStartRef = useRef(onSwipeStart);
+  const onSwipeEndRef = useRef(onSwipeEnd);
+  useEffect(() => { onSwipeStartRef.current = onSwipeStart; }, [onSwipeStart]);
+  useEffect(() => { onSwipeEndRef.current = onSwipeEnd; }, [onSwipeEnd]);
 
-  // Snap closed when disabled (session expands)
   useEffect(() => {
     if (disabled) {
+      currentX.current = 0;
       Animated.spring(translateX, {
         toValue: 0, useNativeDriver: true, bounciness: 0, speed: 25,
       }).start();
@@ -32,19 +42,37 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
 
   const panResponder = useRef(
     PanResponder.create({
+      // Capture phase — runs before navigation gesture handlers. When the card
+      // is open, grab the touch here so rightward swipe-to-close wins.
+      onStartShouldSetPanResponderCapture: () => !disabled && currentX.current !== 0,
       onMoveShouldSetPanResponder: (_, g) =>
         !disabled && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
       onPanResponderGrant: () => {
-        (translateX as any).extractOffset();
+        onSwipeStartRef.current?.();
+        translateX.setOffset(currentX.current);
+        translateX.setValue(0);
       },
       onPanResponderMove: (_, g) => {
-        translateX.setValue(Math.min(0, Math.max(-REVEAL, g.dx)));
+        // Clamp the TOTAL position (offset + delta), not just the delta.
+        // Without this, swiping right on a partially-revealed card does nothing.
+        const max = rightAction ? REVEAL : 0;
+        const clamped = Math.min(max, Math.max(-REVEAL, currentX.current + g.dx));
+        translateX.setValue(clamped - currentX.current);
       },
       onPanResponderRelease: (_, g) => {
-        (translateX as any).flattenOffset();
-        if (g.dx < -(REVEAL / 2)) {
+        translateX.flattenOffset();
+        const max = rightAction ? REVEAL : 0;
+        const total = Math.min(max, Math.max(-REVEAL, currentX.current + g.dx));
+        onSwipeEndRef.current?.();
+        if (total < -(REVEAL / 2)) {
+          currentX.current = -REVEAL;
           Animated.spring(translateX, {
             toValue: -REVEAL, useNativeDriver: true, bounciness: 0, speed: 20,
+          }).start();
+        } else if (rightAction && total > REVEAL / 2) {
+          currentX.current = REVEAL;
+          Animated.spring(translateX, {
+            toValue: REVEAL, useNativeDriver: true, bounciness: 0, speed: 20,
           }).start();
         } else {
           snapClosed();
@@ -54,6 +82,7 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
   ).current;
 
   function snapClosed() {
+    currentX.current = 0;
     Animated.spring(translateX, {
       toValue: 0, useNativeDriver: true, bounciness: 0, speed: 20,
     }).start();
@@ -65,11 +94,16 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
     extrapolate: 'clamp',
   });
 
+  const rightBtnOpacity = translateX.interpolate({
+    inputRange: [0, 8, REVEAL],
+    outputRange: [0, 0.15, 1],
+    extrapolate: 'clamp',
+  });
+
   const btnHeight = cardHeight > heightOffset ? cardHeight - heightOffset : cardHeight;
 
   return (
     <View style={styles.wrapper}>
-      {/* Delete button — sits behind card, revealed on swipe */}
       {btnHeight > 0 && !disabled && (
         <Animated.View style={[styles.btn, {
           backgroundColor: colors.danger,
@@ -88,7 +122,24 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
         </Animated.View>
       )}
 
-      {/* Card */}
+      {btnHeight > 0 && !disabled && rightAction && (
+        <Animated.View style={[styles.btnLeft, {
+          backgroundColor: rightAction.color,
+          height: btnHeight,
+          width: REVEAL - GAP,
+          top: 0,
+          opacity: rightBtnOpacity,
+        }]}>
+          <TouchableOpacity
+            style={styles.btnInner}
+            onPress={() => { snapClosed(); setTimeout(rightAction.onPress, 150); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.btnTxt, { fontFamily: FONTS.family.semibold }]}>{rightAction.label}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <Animated.View
         style={{ transform: [{ translateX }] }}
         {...(disabled ? {} : panResponder.panHandlers)}
@@ -105,6 +156,12 @@ const styles = StyleSheet.create({
   btn: {
     position: 'absolute',
     right: 0,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  btnLeft: {
+    position: 'absolute',
+    left: 0,
     borderRadius: 12,
     overflow: 'hidden',
   },
