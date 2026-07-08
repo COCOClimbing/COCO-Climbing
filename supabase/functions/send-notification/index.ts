@@ -137,6 +137,19 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: `Unknown type: ${type}` }), { status: 400, headers: corsHeaders })
     }
 
+    // Store notification rows for each recipient
+    const effectiveSenderId = senderId ?? user.id
+    await adminClient.from('notifications').insert(
+      filteredIds.map(rid => ({
+        recipient_id: rid,
+        sender_id: effectiveSenderId !== rid ? effectiveSenderId : null,
+        type,
+        session_id: sessionId ?? null,
+        title,
+        body,
+      }))
+    )
+
     const messages = tokenRows.map(({ token }) => ({
       to: token,
       title,

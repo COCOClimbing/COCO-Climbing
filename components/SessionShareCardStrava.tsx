@@ -90,10 +90,9 @@ export default function SessionShareCardStrava({
           {climbingWith && climbingWith.length > 0 ? (
             <View>
               <Text style={styles.withLabel}>CLIMBED WITH</Text>
-              <Text style={styles.withNames}>{climbingWith.join(', ')}</Text>
+              <Text style={styles.withNames}>{climbingWith.slice(0, 2).join(', ')}{climbingWith.length > 2 ? ', ...' : ''}</Text>
             </View>
           ) : <View />}
-          <Text style={styles.footer}>logged with COCO</Text>
         </View>
       </View>
     </View>

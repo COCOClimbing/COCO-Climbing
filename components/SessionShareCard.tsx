@@ -128,7 +128,6 @@ export default function SessionShareCard({
       </View>
 
       {/* Footer */}
-      <Text style={[styles.footer, { color: accentColor + '80' }]}>logged with COCO</Text>
     </View>
   );
 }

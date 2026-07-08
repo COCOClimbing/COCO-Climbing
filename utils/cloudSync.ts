@@ -313,7 +313,8 @@ export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
 
 export async function deleteClimbFromCloud(id: string, r2Uris?: string[]): Promise<void> {
   if (r2Uris?.length) await deleteR2MediaUrls(r2Uris);
-  await supabase.from('climbs').delete().eq('id', id);
+  const { error } = await supabase.from('climbs').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function syncSessionToCloud(session: Session, userId: string): Promise<void> {
@@ -396,10 +397,12 @@ export async function deleteSessionFromCloud(
       );
     }
   }
-  await Promise.all([
+  const [climbsRes, sessionsRes] = await Promise.all([
     supabase.from('climbs').delete().eq('session_id', id),
     supabase.from('sessions').delete().eq('id', id),
   ]);
+  if (climbsRes.error) throw climbsRes.error;
+  if (sessionsRes.error) throw sessionsRes.error;
 }
 
 export async function syncProjectToCloud(project: NamedProject, userId: string): Promise<void> {

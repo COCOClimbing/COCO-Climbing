@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Instagram Preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "3333", "/Users/jacksonwalti/Documents/COCO/.claude"],
+      "port": 3333
+    },
+    {
+      "name": "Expo Dev Server",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start"],
+      "port": 8081
+    },
+    {
+      "name": "Expo iOS",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "run:ios"],
+      "port": 8081
+    },
+    {
+      "name": "Expo Web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--web"],
+      "port": 8081
+    }
+  ]
+}

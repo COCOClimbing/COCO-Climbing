@@ -112,12 +112,9 @@ export default function SessionShareCardVertical({
         {climbingWith && climbingWith.length > 0 ? (
           <View>
             <Text style={[styles.withLabel, { color: mutedColor }]}>CLIMBED WITH</Text>
-            <Text style={[styles.withNames, { color: textColor }]}>{climbingWith.join(', ')}</Text>
+            <Text style={[styles.withNames, { color: textColor }]}>{climbingWith.slice(0, 2).join(', ')}{climbingWith.length > 2 ? ', ...' : ''}</Text>
           </View>
         ) : <View />}
-        <Text style={[styles.footer, { color: isTransparent ? 'rgba(255,255,255,0.4)' : accentColor + '70' }]}>
-          logged with COCO
-        </Text>
       </View>
     </View>
   );

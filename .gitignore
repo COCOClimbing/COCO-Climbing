@@ -1,0 +1,13 @@
+# Sentry credentials
+ios/sentry.properties
+android/sentry.properties
+
+# Expo
+.expo/
+dist/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/

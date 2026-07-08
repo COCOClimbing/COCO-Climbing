@@ -96,34 +96,16 @@ export async function getPendingRequests(userId: string): Promise<FriendRequest[
 
 // Get users this person is following (sender)
 export async function getFollowing(userId: string): Promise<FriendProfile[]> {
-  const { data, error } = await supabase
-    .from('friendships')
-    .select('receiver_id')
-    .eq('sender_id', userId)
-    .eq('status', 'accepted');
-  if (error || !data || data.length === 0) return [];
-  const ids = data.map(r => r.receiver_id);
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name, username, avatar_url, hometown, is_private')
-    .in('id', ids);
-  return (profiles ?? []) as FriendProfile[];
+  const { data, error } = await supabase.rpc('get_following', { target_user_id: userId });
+  if (error || !data) return [];
+  return data as FriendProfile[];
 }
 
 // Get users who follow this person (receiver)
 export async function getFollowers(userId: string): Promise<FriendProfile[]> {
-  const { data, error } = await supabase
-    .from('friendships')
-    .select('sender_id')
-    .eq('receiver_id', userId)
-    .eq('status', 'accepted');
-  if (error || !data || data.length === 0) return [];
-  const ids = data.map(r => r.sender_id);
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name, username, avatar_url, hometown, is_private')
-    .in('id', ids);
-  return (profiles ?? []) as FriendProfile[];
+  const { data, error } = await supabase.rpc('get_followers', { target_user_id: userId });
+  if (error || !data) return [];
+  return data as FriendProfile[];
 }
 
 // Get accepted friends list
@@ -204,7 +186,8 @@ export async function getFriendRecentSessions(friendId: string): Promise<any[]> 
     .from('sessions')
     .select('id, date, started_at, media_uris, media_types, friends, notes, title, location')
     .eq('user_id', friendId)
-    .gte('date', cutoff);
+    .gte('date', cutoff)
+    .not('ended_at', 'is', null);
   return data ?? [];
 }
 
@@ -218,6 +201,7 @@ export async function getTaggedSessions(userId: string): Promise<{ session: any;
     .from('sessions')
     .select('*')
     .gte('date', cutoff)
+    .not('ended_at', 'is', null)
     .contains('friends', [{ id: userId }]);
 
   if (!sessions || sessions.length === 0) return [];

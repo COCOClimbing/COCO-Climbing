@@ -2,14 +2,14 @@
   "expo": {
     "name": "COCO",
     "slug": "coco-climbing",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "updates": {
       "url": "https://u.expo.dev/4e4e63a8-46b2-4df5-9a79-53ebe1b594c5",
       "enabled": true,
-      "checkAutomatically": "ON_LOAD",
+      "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0
     },
     "runtimeVersion": "1.0.0",
@@ -31,9 +31,11 @@
         "NSMicrophoneUsageDescription": "COCO uses your microphone to record climb videos.",
         "NSLocationWhenInUseUsageDescription": "COCO uses your location to tag your climbing sessions with the gym or crag you're at.",
         "NSUserNotificationsUsageDescription": "COCO notifies you when friends tag you in a climbing session.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "FacebookAppID": "2188945488595075",
+        "FacebookDisplayName": "COCO"
       },
-      "buildNumber": "2"
+      "buildNumber": "6"
     },
     "android": {
       "versionCode": 1,

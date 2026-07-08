@@ -122,7 +122,7 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ABOUT</Text>
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.sm }]}>
         <Text style={[styles.aboutAppName, { color: colors.accent }]}>COCO</Text>
-        <Text style={[styles.aboutVersion, { color: colors.textMuted }]}>Version 1.0</Text>
+        <Text style={[styles.aboutVersion, { color: colors.textMuted }]}>Version 1.1.2-ota</Text>
         <Text style={[styles.aboutDesc, { color: colors.textSecondary }]}>
           Your climbing logbook. Track every send, session, and project.
         </Text>
@@ -131,6 +131,9 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         <TouchableOpacity onPress={() => Linking.openURL('https://cococlimbing.github.io/COCO-Climbing/terms-of-service')} activeOpacity={0.7}>
           <Text style={[styles.privacyLink, { color: colors.accent }]}>Terms of Service</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://docs.google.com/forms/d/e/1FAIpQLSesaJ-qvb_26uFYj8I9TMVLCApq6OAQXnmxTDlXZh4LzSue4A/viewform?usp=publish-editor')} activeOpacity={0.7}>
+          <Text style={[styles.privacyLink, { color: colors.accent }]}>Got feedback?</Text>
         </TouchableOpacity>
       </View>
 

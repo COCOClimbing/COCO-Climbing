@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; }
+
+  /* Instagram Stories canvas: 9:16, shown at 360×640 */
+  .stories {
+    width: 360px;
+    height: 640px;
+    background: #1a1a1a;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card {
+    width: 100%;
+    height: 100%;
+    background: #0A0A0A;
+    border-radius: 0;
+    border: none;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    box-sizing: border-box;
+  }
+
+  .accent-bar {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0; /* vertical card has no accent bar */
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(230,100,30,0.18);
+    padding-bottom: 10px;
+  }
+
+  .app-name {
+    font-family: Arial Black, sans-serif;
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: 5px;
+    color: #E6641E;
+  }
+
+  .tagline {
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 0.5px;
+    font-family: Arial, sans-serif;
+  }
+
+  .date {
+    font-size: 13px;
+    font-weight: normal;
+    color: rgba(255,255,255,0.5);
+    font-family: Arial, sans-serif;
+    margin-top: -6px;
+  }
+
+  .stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 12px;
+  }
+
+  .stat-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    color: #888;
+    font-family: Arial, sans-serif;
+    width: 68px;
+  }
+
+  .stat-value {
+    font-size: 42px;
+    font-weight: 900;
+    color: #E6641E;
+    font-family: Arial Black, sans-serif;
+    line-height: 1;
+  }
+
+  .session-title {
+    font-size: 22px;
+    font-weight: 900;
+    color: #F0EDE8;
+    font-family: Arial Black, sans-serif;
+    line-height: 1.1;
+  }
+
+  .footer {
+    font-size: 11px;
+    color: rgba(230,100,30,0.45);
+    text-align: right;
+    font-family: Arial, sans-serif;
+    position: absolute;
+    bottom: 100px;
+    right: 28px;
+  }
+
+  /* Instagram UI chrome */
+  .ig-top {
+    position: absolute;
+    top: 16px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+  }
+
+  .progress-bar {
+    position: absolute;
+    top: 8px;
+    left: 8px; right: 8px;
+    height: 2px;
+    background: rgba(255,255,255,0.35);
+    border-radius: 2px;
+  }
+
+  .progress-fill {
+    width: 60%;
+    height: 100%;
+    background: white;
+    border-radius: 2px;
+  }
+
+  .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #E6641E;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: bold; color: white;
+    font-family: Arial, sans-serif;
+  }
+
+  .username {
+    font-size: 11px;
+    color: white;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    margin-left: 6px;
+    flex: 1;
+  }
+
+  .ig-actions {
+    position: absolute;
+    bottom: 20px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 16px;
+  }
+
+  .send-btn {
+    flex: 1;
+    height: 36px;
+    border: 1.5px solid rgba(255,255,255,0.5);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+  }
+</style>
+</head>
+<body>
+  <div class="stories">
+    <!-- Progress bar -->
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+
+    <!-- Top chrome -->
+    <div class="ig-top">
+      <div style="display:flex;align-items:center;">
+        <div class="avatar">J</div>
+        <span class="username">jackson</span>
+      </div>
+      <span style="color:white;font-size:18px;font-family:Arial;">···</span>
+    </div>
+
+    <!-- Card -->
+    <div class="card">
+      <div class="header">
+        <span class="app-name">COCO</span>
+        <span class="tagline">Climb On. Climb Off.</span>
+      </div>
+      <span class="session-title">Afternoon Bouldering Session</span>
+      <span class="date">Monday, Apr 13</span>
+      <div class="stats-list">
+        <div class="stat-row">
+          <span class="stat-label">CLIMBS</span>
+          <span class="stat-value">8</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">SENDS</span>
+          <span class="stat-value">6</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">FLASHES</span>
+          <span class="stat-value">2</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">HARDEST</span>
+          <span class="stat-value">V6</span>
+        </div>
+      </div>
+      <span class="footer">logged with COCO</span>
+    </div>
+
+    <!-- Bottom actions -->
+    <div class="ig-actions">
+      <div class="send-btn">Send message</div>
+    </div>
+  </div>
+</body>
+</html>

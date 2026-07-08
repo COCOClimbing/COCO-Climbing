@@ -36,3 +36,41 @@ create policy "Users can view profiles of friends or requesters" on public.profi
          or (f.receiver_id = auth.uid() and f.sender_id = id)
     )
   );
+
+-- ─── Follow list RPCs ────────────────────────────────────────────────────────
+-- Collapse the friendships -> profiles two-step lookup used by getFollowing /
+-- getFollowers in friendsApi.ts into a single round trip.
+
+create or replace function public.get_following(target_user_id uuid)
+returns table (
+  id uuid,
+  name text,
+  username text,
+  avatar_url text,
+  hometown text,
+  is_private boolean
+)
+language sql stable security definer as $$
+  select p.id, p.name, p.username, p.avatar_url, p.hometown, p.is_private
+  from public.profiles p
+  join public.friendships f on f.receiver_id = p.id
+  where f.sender_id = target_user_id
+    and f.status = 'accepted';
+$$;
+
+create or replace function public.get_followers(target_user_id uuid)
+returns table (
+  id uuid,
+  name text,
+  username text,
+  avatar_url text,
+  hometown text,
+  is_private boolean
+)
+language sql stable security definer as $$
+  select p.id, p.name, p.username, p.avatar_url, p.hometown, p.is_private
+  from public.profiles p
+  join public.friendships f on f.sender_id = p.id
+  where f.receiver_id = target_user_id
+    and f.status = 'accepted';
+$$;
