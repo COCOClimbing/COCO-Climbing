@@ -6,6 +6,7 @@ import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
+import { routeNotificationTap } from '../utils/notifications';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
 const SCREEN_TITLES: Partial<Record<ScreenId, string>> = {
@@ -31,7 +32,8 @@ type AppNotification = {
 
 export default function AppHeader() {
   const { colors } = useTheme();
-  const { screen, navigate, openSettings, openFriends } = useNav();
+  const nav = useNav();
+  const { screen, navigate, openSettings, openFriends } = nav;
   const { user, pendingRequestCount, avatarUrl, localAvatarUri, profileName } = useAuth();
   const initials = profileName
     ? profileName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -78,6 +80,13 @@ export default function AppHeader() {
       .eq('recipient_id', user!.id)
       .eq('read', false);
     setUnreadCount(0);
+  }
+
+  function handleNotificationTap(n: AppNotification) {
+    setNotifVisible(false);
+    routeNotificationTap(nav, n.type, { senderId: n.sender_id, sessionId: n.session_id }).catch(err => {
+      console.error('[notifications] Failed to resolve tap routing:', err);
+    });
   }
 
   function iconForType(type: string) {
@@ -156,8 +165,10 @@ export default function AppHeader() {
           ) : (
             <ScrollView contentContainerStyle={{ paddingVertical: SPACING.sm }}>
               {notifications.map(n => (
-                <View
+                <TouchableOpacity
                   key={n.id}
+                  onPress={() => handleNotificationTap(n)}
+                  activeOpacity={0.7}
                   style={[styles.notifRow, { borderBottomColor: colors.border, backgroundColor: n.read ? 'transparent' : colors.accentSoft }]}
                 >
                   <View style={[styles.notifIcon, { backgroundColor: colors.accentSoft }]}>
@@ -170,7 +181,7 @@ export default function AppHeader() {
                       {formatDistanceToNow(parseISO(n.created_at), { addSuffix: true })}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </ScrollView>
           )}

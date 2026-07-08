@@ -149,6 +149,25 @@ export async function sendCommentLikeNotification(commentAuthorId: string, liker
 const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request', 'follow_request_accepted']);
 const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like', 'comment']);
 
+// Shared by push-notification tap routing and the in-app notification list,
+// so both navigate identically for a given notification type.
+export async function routeNotificationTap(
+  nav: ReturnType<typeof useNav>,
+  type: string,
+  opts: { senderId?: string | null; sessionId?: string | null }
+): Promise<void> {
+  if (PROFILE_NOTIFICATION_TYPES.has(type)) {
+    if (!opts.senderId) return;
+    const profile = await getProfileById(opts.senderId);
+    if (profile) nav.viewFriendProfile(profile);
+    return;
+  }
+
+  if (SESSION_NOTIFICATION_TYPES.has(type) && opts.sessionId) {
+    nav.viewActivitySession(opts.sessionId);
+  }
+}
+
 export function useNotificationTapRouting(): void {
   const nav = useNav();
   const navRef = useRef(nav);
@@ -157,21 +176,10 @@ export function useNotificationTapRouting(): void {
   useEffect(() => {
     function routeTap(data: any) {
       if (!data || typeof data.type !== 'string') return;
-
-      if (PROFILE_NOTIFICATION_TYPES.has(data.type)) {
-        const id = data.senderId ?? data.followerId;
-        if (!id) return;
-        getProfileById(id).then(profile => {
-          if (profile) navRef.current.viewFriendProfile(profile);
-        }).catch(err => {
-          console.error('[notifications] Failed to resolve profile for tap routing:', err);
-        });
-        return;
-      }
-
-      if (SESSION_NOTIFICATION_TYPES.has(data.type) && data.sessionId) {
-        navRef.current.viewActivitySession(data.sessionId);
-      }
+      const senderId = data.senderId ?? data.followerId;
+      routeNotificationTap(navRef.current, data.type, { senderId, sessionId: data.sessionId }).catch(err => {
+        console.error('[notifications] Failed to resolve tap routing:', err);
+      });
     }
 
     // Cold start: the app was launched by tapping a notification while fully closed.

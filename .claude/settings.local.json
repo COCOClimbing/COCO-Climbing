@@ -296,7 +296,11 @@
       "Bash(/usr/bin/curl -4 -s --max-time 10 'https://oexaqytotrxqbxmzqabu.supabase.co/rest/v1/session_comments?select=session_id,user_id,text&limit=5' -H 'apikey: sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Authorization: Bearer sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -w '\\\\nHTTP:%{http_code}\\\\n')",
       "Bash(/usr/bin/curl -4 -s --max-time 10 'https://oexaqytotrxqbxmzqabu.supabase.co/rest/v1/session_likes?select=session_id,user_id&limit=5' -H 'apikey: sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Authorization: Bearer sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -w '\\\\nHTTP:%{http_code}\\\\n')",
       "Bash(/usr/bin/curl -4 -s --max-time 10 -X POST https://oexaqytotrxqbxmzqabu.supabase.co/rest/v1/rpc/is_username_available -H 'apikey: sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Authorization: Bearer sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Content-Type: application/json' -d '{\"check_username\":\"OrthoCoach\"}' -w '\\\\nHTTP:%{http_code}\\\\n')",
-      "Bash(/usr/bin/curl -4 -s --max-time 10 'https://oexaqytotrxqbxmzqabu.supabase.co/rest/v1/profiles?select=id,username,is_private&is_private=eq.false&limit=2' -H 'apikey: sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Authorization: Bearer sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -w '\\\\nHTTP:%{http_code}\\\\n')"
+      "Bash(/usr/bin/curl -4 -s --max-time 10 'https://oexaqytotrxqbxmzqabu.supabase.co/rest/v1/profiles?select=id,username,is_private&is_private=eq.false&limit=2' -H 'apikey: sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -H 'Authorization: Bearer sb_publishable_nI7aNpJ895AcZy0hsCGEiw_3yW1oCAT' -w '\\\\nHTTP:%{http_code}\\\\n')",
+      "Bash(git fetch *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(brctl status *)"
     ]
   }
 }
