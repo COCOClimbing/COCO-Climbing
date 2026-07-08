@@ -368,13 +368,9 @@ export async function unlikeComment(commentId: string, userId: string): Promise<
 
 // Check if a username is available
 export async function isUsernameAvailable(username: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id')
-    .ilike('username', username)
-    .limit(1);
+  const { data, error } = await supabase.rpc('is_username_available', { check_username: username });
   if (error) throw new Error(error.message);
-  return !data || data.length === 0;
+  return data === true;
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
