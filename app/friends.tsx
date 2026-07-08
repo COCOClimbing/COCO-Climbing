@@ -710,6 +710,8 @@ export default function FriendsScreen() {
   };
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
   const [daysLoaded, setDaysLoaded] = useState(14);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [caughtUp, setCaughtUp] = useState(false);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
   const [preferredRope, setPreferredRope] = useState('yds');
 
@@ -819,6 +821,8 @@ export default function FriendsScreen() {
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollY = useRef(0);
   const everLoadedFeedRef = useRef(false);
+  const canTriggerLoadMoreRef = useRef(true);
+  const loadingMoreRef = useRef(false);
   const SCREEN_WIDTH = Dimensions.get('window').width;
   const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -1141,6 +1145,20 @@ export default function FriendsScreen() {
       setLoadingFeed(false);
       return 0;
     }
+  }
+
+  async function loadMoreFeed() {
+    if (loadingMoreRef.current || !canTriggerLoadMoreRef.current) return;
+    loadingMoreRef.current = true;
+    canTriggerLoadMoreRef.current = false;
+    setLoadingMore(true);
+    const prevCount = activityFeed.length;
+    const next = daysLoaded + 7;
+    setDaysLoaded(next);
+    const newCount = await loadFeed(next);
+    setCaughtUp(newCount <= prevCount);
+    setLoadingMore(false);
+    loadingMoreRef.current = false;
   }
 
   async function loadRequests() {
@@ -1796,7 +1814,25 @@ export default function FriendsScreen() {
           )}
         </View>
       ) : (
-        <ScrollView ref={feedScrollRef} style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={loadFeed} />} scrollEventThrottle={16} onScroll={e => { feedScrollY.current = e.nativeEvent.contentOffset.y; }}>
+        <ScrollView
+          ref={feedScrollRef}
+          style={styles.scrollArea}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={() => { setDaysLoaded(14); setCaughtUp(false); loadFeed(14); }} />}
+          scrollEventThrottle={16}
+          onScroll={e => {
+            feedScrollY.current = e.nativeEvent.contentOffset.y;
+            const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+            const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+            if (distanceFromBottom < 200) {
+              loadMoreFeed();
+            } else {
+              canTriggerLoadMoreRef.current = true;
+            }
+          }}
+        >
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</Text>
           {activityFeed.map((entry) => {
             const sessionKey = entry.sessionId ? `sid-${entry.sessionId}` : `fid-${entry.friend.id}|${entry.sessionDate}`;
@@ -2050,6 +2086,14 @@ export default function FriendsScreen() {
               </View>
             );
           })}
+          {loadingMore && (
+            <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />
+          )}
+          {!loadingMore && caughtUp && (
+            <Text style={[styles.emptyStateText, { color: colors.textMuted, marginVertical: SPACING.lg }]}>
+              You're all caught up
+            </Text>
+          )}
         </ScrollView>
       ))}
 
