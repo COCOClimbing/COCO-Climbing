@@ -61,7 +61,6 @@ import {
   getCommentLikes,
   likeComment,
   unlikeComment,
-  getSessionForNotification,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -710,6 +709,7 @@ export default function FriendsScreen() {
     location?: string;
   };
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
+  const [daysLoaded, setDaysLoaded] = useState(14);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
   const [preferredRope, setPreferredRope] = useState('yds');
 
@@ -818,6 +818,7 @@ export default function FriendsScreen() {
   const [shareEntry, setShareEntry] = useState<SessionSummary | null>(null);
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollY = useRef(0);
+  const everLoadedFeedRef = useRef(false);
   const SCREEN_WIDTH = Dimensions.get('window').width;
   const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -866,8 +867,8 @@ export default function FriendsScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async function loadFeed() {
-    if (!user) return;
+  async function loadFeed(days: number = daysLoaded): Promise<number> {
+    if (!user) return 0;
     setLoadingFeed(true);
     try {
       const normDate = (d: string) => (d ?? '').slice(0, 10);
@@ -887,10 +888,10 @@ export default function FriendsScreen() {
 
       const summaries: SessionSummary[] = [];
 
-      // Add user's own recent sessions (last 14 days)
-      const fourteenDaysAgo = new Date();
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-      const cutoff = fourteenDaysAgo.toISOString().slice(0, 10);
+      // Add user's own recent sessions (last `days` days)
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - days);
+      const cutoff = daysAgo.toISOString().slice(0, 10);
       const activeSessionId = getActiveSessionId();
       const recentSessions = allSessions.filter(s => normDate(s.date) >= cutoff && s.id !== activeSessionId);
       const selfProfile = { id: user.id, name: 'You', username: username ?? '', avatar_url: myAvatar };
@@ -953,7 +954,7 @@ export default function FriendsScreen() {
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
-      const taggedSessions = await getTaggedSessions(user.id);
+      const taggedSessions = await getTaggedSessions(user.id, days);
       for (const { session: s, profile } of taggedSessions) {
         if (!profile || allExcluded.includes(s.user_id) || s.user_id === user.id) continue;
         const { data: sessionClimbs } = await supabase
@@ -1016,8 +1017,8 @@ export default function FriendsScreen() {
         acceptedFiltered.map(async (f) => {
           try {
             const [climbs, friendSessions] = await Promise.all([
-              getFriendRecentClimbs(f.id),
-              getFriendRecentSessions(f.id),
+              getFriendRecentClimbs(f.id, days),
+              getFriendRecentSessions(f.id, days),
             ]);
             const sessionMediaMap = new Map<string, string[]>(
               friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
@@ -1131,10 +1132,15 @@ export default function FriendsScreen() {
           loadLikesAndComments(key, e.sessionId);
         }
       });
+      everLoadedFeedRef.current = true;
+      setLoadingFeed(false);
+      return dedupedWithWidths.length;
     } catch {
       setActivityFeed([]);
+      everLoadedFeedRef.current = true;
+      setLoadingFeed(false);
+      return 0;
     }
-    setLoadingFeed(false);
   }
 
   async function loadRequests() {
@@ -1278,7 +1284,7 @@ export default function FriendsScreen() {
             ? localClimbs.filter(c => c.sessionId === entry.sessionId)
             : localClimbs.filter(c => (c.date ?? '').slice(0, 10) === entry.sessionDate);
         } else {
-          const climbs = await getFriendRecentClimbs(entry.friend.id);
+          const climbs = await getFriendRecentClimbs(entry.friend.id, daysLoaded);
           const normDate = (d: string) => (d ?? '').slice(0, 10);
           // Prefer session_id match over date match — date filtering breaks when climb
           // timestamps cross a UTC date boundary vs the session's local date.
@@ -1328,7 +1334,7 @@ export default function FriendsScreen() {
             ? localClimbs.filter(c => c.sessionId === entry.sessionId)
             : localClimbs.filter(c => (c.date ?? '').slice(0, 10) === entry.sessionDate);
         } else {
-          const fetched = await getFriendRecentClimbs(entry.friend.id);
+          const fetched = await getFriendRecentClimbs(entry.friend.id, daysLoaded);
           const normDate = (d: string) => (d ?? '').slice(0, 10);
           mapped = fetched
             .filter((c: any) => entry.sessionId ? c.session_id === entry.sessionId : normDate(c.date) === normDate(entry.sessionDate))
