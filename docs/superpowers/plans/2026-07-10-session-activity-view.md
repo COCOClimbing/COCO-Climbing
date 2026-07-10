@@ -795,13 +795,9 @@ Directly below the existing `mediaSection` const (before the `return (` that sta
       <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <Text style={[styles.metaLabel, { color: colors.textMuted }]}>ACTIVITY</Text>
         <LikesAvatarRow
-          likers={sessionLikes.map(l => ({ id: l.id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
-          onPressLiker={(l) => {
-            const likeRow = sessionLikes.find(x => x.id === l.id);
-            if (likeRow && likeRow.user_id !== user?.id) {
-              viewFriendProfile({ id: likeRow.user_id, name: likeRow.profile?.name ?? 'Unknown', username: '', avatar_url: likeRow.profile?.avatar_url ?? null });
-            }
-          }}
+          likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+          onPressLiker={(l) => viewFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
+          currentUserId={user?.id}
           colors={colors}
         />
         {sessionComments.length > 0 && (
