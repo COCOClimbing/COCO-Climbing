@@ -45,6 +45,10 @@ export default function FriendPicker({ selected, onChange, onFocus, onDropdownCh
     onDropdownChange?.(focused);
   }, [focused]);
 
+  useEffect(() => {
+    if (!editable) setFocused(false);
+  }, [editable]);
+
   function handleSelect(f: FriendProfile) {
     Keyboard.dismiss();
     onChange([...selected, { id: f.id, name: f.name }]);
