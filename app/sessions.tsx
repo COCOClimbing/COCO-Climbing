@@ -859,7 +859,7 @@ export default function SessionsScreen() {
           scrollEventThrottle={16}
           onScroll={e => { _detailScrollY = e.nativeEvent.contentOffset.y; }}
           contentContainerStyle={styles.detailContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="never"
           scrollEnabled={detailScrollEnabled}
         >
           {/* Session header */}
