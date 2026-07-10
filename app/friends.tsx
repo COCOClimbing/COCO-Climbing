@@ -779,13 +779,15 @@ export default function FriendsScreen() {
         const y = cardOffsets.current[sessionKey];
         if (y !== undefined) {
           feedScrollRef.current?.scrollTo({ y: Math.max(0, y - SPACING.lg), animated: true });
+          clearPendingActivitySessionId();
         } else if (attempts < 5) {
           attempts += 1;
           scrollToCardTimeoutRef.current = setTimeout(tryScroll, 50);
+        } else {
+          clearPendingActivitySessionId(); // give up after exhausting retries
         }
       };
       scrollToCardTimeoutRef.current = setTimeout(tryScroll, 50);
-      clearPendingActivitySessionId();
       return () => {
         if (scrollToCardTimeoutRef.current) clearTimeout(scrollToCardTimeoutRef.current);
       };
