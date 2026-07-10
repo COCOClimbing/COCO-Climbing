@@ -639,6 +639,7 @@ export default function SessionsScreen() {
     const { sends, hardest, projecting, gradedCount } = sessionStats(day);
     const label = formatSessionLabel(day);
     const isActive = day.sessionId === getActiveSessionId();
+    const [editMode, setEditMode] = useState(false);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = isActive ? day.climbs : mergeClimbs(day.climbs);
 
@@ -793,57 +794,65 @@ export default function SessionsScreen() {
       </View>
     );
 
-    const mediaSection = (() => {
-      // Gather all climb photos for this session
-      const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
-      for (const c of day.climbs) {
-        if (c.mediaUris && c.mediaUris.length > 0) {
-          c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
-        } else if (c.mediaUri) {
-          climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
-        }
+    const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
+    for (const c of day.climbs) {
+      if (c.mediaUris && c.mediaUris.length > 0) {
+        c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
+      } else if (c.mediaUri) {
+        climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
       }
-      const allMedia = [
-        ...sessionMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
-        ...climbMedia,
-      ];
-      return (
-        <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
-          {allMedia.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
-              {allMedia.map((item, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
-                  onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
-                  activeOpacity={0.9}
-                  delayLongPress={400}
-                  style={{ marginRight: SPACING.sm }}
-                >
-                  <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
-                </TouchableOpacity>
-              ))}
+    }
+    const allMedia = [
+      ...sessionMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
+      ...climbMedia,
+    ];
+
+    const hasNotes = sessionNotes.trim().length > 0;
+    const hasLocation = sessionLocation.trim().length > 0;
+    const hasFriends = sessionFriends.length > 0;
+    const hasMedia = allMedia.length > 0;
+
+    const showNotes = isActive || editMode || hasNotes;
+    const showLocation = isActive || editMode || hasLocation;
+    const showFriends = isActive || editMode || hasFriends;
+    const showMedia = isActive || editMode || hasMedia;
+
+    const mediaSection = (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
+        {allMedia.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+            {allMedia.map((item, idx) => (
               <TouchableOpacity
-                style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
-                onPress={handlePickSessionMedia}
-                activeOpacity={0.7}
+                key={idx}
+                onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
+                onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
+                activeOpacity={0.9}
+                delayLongPress={400}
+                style={{ marginRight: SPACING.sm }}
               >
-                <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+                <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
               </TouchableOpacity>
-            </ScrollView>
-          ) : (
+            ))}
             <TouchableOpacity
-              style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+              style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
               onPress={handlePickSessionMedia}
               activeOpacity={0.7}
             >
-              <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+              <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
             </TouchableOpacity>
-          )}
-        </View>
-      );
-    })();
+          </ScrollView>
+        ) : (
+          <TouchableOpacity
+            style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+            onPress={handlePickSessionMedia}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
 
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
@@ -937,17 +946,17 @@ export default function SessionsScreen() {
           {isActive ? (
             <>
               {climbsSection}
-              {notesSection}
-              {locationSection}
-              {friendsSection}
-              {mediaSection}
+              {showNotes && notesSection}
+              {showLocation && locationSection}
+              {showFriends && friendsSection}
+              {showMedia && mediaSection}
             </>
           ) : (
             <>
-              {notesSection}
-              {locationSection}
-              {friendsSection}
-              {mediaSection}
+              {showNotes && notesSection}
+              {showLocation && locationSection}
+              {showFriends && friendsSection}
+              {showMedia && mediaSection}
               {climbsSection}
             </>
           )}
