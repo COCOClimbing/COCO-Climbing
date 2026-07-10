@@ -1323,11 +1323,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   mediaBtn: {
+    height: 44,
     borderWidth: 1,
     borderRadius: 8,
     borderStyle: 'dashed',
-    paddingVertical: SPACING.md,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   mediaBtnText: {
     fontSize: FONTS.sizes.sm,

@@ -355,10 +355,10 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 44,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
     marginBottom: SPACING.md,
     gap: SPACING.sm,
   },

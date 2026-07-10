@@ -188,9 +188,9 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 44,
     borderWidth: 1,
     borderRadius: 8,
-    paddingVertical: SPACING.md,
   },
   input: {
     flex: 1,
