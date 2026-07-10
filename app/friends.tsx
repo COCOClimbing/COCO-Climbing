@@ -802,7 +802,7 @@ export default function FriendsScreen() {
     loadingMoreRef.current = true;
     const next = daysLoaded + 7;
     setDaysLoaded(next);
-    loadFeed(next).finally(() => { loadingMoreRef.current = false; });
+    loadFeed(next, false).finally(() => { loadingMoreRef.current = false; });
   }, [pendingActivitySessionId, screen, activityFeed]);
 
   // Tapping Activity tab while already on it returns to main feed
@@ -886,9 +886,9 @@ export default function FriendsScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async function loadFeed(days: number = daysLoaded): Promise<number> {
+  async function loadFeed(days: number = daysLoaded, showLoading: boolean = true): Promise<number> {
     if (!user) return 0;
-    setLoadingFeed(true);
+    if (showLoading) setLoadingFeed(true);
     try {
       const normDate = (d: string) => (d ?? '').slice(0, 10);
 
@@ -1152,12 +1152,12 @@ export default function FriendsScreen() {
         }
       });
       everLoadedFeedRef.current = true;
-      setLoadingFeed(false);
+      if (showLoading) setLoadingFeed(false);
       return dedupedWithWidths.length;
     } catch {
-      setActivityFeed([]);
+      if (showLoading) setActivityFeed([]);
       everLoadedFeedRef.current = true;
-      setLoadingFeed(false);
+      if (showLoading) setLoadingFeed(false);
       return 0;
     }
   }
@@ -1170,7 +1170,7 @@ export default function FriendsScreen() {
     const prevCount = activityFeed.length;
     const next = daysLoaded + 7;
     setDaysLoaded(next);
-    const newCount = await loadFeed(next);
+    const newCount = await loadFeed(next, false);
     setCaughtUp(newCount <= prevCount);
     setLoadingMore(false);
     loadingMoreRef.current = false;
