@@ -2069,7 +2069,7 @@ export default function FriendsScreen() {
                                     c={c}
                                     isOwn={c.user_id === user?.id || entry.friend.id === user?.id}
                                     onDelete={() => entry.sessionId && handleDeleteComment(sessionKey, entry.sessionId, c.id)}
-                                    onReport={c.user_id !== user?.id ? () => Alert.alert('Report Comment', 'Are you sure you want to report this comment?', [
+                                    onReport={(c.user_id !== user?.id && entry.friend.id !== user?.id) ? () => Alert.alert('Report Comment', 'Are you sure you want to report this comment?', [
                                       { text: 'Cancel', style: 'cancel' },
                                       { text: 'Report', style: 'destructive', onPress: () => submitReport(c.user_id, c.id, 'comment', 'Inappropriate comment') },
                                     ]) : () => {}}
