@@ -851,13 +851,15 @@ export default function SessionsScreen() {
             )}
           </ScrollView>
         ) : (
-          <TouchableOpacity
-            style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
-            onPress={handlePickSessionMedia}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
-          </TouchableOpacity>
+          canEditMeta && (
+            <TouchableOpacity
+              style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+              onPress={handlePickSessionMedia}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+            </TouchableOpacity>
+          )
         )}
       </View>
     );
@@ -924,9 +926,11 @@ export default function SessionsScreen() {
                 <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
               </TouchableOpacity>
             ) : (
-              <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
-                {sessionTitle.trim() || sessionTimeOfDay(day)}
-              </Text>
+              <View style={styles.detailTitleRow}>
+                <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
+                  {sessionTitle.trim() || sessionTimeOfDay(day)}
+                </Text>
+              </View>
             )}
 
             {/* Friends */}
