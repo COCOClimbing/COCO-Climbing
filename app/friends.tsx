@@ -761,33 +761,36 @@ export default function FriendsScreen() {
     }
   }, [pendingFriendProfile, screen]);
 
-  // Open a session requested externally (e.g. tapping a notification)
-  const pendingActivitySessionIdRef = useRef(pendingActivitySessionId);
-  pendingActivitySessionIdRef.current = pendingActivitySessionId;
+  // Open a session requested externally (e.g. tapping a notification) by
+  // scrolling to its card in the feed, auto-extending the loaded window if
+  // it isn't there yet (capped so a stale/deleted session doesn't search
+  // forever).
+  const cardOffsets = useRef<Record<string, number>>({});
+  const MAX_AUTO_EXTEND_DAYS = 90;
   useEffect(() => {
     if (!pendingActivitySessionId || screen !== 'friends') return;
     const sessionId = pendingActivitySessionId;
+    const sessionKey = `sid-${sessionId}`;
     const existing = activityFeed.find(e => e.sessionId === sessionId);
     if (existing) {
-      handleOpenSession(existing);
+      setTimeout(() => {
+        const y = cardOffsets.current[sessionKey];
+        if (y !== undefined) {
+          feedScrollRef.current?.scrollTo({ y: Math.max(0, y - SPACING.lg), animated: true });
+        }
+      }, 50);
       clearPendingActivitySessionId();
       return;
     }
-    // Not in the currently loaded feed (e.g. app was cold-started by the
-    // notification tap before loadFeed() finished, or the session is older
-    // than the feed's 14-day window) — fetch it directly instead.
-    (async () => {
-      const result = await getSessionForNotification(sessionId);
-      // Bail if a newer request has since superseded this one (e.g. the
-      // feed loaded in the meantime and took the fast path instead, or
-      // another notification tap arrived while this fetch was in flight).
-      if (pendingActivitySessionIdRef.current !== sessionId) return;
-      if (result) {
-        setViewingSession(result);
-        loadLikesAndComments(`sid-${sessionId}`, sessionId);
-      }
-      clearPendingActivitySessionId();
-    })();
+    // Not found yet.
+    if (!everLoadedFeedRef.current) return; // wait for the first load to finish
+    if (daysLoaded >= MAX_AUTO_EXTEND_DAYS) {
+      clearPendingActivitySessionId(); // searched far enough back — give up silently
+      return;
+    }
+    const next = daysLoaded + 7;
+    setDaysLoaded(next);
+    loadFeed(next);
   }, [pendingActivitySessionId, screen, activityFeed]);
 
   // Tapping Activity tab while already on it returns to main feed
@@ -1840,7 +1843,11 @@ export default function FriendsScreen() {
             const isOutdoor = entry.environment === 'outdoor';
 
             return (
-              <View key={sessionKey} style={[styles.activityCard, { borderBottomColor: colors.border }]}>
+              <View
+                key={sessionKey}
+                style={[styles.activityCard, { borderBottomColor: colors.border }]}
+                onLayout={e => { cardOffsets.current[sessionKey] = e.nativeEvent.layout.y; }}
+              >
 
                 {/* ── Header: avatar + name + date + env + more menu ── */}
                 <View style={styles.cardHeader}>
