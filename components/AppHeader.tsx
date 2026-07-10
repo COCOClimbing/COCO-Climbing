@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav, ScreenId } from '../utils/NavigationContext';
@@ -43,6 +43,11 @@ export default function AppHeader() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifDaysLoaded, setNotifDaysLoaded] = useState(14);
+  const [loadingMoreNotifs, setLoadingMoreNotifs] = useState(false);
+  const [notifsCaughtUp, setNotifsCaughtUp] = useState(false);
+  const canTriggerLoadMoreNotifsRef = useRef(true);
+  const loadingMoreNotifsRef = useRef(false);
 
   const loadUnreadCount = useCallback(async () => {
     if (!user) return;
@@ -61,25 +66,51 @@ export default function AppHeader() {
     return () => clearInterval(interval);
   }, [loadUnreadCount]);
 
-  async function openNotifications() {
-    setNotifVisible(true);
-    setNotifLoading(true);
+  async function fetchNotifications(days: number): Promise<number> {
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - days);
+    const cutoff = daysAgo.toISOString();
+
     const { data } = await supabase
       .from('notifications')
       .select('*')
       .eq('recipient_id', user!.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setNotifications((data ?? []) as AppNotification[]);
-    setNotifLoading(false);
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false });
+    const rows = (data ?? []) as AppNotification[];
+    setNotifications(rows);
 
-    // Mark all as read
-    await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('recipient_id', user!.id)
-      .eq('read', false);
+    // Mark only this loaded batch as read — a notification outside the
+    // currently-loaded window shouldn't be marked read before it's ever seen.
+    const unreadIds = rows.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length > 0) {
+      await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+    }
     setUnreadCount(0);
+    return rows.length;
+  }
+
+  async function openNotifications() {
+    setNotifVisible(true);
+    setNotifLoading(true);
+    setNotifDaysLoaded(14);
+    setNotifsCaughtUp(false);
+    await fetchNotifications(14);
+    setNotifLoading(false);
+  }
+
+  async function loadMoreNotifications() {
+    if (loadingMoreNotifsRef.current || !canTriggerLoadMoreNotifsRef.current) return;
+    loadingMoreNotifsRef.current = true;
+    canTriggerLoadMoreNotifsRef.current = false;
+    setLoadingMoreNotifs(true);
+    const prevCount = notifications.length;
+    const next = notifDaysLoaded + 7;
+    setNotifDaysLoaded(next);
+    const newCount = await fetchNotifications(next);
+    setNotifsCaughtUp(newCount <= prevCount);
+    setLoadingMoreNotifs(false);
+    loadingMoreNotifsRef.current = false;
   }
 
   function handleNotificationTap(n: AppNotification) {
@@ -163,7 +194,19 @@ export default function AppHeader() {
           ) : notifications.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>No notifications yet.</Text>
           ) : (
-            <ScrollView contentContainerStyle={{ paddingVertical: SPACING.sm }}>
+            <ScrollView
+              contentContainerStyle={{ paddingVertical: SPACING.sm }}
+              scrollEventThrottle={16}
+              onScroll={e => {
+                const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+                if (distanceFromBottom < 200) {
+                  loadMoreNotifications();
+                } else {
+                  canTriggerLoadMoreNotifsRef.current = true;
+                }
+              }}
+            >
               {notifications.map(n => (
                 <TouchableOpacity
                   key={n.id}
@@ -183,6 +226,12 @@ export default function AppHeader() {
                   </View>
                 </TouchableOpacity>
               ))}
+              {loadingMoreNotifs && (
+                <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />
+              )}
+              {!loadingMoreNotifs && notifsCaughtUp && (
+                <Text style={[styles.emptyText, { marginTop: 0, marginVertical: SPACING.lg }]}>You're all caught up</Text>
+              )}
             </ScrollView>
           )}
         </View>
