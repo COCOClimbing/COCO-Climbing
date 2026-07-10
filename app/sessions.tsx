@@ -49,10 +49,12 @@ function SessionFriendPicker({
   initialFriends,
   onSave,
   scrollToSelf,
+  editable,
 }: {
   initialFriends: { id: string; name: string }[];
   onSave: (friends: { id: string; name: string }[]) => void;
   scrollToSelf?: (keyboardHeight: number) => void;
+  editable?: boolean;
 }) {
   const [friends, setFriends] = useState<{ id: string; name: string }[]>(initialFriends);
   const isFocused = useRef(false);
@@ -74,6 +76,7 @@ function SessionFriendPicker({
       selected={friends}
       onChange={(names) => { setFriends(names); onSave(names); }}
       onFocus={() => { isFocused.current = true; }}
+      editable={editable}
     />
   );
 }
@@ -640,6 +643,7 @@ export default function SessionsScreen() {
     const label = formatSessionLabel(day);
     const isActive = day.sessionId === getActiveSessionId();
     const [editMode, setEditMode] = useState(false);
+    const canEditMeta = isActive || editMode;
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = isActive ? day.climbs : mergeClimbs(day.climbs);
 
@@ -727,13 +731,13 @@ export default function SessionsScreen() {
             <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
               <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
             </TouchableOpacity>
-          ) : (
+          ) : canEditMeta ? (
             <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
               <Text style={[styles.metaAction, { color: colors.accent }]}>
                 {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
         {editingNotes ? (
           <TextInput
@@ -763,6 +767,7 @@ export default function SessionsScreen() {
             setSessionLocation(loc);
             handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
           }}
+          editable={canEditMeta}
         />
       </View>
     );
@@ -790,6 +795,7 @@ export default function SessionsScreen() {
               detailScrollRef.current?.scrollTo({ y: Math.max(0, scrollY), animated: true });
             }
           }}
+          editable={canEditMeta}
         />
       </View>
     );
@@ -826,7 +832,7 @@ export default function SessionsScreen() {
               <TouchableOpacity
                 key={idx}
                 onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
-                onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
+                onLongPress={canEditMeta ? () => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex) : undefined}
                 activeOpacity={0.9}
                 delayLongPress={400}
                 style={{ marginRight: SPACING.sm }}
@@ -834,13 +840,15 @@ export default function SessionsScreen() {
                 <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
-              onPress={handlePickSessionMedia}
-              activeOpacity={0.7}
-            >
-              <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
-            </TouchableOpacity>
+            {canEditMeta && (
+              <TouchableOpacity
+                style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                onPress={handlePickSessionMedia}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         ) : (
           <TouchableOpacity
@@ -904,7 +912,7 @@ export default function SessionsScreen() {
                 selectTextOnFocus
                 returnKeyType="done"
               />
-            ) : (
+            ) : canEditMeta ? (
               <TouchableOpacity
                 style={styles.detailTitleRow}
                 onPress={() => { titleInputValue.current = sessionTitle; setEditingTitle(true); }}
@@ -915,6 +923,10 @@ export default function SessionsScreen() {
                 </Text>
                 <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
               </TouchableOpacity>
+            ) : (
+              <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
+                {sessionTitle.trim() || sessionTimeOfDay(day)}
+              </Text>
             )}
 
             {/* Friends */}
