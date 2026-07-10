@@ -235,7 +235,7 @@ export default function AppHeader() {
                 <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />
               )}
               {!loadingMoreNotifs && notifsCaughtUp && (
-                <Text style={[styles.emptyText, { marginTop: 0, marginVertical: SPACING.lg }]}>You're all caught up</Text>
+                <Text style={[styles.emptyText, { marginTop: SPACING.lg, marginVertical: SPACING.lg }]}>You're all caught up</Text>
               )}
             </ScrollView>
           )}
