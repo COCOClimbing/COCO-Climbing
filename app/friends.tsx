@@ -766,6 +766,7 @@ export default function FriendsScreen() {
   // it isn't there yet (capped so a stale/deleted session doesn't search
   // forever).
   const cardOffsets = useRef<Record<string, number>>({});
+  const scrollToCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_AUTO_EXTEND_DAYS = 90;
   useEffect(() => {
     if (!pendingActivitySessionId || screen !== 'friends') return;
@@ -773,14 +774,21 @@ export default function FriendsScreen() {
     const sessionKey = `sid-${sessionId}`;
     const existing = activityFeed.find(e => e.sessionId === sessionId);
     if (existing) {
-      setTimeout(() => {
+      let attempts = 0;
+      const tryScroll = () => {
         const y = cardOffsets.current[sessionKey];
         if (y !== undefined) {
           feedScrollRef.current?.scrollTo({ y: Math.max(0, y - SPACING.lg), animated: true });
+        } else if (attempts < 5) {
+          attempts += 1;
+          scrollToCardTimeoutRef.current = setTimeout(tryScroll, 50);
         }
-      }, 50);
+      };
+      scrollToCardTimeoutRef.current = setTimeout(tryScroll, 50);
       clearPendingActivitySessionId();
-      return;
+      return () => {
+        if (scrollToCardTimeoutRef.current) clearTimeout(scrollToCardTimeoutRef.current);
+      };
     }
     // Not found yet.
     if (!everLoadedFeedRef.current) return; // wait for the first load to finish
@@ -788,9 +796,11 @@ export default function FriendsScreen() {
       clearPendingActivitySessionId(); // searched far enough back — give up silently
       return;
     }
+    if (loadingMoreRef.current) return; // an extend is already in flight (manual scroll or a prior tap) — this effect re-fires once activityFeed updates
+    loadingMoreRef.current = true;
     const next = daysLoaded + 7;
     setDaysLoaded(next);
-    loadFeed(next);
+    loadFeed(next).finally(() => { loadingMoreRef.current = false; });
   }, [pendingActivitySessionId, screen, activityFeed]);
 
   // Tapping Activity tab while already on it returns to main feed
