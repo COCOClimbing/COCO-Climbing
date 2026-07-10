@@ -761,14 +761,16 @@ export default function SessionsScreen() {
     const locationSection = (
       <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
-        <LocationPicker
-          value={sessionLocation}
-          onChange={(loc) => {
-            setSessionLocation(loc);
-            handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
-          }}
-          editable={canEditMeta}
-        />
+        <View style={{ marginBottom: -SPACING.md }}>
+          <LocationPicker
+            value={sessionLocation}
+            onChange={(loc) => {
+              setSessionLocation(loc);
+              handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
+            }}
+            editable={canEditMeta}
+          />
+        </View>
       </View>
     );
 
