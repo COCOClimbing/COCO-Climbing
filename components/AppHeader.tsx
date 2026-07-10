@@ -67,27 +67,31 @@ export default function AppHeader() {
   }, [loadUnreadCount]);
 
   async function fetchNotifications(days: number): Promise<number> {
-    const daysAgo = new Date();
-    daysAgo.setDate(daysAgo.getDate() - days);
-    const cutoff = daysAgo.toISOString();
+    try {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - days);
+      const cutoff = daysAgo.toISOString();
 
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('recipient_id', user!.id)
-      .gte('created_at', cutoff)
-      .order('created_at', { ascending: false });
-    const rows = (data ?? []) as AppNotification[];
-    setNotifications(rows);
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_id', user!.id)
+        .gte('created_at', cutoff)
+        .order('created_at', { ascending: false });
+      const rows = (data ?? []) as AppNotification[];
+      setNotifications(rows);
 
-    // Mark only this loaded batch as read — a notification outside the
-    // currently-loaded window shouldn't be marked read before it's ever seen.
-    const unreadIds = rows.filter(n => !n.read).map(n => n.id);
-    if (unreadIds.length > 0) {
-      await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+      // Mark only this loaded batch as read — a notification outside the
+      // currently-loaded window shouldn't be marked read before it's ever seen.
+      const unreadIds = rows.filter(n => !n.read).map(n => n.id);
+      if (unreadIds.length > 0) {
+        await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+      }
+      setUnreadCount(0);
+      return rows.length;
+    } catch {
+      return 0;
     }
-    setUnreadCount(0);
-    return rows.length;
   }
 
   async function openNotifications() {
@@ -95,6 +99,7 @@ export default function AppHeader() {
     setNotifLoading(true);
     setNotifDaysLoaded(14);
     setNotifsCaughtUp(false);
+    canTriggerLoadMoreNotifsRef.current = true;
     await fetchNotifications(14);
     setNotifLoading(false);
   }
