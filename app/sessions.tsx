@@ -857,10 +857,15 @@ export default function SessionsScreen() {
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
         {/* Back bar */}
-        <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
+        <View style={[styles.detailTopBar, { borderBottomColor: colors.border, justifyContent: 'space-between' }]}>
           <TouchableOpacity onPress={goBackToList} style={styles.backBtn} activeOpacity={0.7}>
             <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
+          {!isActive && (
+            <TouchableOpacity onPress={() => setEditMode(v => !v)} style={styles.backBtn} activeOpacity={0.7}>
+              <Text style={[styles.backBtnText, { color: colors.accent }]}>{editMode ? 'Done' : 'Edit'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView
