@@ -2703,6 +2703,7 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.regular,
     padding: 0,
+    height: 22,
   },
   clearSearch: {
     fontSize: FONTS.sizes.md,

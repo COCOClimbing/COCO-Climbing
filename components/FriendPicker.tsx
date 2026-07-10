@@ -178,7 +178,8 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.regular,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 0,
+    height: 20,
   },
   clearBtn: {
     fontSize: FONTS.sizes.lg,
