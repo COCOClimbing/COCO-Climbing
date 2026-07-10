@@ -19,7 +19,6 @@ import {
   Keyboard,
   Pressable,
 } from 'react-native';
-import SwipeToDelete from '../components/SwipeToDelete';
 import ShareModal from '../components/ShareModal';
 import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
