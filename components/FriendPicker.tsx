@@ -190,6 +190,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
+    paddingVertical: SPACING.md,
   },
   input: {
     flex: 1,
