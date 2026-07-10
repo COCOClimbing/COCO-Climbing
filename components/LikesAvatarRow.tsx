@@ -4,6 +4,7 @@ import { FONTS, SPACING } from '../utils/theme';
 
 export interface Liker {
   id: string;
+  userId: string;
   name: string;
   avatarUrl: string | null;
 }
@@ -11,10 +12,12 @@ export interface Liker {
 export default function LikesAvatarRow({
   likers,
   onPressLiker,
+  currentUserId,
   colors,
 }: {
   likers: Liker[];
   onPressLiker?: (liker: Liker) => void;
+  currentUserId?: string;
   colors: any;
 }) {
   if (likers.length === 0) return null;
@@ -22,7 +25,7 @@ export default function LikesAvatarRow({
     <View style={styles.likeCountRow}>
       <View style={styles.avatarStack}>
         {likers.slice(0, 3).map((l, i) => {
-          const onPress = onPressLiker ? () => onPressLiker(l) : undefined;
+          const onPress = (onPressLiker && l.userId !== currentUserId) ? () => onPressLiker(l) : undefined;
           return l.avatarUrl
             ? (
               <TouchableOpacity key={l.id} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>

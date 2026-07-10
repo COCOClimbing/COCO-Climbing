@@ -1920,13 +1920,9 @@ export default function FriendsScreen() {
                       {(likes.length > 0 || comments.length > 0) && (
                         <View style={styles.cardCounts}>
                           <LikesAvatarRow
-                            likers={likes.map(l => ({ id: l.id ?? l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
-                            onPressLiker={(l) => {
-                              const likeRow = likes.find(x => (x.id ?? x.user_id) === l.id);
-                              if (likeRow && likeRow.user_id !== user?.id) {
-                                openFriendProfile({ id: likeRow.user_id, name: likeRow.profile?.name ?? 'Unknown', username: '', avatar_url: likeRow.profile?.avatar_url ?? null });
-                              }
-                            }}
+                            likers={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+                            onPressLiker={(l) => openFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl }, 'activity')}
+                            currentUserId={user?.id}
                             colors={colors}
                           />
                           {comments.length > 0 && (
