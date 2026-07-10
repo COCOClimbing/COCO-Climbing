@@ -30,6 +30,7 @@ import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGr
 import { isDeadMediaUrl } from '../utils/cloudSync';
 import ClimbCard from '../components/ClimbCard';
 import SwipeableComment from '../components/SwipeableComment';
+import LikesAvatarRow from '../components/LikesAvatarRow';
 import { format, parseISO } from 'date-fns';
 import {
   FriendProfile,
@@ -1918,23 +1919,16 @@ export default function FriendsScreen() {
                       {/* Like/comment counts */}
                       {(likes.length > 0 || comments.length > 0) && (
                         <View style={styles.cardCounts}>
-                          {likes.length > 0 && (
-                            <View style={styles.likeCountRow}>
-                              <View style={styles.avatarStack}>
-                                {likes.slice(0, 3).map((l, i) => {
-                                  const url = l.user_id === user?.id ? myAvatar : l.profile?.avatar_url;
-                                  const onPress = l.user_id !== user?.id ? () => openFriendProfile({ id: l.user_id, name: l.profile?.name ?? 'Unknown', username: '', avatar_url: l.profile?.avatar_url ?? null }, 'activity') : undefined;
-                                  const likeKey = l.id ?? l.user_id ?? String(i);
-                                  return url
-                                    ? <TouchableOpacity key={likeKey} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}><Image source={{ uri: url }} style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]} /></TouchableOpacity>
-                                    : <TouchableOpacity key={likeKey} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}><View style={[styles.likeAvatar, styles.likeAvatarFallback, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i, backgroundColor: colors.border }]} /></TouchableOpacity>;
-                                })}
-                              </View>
-                              <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
-                                {likes.length} {likes.length === 1 ? 'like' : 'likes'}
-                              </Text>
-                            </View>
-                          )}
+                          <LikesAvatarRow
+                            likers={likes.map(l => ({ id: l.id ?? l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+                            onPressLiker={(l) => {
+                              const likeRow = likes.find(x => (x.id ?? x.user_id) === l.id);
+                              if (likeRow && likeRow.user_id !== user?.id) {
+                                openFriendProfile({ id: likeRow.user_id, name: likeRow.profile?.name ?? 'Unknown', username: '', avatar_url: likeRow.profile?.avatar_url ?? null });
+                              }
+                            }}
+                            colors={colors}
+                          />
                           {comments.length > 0 && (
                             <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
                               {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
