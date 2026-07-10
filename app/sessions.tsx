@@ -680,6 +680,171 @@ export default function SessionsScreen() {
       }
     }, []);
 
+    const climbsSection = (
+      displayClimbs.length === 0
+        ? <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
+        : displayClimbs.map(c => (
+          <SwipeToDelete
+            key={c.id}
+            onSwipeStart={() => setDetailScrollEnabled(false)}
+            onSwipeEnd={() => setDetailScrollEnabled(true)}
+            onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
+            rightAction={isActive && c.outcome === 'attempt' ? {
+              label: 'Send',
+              color: colors.accentGreen,
+              onPress: async () => {
+                await saveClimb({ ...c, outcome: 'send', attempts: (c.attempts ?? 1) + 1 });
+                triggerStatsRefresh();
+                load();
+              },
+            } : undefined}
+          >
+            <ClimbCard
+              climb={c}
+              compact
+              onPress={() => {
+                if (isActive) {
+                  setEditingClimb(c); setLogModalVisible(true);
+                } else {
+                  setDetailClimb(c);
+                }
+              }}
+              onIncrementAttempts={isActive ? async () => {
+                await saveClimb({ ...c, attempts: (c.attempts ?? 1) + 1 });
+                load();
+              } : undefined}
+            />
+          </SwipeToDelete>
+        ))
+    );
+
+    const notesSection = (
+      <View ref={notesCardRef} style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <View style={styles.metaLabelRow}>
+          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+          {editingNotes ? (
+            <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
+              <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
+              <Text style={[styles.metaAction, { color: colors.accent }]}>
+                {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {editingNotes ? (
+          <TextInput
+            key={day.sessionId}
+            style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
+            defaultValue={sessionNotes}
+            onChangeText={(t) => { notesInputValue.current = t; }}
+            onEndEditing={(e) => handleSaveNotes(e.nativeEvent.text)}
+            placeholder="Add session notes…"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            textAlignVertical="top"
+            autoFocus
+          />
+        ) : sessionNotes.trim() ? (
+          <Text style={[styles.notesText, { color: colors.textSecondary }]}>{sessionNotes}</Text>
+        ) : null}
+      </View>
+    );
+
+    const locationSection = (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
+        <LocationPicker
+          value={sessionLocation}
+          onChange={(loc) => {
+            setSessionLocation(loc);
+            handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
+          }}
+        />
+      </View>
+    );
+
+    const friendsSection = (
+      <View
+        style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+        onLayout={(e) => { friendsCardY.current = e.nativeEvent.layout.y; }}
+      >
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
+        <SessionFriendPicker
+          initialFriends={sessionFriends}
+          onSave={(names) => {
+            setSessionFriends(names);
+            setSelectedDay(prev => prev ? { ...prev, friends: names } : null);
+            handleSaveSessionMeta(sessionNotes, names, sessionLocation, sessionMediaItems);
+          }}
+          scrollToSelf={(keyboardHeight) => {
+            if (friendsCardY.current > 0) {
+              // Scroll so the friends card sits in the top third of the space
+              // above the keyboard, leaving the dropdown visible below the input.
+              const windowHeight = Dimensions.get('window').height;
+              const visibleHeight = windowHeight - keyboardHeight;
+              const scrollY = friendsCardY.current - visibleHeight * 0.25;
+              detailScrollRef.current?.scrollTo({ y: Math.max(0, scrollY), animated: true });
+            }
+          }}
+        />
+      </View>
+    );
+
+    const mediaSection = (() => {
+      // Gather all climb photos for this session
+      const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
+      for (const c of day.climbs) {
+        if (c.mediaUris && c.mediaUris.length > 0) {
+          c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
+        } else if (c.mediaUri) {
+          climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
+        }
+      }
+      const allMedia = [
+        ...sessionMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
+        ...climbMedia,
+      ];
+      return (
+        <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
+          {allMedia.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+              {allMedia.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
+                  onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
+                  activeOpacity={0.9}
+                  delayLongPress={400}
+                  style={{ marginRight: SPACING.sm }}
+                >
+                  <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                onPress={handlePickSessionMedia}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : (
+            <TouchableOpacity
+              style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+              onPress={handlePickSessionMedia}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    })();
+
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
         {/* Back bar */}
@@ -769,168 +934,23 @@ export default function SessionsScreen() {
             </View>
           </View>
 
-          {/* Climbs */}
-          {displayClimbs.length === 0
-            ? <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
-            : displayClimbs.map(c => (
-              <SwipeToDelete
-                key={c.id}
-                onSwipeStart={() => setDetailScrollEnabled(false)}
-                onSwipeEnd={() => setDetailScrollEnabled(true)}
-                onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
-                rightAction={isActive && c.outcome === 'attempt' ? {
-                  label: 'Send',
-                  color: colors.accentGreen,
-                  onPress: async () => {
-                    await saveClimb({ ...c, outcome: 'send', attempts: (c.attempts ?? 1) + 1 });
-                    triggerStatsRefresh();
-                    load();
-                  },
-                } : undefined}
-              >
-                <ClimbCard
-                  climb={c}
-                  compact
-                  onPress={() => {
-                    if (isActive) {
-                      setEditingClimb(c); setLogModalVisible(true);
-                    } else {
-                      setDetailClimb(c);
-                    }
-                  }}
-                  onIncrementAttempts={isActive ? async () => {
-                    await saveClimb({ ...c, attempts: (c.attempts ?? 1) + 1 });
-                    load();
-                  } : undefined}
-                />
-              </SwipeToDelete>
-            ))
-          }
-
-          {/* Notes */}
-          <View ref={notesCardRef} style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-            <View style={styles.metaLabelRow}>
-              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
-              {editingNotes ? (
-                <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
-                  <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
-                  <Text style={[styles.metaAction, { color: colors.accent }]}>
-                    {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {editingNotes ? (
-              <TextInput
-                key={day.sessionId}
-                style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={sessionNotes}
-                onChangeText={(t) => { notesInputValue.current = t; }}
-                onEndEditing={(e) => handleSaveNotes(e.nativeEvent.text)}
-                placeholder="Add session notes…"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                textAlignVertical="top"
-                autoFocus
-              />
-            ) : sessionNotes.trim() ? (
-              <Text style={[styles.notesText, { color: colors.textSecondary }]}>{sessionNotes}</Text>
-            ) : null}
-          </View>
-
-          {/* Location */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
-            <LocationPicker
-              value={sessionLocation}
-              onChange={(loc) => {
-                setSessionLocation(loc);
-                handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
-              }}
-            />
-          </View>
-
-          {/* Friends */}
-          <View
-            style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-            onLayout={(e) => { friendsCardY.current = e.nativeEvent.layout.y; }}
-          >
-            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
-            <SessionFriendPicker
-              initialFriends={sessionFriends}
-              onSave={(names) => {
-                setSessionFriends(names);
-                setSelectedDay(prev => prev ? { ...prev, friends: names } : null);
-                handleSaveSessionMeta(sessionNotes, names, sessionLocation, sessionMediaItems);
-              }}
-              scrollToSelf={(keyboardHeight) => {
-                if (friendsCardY.current > 0) {
-                  // Scroll so the friends card sits in the top third of the space
-                  // above the keyboard, leaving the dropdown visible below the input.
-                  const windowHeight = Dimensions.get('window').height;
-                  const visibleHeight = windowHeight - keyboardHeight;
-                  const scrollY = friendsCardY.current - visibleHeight * 0.25;
-                  detailScrollRef.current?.scrollTo({ y: Math.max(0, scrollY), animated: true });
-                }
-              }}
-            />
-          </View>
-
-          {/* Session Media */}
-          {(() => {
-            // Gather all climb photos for this session
-            const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
-            for (const c of day.climbs) {
-              if (c.mediaUris && c.mediaUris.length > 0) {
-                c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
-              } else if (c.mediaUri) {
-                climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
-              }
-            }
-            const allMedia = [
-              ...sessionMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
-              ...climbMedia,
-            ];
-            return (
-              <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
-                {allMedia.length > 0 ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
-                    {allMedia.map((item, idx) => (
-                      <TouchableOpacity
-                        key={idx}
-                        onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
-                        onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
-                        activeOpacity={0.9}
-                        delayLongPress={400}
-                        style={{ marginRight: SPACING.sm }}
-                      >
-                        <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
-                      </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity
-                      style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
-                      onPress={handlePickSessionMedia}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
-                    </TouchableOpacity>
-                  </ScrollView>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
-                    onPress={handlePickSessionMedia}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          })()}
+          {isActive ? (
+            <>
+              {climbsSection}
+              {notesSection}
+              {locationSection}
+              {friendsSection}
+              {mediaSection}
+            </>
+          ) : (
+            <>
+              {notesSection}
+              {locationSection}
+              {friendsSection}
+              {mediaSection}
+              {climbsSection}
+            </>
+          )}
 
           {/* Actions */}
           <View style={styles.detailActions}>
