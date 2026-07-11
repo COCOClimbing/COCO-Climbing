@@ -855,6 +855,11 @@ export default function FriendsScreen() {
     if (tabResetCount['friends']) {
       setViewingFriend(null);
       setViewingSession(null);
+      // This abandons any open profile without going through onBack, so clear
+      // returnTo too — otherwise a stale cross-screen value (e.g. from a
+      // Sessions-tab visit) could wrongly redirect a later notification-opened
+      // profile's back button.
+      setReturnTo(null);
     }
   }, [tabResetCount['friends']]);
 
