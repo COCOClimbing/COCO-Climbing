@@ -113,7 +113,7 @@ export default function SessionCard({
   const hiddenCommentCount = sessionComments.length - 3;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+    <View style={[styles.card, { borderBottomColor: colors.border }]}>
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
@@ -328,7 +328,7 @@ function SessionCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string[
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 12, borderWidth: 1, padding: SPACING.lg, gap: SPACING.md },
+  card: { borderBottomWidth: 3, paddingVertical: SPACING.lg, gap: SPACING.md },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.bold, letterSpacing: 1 },
   title: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28, marginTop: SPACING.xs },
