@@ -77,7 +77,7 @@ let _cachedDays: DaySession[] = [];
 export default function SessionsScreen() {
   const { colors } = useTheme();
   const { user, avatarUrl, localAvatarUri } = useAuth();
-  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, returnTo, setReturnTo, navigate, viewFriendProfile } = useNav();
+  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, viewFriendProfile } = useNav();
 
   // Keep refs current so load() (stable useCallback with [] deps) can read
   // the latest navPendingSessionId without a stale closure
@@ -94,7 +94,7 @@ export default function SessionsScreen() {
     if (!navPendingSessionId) return;
     const target = days.find(d => d.sessionId === navPendingSessionId);
     if (target) {
-      setSelectedDay(target);
+      scrollToSessionCard(navPendingSessionId);
       clearPendingSessionId();
     }
   }, [navPendingSessionId, days]);
@@ -129,6 +129,9 @@ export default function SessionsScreen() {
   const notesInputValue = useRef('');
   const [listScrollEnabled, setListScrollEnabled] = useState(true);
   const pendingSessionId = useRef<string | null>(null);
+  const sessionsScrollRef = useRef<ScrollView>(null);
+  const sessionCardOffsets = useRef<Record<string, number>>({});
+  const scrollToSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!selectedDay) return;
@@ -245,7 +248,7 @@ export default function SessionsScreen() {
     if (navId) {
       const navTarget = result.find(d => d.sessionId === navId);
       if (navTarget) {
-        setSelectedDay(navTarget);
+        scrollToSessionCard(navId);
         clearNavPendingRef.current();
         return;
       }
@@ -253,9 +256,10 @@ export default function SessionsScreen() {
 
     // Navigate into a newly-created past session after saving
     if (pendingSessionId.current) {
-      const target = result.find(d => d.sessionId === pendingSessionId.current);
+      const targetId = pendingSessionId.current;
+      const target = result.find(d => d.sessionId === targetId);
       pendingSessionId.current = null;
-      if (target) { setSelectedDay(target); return; }
+      if (target) { scrollToSessionCard(targetId); return; }
     }
 
     // Keep selectedDay in sync after reload (use ref to avoid stale closure)
@@ -627,11 +631,22 @@ export default function SessionsScreen() {
     setLogModalVisible(true);
   }
 
+  function scrollToSessionCard(sessionId: string, attemptsLeft = 10) {
+    if (scrollToSessionTimeoutRef.current) clearTimeout(scrollToSessionTimeoutRef.current);
+    const y = sessionCardOffsets.current[sessionId];
+    if (y !== undefined) {
+      sessionsScrollRef.current?.scrollTo({ y: Math.max(0, y - SPACING.lg), animated: true });
+    } else if (attemptsLeft > 0) {
+      scrollToSessionTimeoutRef.current = setTimeout(() => scrollToSessionCard(sessionId, attemptsLeft - 1), 50);
+    }
+  }
+
   function handleCalendarSelect(dateStr: string) {
     setSelectedCalDate(dateStr);
     const existing = listDays.find(d => d.date === dateStr);
     if (existing) {
-      setSelectedDay(existing);
+      setCalendarVisible(false);
+      scrollToSessionCard(existing.sessionId);
     } else {
       handleAddPastSession(dateStr);
       setCalendarVisible(false);
@@ -1346,26 +1361,27 @@ export default function SessionsScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} scrollEnabled={listScrollEnabled}>
+        <ScrollView ref={sessionsScrollRef} contentContainerStyle={styles.list} scrollEnabled={listScrollEnabled}>
           <ActiveSessionCard />
           {listDays.length === 0 && !activeSession && (
             <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
           )}
           {listDays.map(day => (
-            <SessionCard
-              key={day.sessionId}
-              day={day}
-              colors={colors}
-              currentUserId={user?.id}
-              myAvatar={localAvatarUri ?? avatarUrl}
-              onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
-              onShare={() => setShareDay(day)}
-              onOpenClimb={(climb) => setDetailClimb(climb)}
-              onDeleteClimb={async (climbId) => { await deleteClimb(climbId); triggerStatsRefresh(); load(); }}
-              onViewProfile={viewFriendProfile}
-              onSwipeStart={() => setListScrollEnabled(false)}
-              onSwipeEnd={() => setListScrollEnabled(true)}
-            />
+            <View key={day.sessionId} onLayout={(e) => { sessionCardOffsets.current[day.sessionId] = e.nativeEvent.layout.y; }}>
+              <SessionCard
+                day={day}
+                colors={colors}
+                currentUserId={user?.id}
+                myAvatar={localAvatarUri ?? avatarUrl}
+                onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
+                onShare={() => setShareDay(day)}
+                onOpenClimb={(climb) => setDetailClimb(climb)}
+                onDeleteClimb={async (climbId) => { await deleteClimb(climbId); triggerStatsRefresh(); load(); }}
+                onViewProfile={viewFriendProfile}
+                onSwipeStart={() => setListScrollEnabled(false)}
+                onSwipeEnd={() => setListScrollEnabled(true)}
+              />
+            </View>
           ))}
         </ScrollView>
 
