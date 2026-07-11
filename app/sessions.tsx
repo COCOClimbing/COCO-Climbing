@@ -263,6 +263,130 @@ export default function SessionsScreen() {
     setSelectedDay(prev => prev ? updater(prev) : null);
   }
 
+  async function handleSaveActiveSessionMeta(sessionId: string, notes: string, friends: { id: string; name: string }[], location: string, mediaItems?: { uri: string; type: 'photo' | 'video' }[], title?: string) {
+    const sessions = await getAllSessions();
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+    const mediaUris = mediaItems?.map(m => m.uri);
+    const mediaTypes = mediaItems?.map(m => m.type);
+    const newTitle = title !== undefined ? title : session.title;
+    const updatedSession = { ...session, title: newTitle || undefined, notes, friends, location: location || undefined, mediaUris, mediaTypes, mediaUri: mediaUris?.[0], mediaType: mediaTypes?.[0] };
+    await saveSession(updatedSession);
+    triggerFeedRefresh();
+    if (user) syncSessionToCloud(updatedSession, user.id).catch(() => {});
+    setDays(prev => prev.map(d => d.sessionId === sessionId ? { ...d, title: newTitle || undefined, notes, friends, location: location || undefined, mediaUris: mediaUris ?? [], mediaTypes: mediaTypes ?? [] } : d));
+  }
+
+  async function handlePickActiveSessionMedia(sessionId: string, currentMediaItems: { uri: string; type: 'photo' | 'video' }[], setMediaItems: (items: { uri: string; type: 'photo' | 'video' }[]) => void, notes: string, friends: { id: string; name: string }[], location: string) {
+    Alert.alert('Add Photo', 'Choose source', [
+      { text: 'Take Photo',    onPress: () => launchActiveSessionMedia('camera', sessionId, currentMediaItems, setMediaItems, notes, friends, location) },
+      { text: 'Photo Library', onPress: () => launchActiveSessionMedia('library', sessionId, currentMediaItems, setMediaItems, notes, friends, location) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function launchActiveSessionMedia(source: 'camera' | 'library', sessionId: string, currentMediaItems: { uri: string; type: 'photo' | 'video' }[], setMediaItems: (items: { uri: string; type: 'photo' | 'video' }[]) => void, notes: string, friends: { id: string; name: string }[], location: string) {
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow camera access in Settings.'); return; }
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow photo library access in Settings.'); return; }
+    }
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsMultipleSelection: true });
+    if (result.canceled || !result.assets?.length) return;
+    if (!user) return;
+
+    const startIdx = currentMediaItems.length;
+    const mediaDir = `${FileSystem.documentDirectory}coco_media/`;
+    try { await FileSystem.makeDirectoryAsync(mediaDir, { intermediates: true }); } catch {}
+    const permanentItems: { uri: string; type: 'photo' | 'video' }[] = [];
+    const isPermanentCopy: boolean[] = [];
+    for (let i = 0; i < result.assets.length; i++) {
+      const asset = result.assets[i];
+      const destUri = `${mediaDir}session_${sessionId}_${startIdx + i}_${Date.now()}.jpg`;
+      try {
+        await FileSystem.copyAsync({ from: asset.uri, to: destUri });
+        permanentItems.push({ uri: destUri, type: 'photo' });
+        isPermanentCopy.push(true);
+      } catch (copyErr: any) {
+        console.warn('[launchActiveSessionMedia] copy to permanent storage failed:', copyErr);
+        permanentItems.push({ uri: asset.uri, type: 'photo' });
+        isPermanentCopy.push(false);
+      }
+    }
+
+    const withLocal = [...currentMediaItems, ...permanentItems];
+    setMediaItems(withLocal);
+
+    const permanentOnly = permanentItems.filter((_, i) => isPermanentCopy[i]);
+    if (permanentOnly.length > 0) {
+      const withPermanent = [...currentMediaItems, ...permanentOnly];
+      await handleSaveActiveSessionMeta(sessionId, notes, friends, location, withPermanent);
+    }
+
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) {
+      console.warn('[launchActiveSessionMedia] no auth session — upload skipped, file:// saved for retry');
+      return;
+    }
+
+    const resolved = [...withLocal];
+    let anyUploaded = false;
+
+    for (let i = 0; i < permanentItems.length; i++) {
+      const item = permanentItems[i];
+      const slot = startIdx + i;
+      try {
+        const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
+        const url = await uploadMedia(item.uri, path, authSession.access_token);
+        resolved[slot] = { uri: url, type: item.type };
+        anyUploaded = true;
+      } catch (uploadErr: any) {
+        console.warn('[launchActiveSessionMedia] R2 upload failed for slot', slot, ':', uploadErr);
+      }
+    }
+
+    if (anyUploaded) {
+      setMediaItems(resolved);
+      const allSessions = await getAllSessions();
+      const sess = allSessions.find(s => s.id === sessionId);
+      if (sess) {
+        const updatedUris = resolved.map(m => m.uri);
+        const updatedTypes = resolved.map(m => m.type);
+        const updated = { ...sess, mediaUris: updatedUris, mediaTypes: updatedTypes, mediaUri: updatedUris[0], mediaType: updatedTypes[0] };
+        await saveSession(updated);
+        if (user) syncSessionToCloud(updated, user.id).catch(() => {});
+        triggerFeedRefresh();
+        setDays(prev => prev.map(d => d.sessionId === sessionId ? { ...d, mediaUris: updatedUris, mediaTypes: updatedTypes } : d));
+      }
+      for (let i = 0; i < permanentItems.length; i++) {
+        if (isPermanentCopy[i] && resolved[startIdx + i]?.uri?.startsWith('http')) {
+          FileSystem.deleteAsync(permanentItems[i].uri, { idempotent: true }).catch(() => {});
+        }
+      }
+    }
+  }
+
+  function handleRemoveActiveSessionMediaItem(index: number, sessionId: string, currentMediaItems: { uri: string; type: 'photo' | 'video' }[], setMediaItems: (items: { uri: string; type: 'photo' | 'video' }[]) => void, notes: string, friends: { id: string; name: string }[], location: string) {
+    Alert.alert('Remove Photo', 'Remove this photo?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive', onPress: () => {
+          const removedUri = currentMediaItems[index]?.uri;
+          const updated = currentMediaItems.filter((_, i) => i !== index);
+          setMediaItems(updated);
+          handleSaveActiveSessionMeta(sessionId, notes, friends, location, updated);
+          if (removedUri?.startsWith('http')) {
+            deleteR2MediaUrls([removedUri]).catch(() => {});
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleSaveTitle(title: string) {
     setSessionTitle(title);
     setEditingTitle(false);
@@ -494,70 +618,285 @@ export default function SessionsScreen() {
   const SCREEN_HEIGHT = Dimensions.get('window').height;
 
   function ActiveSessionCard() {
+    const [activeTitle, setActiveTitle] = useState('');
+    const [activeEditingTitle, setActiveEditingTitle] = useState(false);
+    const activeTitleInputValue = useRef('');
+    const [activeNotes, setActiveNotes] = useState('');
+    const [activeEditingNotes, setActiveEditingNotes] = useState(false);
+    const activeNotesInputValue = useRef('');
+    const [activeFriends, setActiveFriends] = useState<{ id: string; name: string }[]>([]);
+    const [activeLocation, setActiveLocation] = useState('');
+    const [activeMediaItems, setActiveMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
+    const [activeDetailScrollEnabled, setActiveDetailScrollEnabled] = useState(true);
+
+    useEffect(() => {
+      setActiveTitle(activeSession?.title ?? '');
+      setActiveNotes(activeSession?.notes ?? '');
+      setActiveFriends(activeSession?.friends ?? []);
+      setActiveLocation(activeSession?.location ?? '');
+      if (activeSession?.mediaUris && activeSession.mediaUris.length > 0) {
+        setActiveMediaItems(activeSession.mediaUris.map((uri, i) => ({ uri, type: activeSession.mediaTypes?.[i] ?? 'photo' })));
+      } else {
+        setActiveMediaItems([]);
+      }
+      setActiveEditingNotes(false);
+      setActiveEditingTitle(false);
+    }, [activeSession?.sessionId]);
+
     if (!activeSession) return null;
 
-    const { sends, hardest, projecting, gradedCount } = sessionStats(activeSession);
-    const label = formatSessionLabel(activeSession);
+    const { sends, hardest, projecting } = sessionStats(activeSession);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
 
-    return (
-      <>
-      <View style={[styles.sessionBlock, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, marginBottom: 4 }]}>
-        {/* Tappable top row → detail view */}
-        <TouchableOpacity
-          style={styles.sessionHeader}
-          onPress={() => setSelectedDay(activeSession)}
-          activeOpacity={0.75}
-        >
-          <View style={styles.sessionLeft}>
-            <View style={styles.activeBadgeRow}>
-              <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
-              <Text style={[styles.sessionDay, { color: colors.accent, fontFamily: FONTS.family.bold }]}>{label.top}</Text>
-            </View>
-            <Text style={[styles.sessionDate, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{label.bottom}</Text>
-          </View>
-          <View style={styles.sessionMeta}>
-            {hardest && (
-              <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
-                <Text style={[styles.hardestText, { color: hardestTypeColor, fontFamily: FONTS.family.bold }]}>{hardest.grade}</Text>
-              </View>
-            )}
-            {projecting
-              ? <Text style={[styles.sessionStatLabel, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
-              : gradedCount > 0 ? <>
-                  <View>
-                    <Text style={[styles.sessionStatVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{gradedCount}</Text>
-                    <Text style={[styles.sessionStatLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>logged</Text>
-                  </View>
-                  <View>
-                    <Text style={[styles.sessionStatVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{sends}</Text>
-                    <Text style={[styles.sessionStatLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>sends</Text>
-                  </View>
-                </> : null
-            }
-            <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
-          </View>
-        </TouchableOpacity>
+    const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
+    for (const c of activeSession.climbs) {
+      if (c.mediaUris && c.mediaUris.length > 0) {
+        c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
+      } else if (c.mediaUri) {
+        climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
+      }
+    }
+    const allActiveMedia = [
+      ...activeMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
+      ...climbMedia,
+    ];
 
-        {/* End Session footer button */}
-        <TouchableOpacity
-          style={[styles.endSessionRow, { borderTopColor: colors.accent + '40' }]}
-          onPress={async () => {
-            if (activeSessionId) {
-              await endSession(activeSessionId);
-              const sessions = await import('../utils/storage').then(m => m.getAllSessions());
-              const ended = sessions.find(s => s.id === activeSessionId);
-              if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
-            }
-            await load();
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.endSessionText, { color: colors.accent }]}>End Session</Text>
-        </TouchableOpacity>
+    return (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, gap: SPACING.md, marginBottom: SPACING.md }]}>
+        {/* Active badge */}
+        <View style={styles.activeBadgeRow}>
+          <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
+          <Text style={[styles.detailDay, { color: colors.accent }]}>ACTIVE SESSION</Text>
+        </View>
+
+        {/* Editable title */}
+        {activeEditingTitle ? (
+          <TextInput
+            style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
+            defaultValue={activeTitle || sessionTimeOfDay(activeSession)}
+            onChangeText={t => { activeTitleInputValue.current = t; }}
+            onEndEditing={e => {
+              const t = e.nativeEvent.text.trim();
+              setActiveTitle(t);
+              setActiveEditingTitle(false);
+              handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, activeLocation, activeMediaItems, t);
+            }}
+            onSubmitEditing={e => {
+              const t = e.nativeEvent.text.trim();
+              setActiveTitle(t);
+              setActiveEditingTitle(false);
+              handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, activeLocation, activeMediaItems, t);
+            }}
+            placeholder={sessionTimeOfDay(activeSession)}
+            placeholderTextColor={colors.textMuted}
+            autoFocus
+            selectTextOnFocus
+            returnKeyType="done"
+          />
+        ) : (
+          <TouchableOpacity
+            style={styles.detailTitleRow}
+            onPress={() => { activeTitleInputValue.current = activeTitle; setActiveEditingTitle(true); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
+              {activeTitle.trim() || sessionTimeOfDay(activeSession)}
+            </Text>
+            <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
+          </TouchableOpacity>
+        )}
+
+        {/* Stats row */}
+        <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
+          {projecting ? (
+            <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
+          ) : (
+            <>
+              <View style={styles.todayStat}>
+                <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{activeSession.climbs.reduce((s, c) => s + climbCount(c), 0)}</Text>
+                <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
+              </View>
+              <View style={styles.todayStat}>
+                <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{sends}</Text>
+                <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>sends</Text>
+              </View>
+            </>
+          )}
+          {hardest && (
+            <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
+              <Text style={[styles.hardestText, { color: hardestTypeColor }]}>{hardest.grade}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Climbs */}
+        {activeSession.climbs.length === 0 ? (
+          <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
+        ) : (
+          activeSession.climbs.map(c => (
+            <SwipeToDelete
+              key={c.id}
+              onSwipeStart={() => setActiveDetailScrollEnabled(false)}
+              onSwipeEnd={() => setActiveDetailScrollEnabled(true)}
+              onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
+              rightAction={c.outcome === 'attempt' ? {
+                label: 'Send',
+                color: colors.accentGreen,
+                onPress: async () => {
+                  await saveClimb({ ...c, outcome: 'send', attempts: (c.attempts ?? 1) + 1 });
+                  triggerStatsRefresh();
+                  load();
+                },
+              } : undefined}
+            >
+              <ClimbCard
+                climb={c}
+                compact
+                onPress={() => { setEditingClimb(c); setLogModalVisible(true); }}
+                onIncrementAttempts={async () => {
+                  await saveClimb({ ...c, attempts: (c.attempts ?? 1) + 1 });
+                  load();
+                }}
+              />
+            </SwipeToDelete>
+          ))
+        )}
+
+        {/* Notes */}
+        <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <View style={styles.metaLabelRow}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+            {activeEditingNotes ? (
+              <TouchableOpacity
+                onPress={() => {
+                  const t = activeNotesInputValue.current;
+                  setActiveNotes(t);
+                  setActiveEditingNotes(false);
+                  handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => { activeNotesInputValue.current = activeNotes; setActiveEditingNotes(true); }} activeOpacity={0.7}>
+                <Text style={[styles.metaAction, { color: colors.accent }]}>
+                  {activeNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {activeEditingNotes ? (
+            <TextInput
+              key={activeSession.sessionId}
+              style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
+              defaultValue={activeNotes}
+              onChangeText={(t) => { activeNotesInputValue.current = t; }}
+              onEndEditing={(e) => {
+                const t = e.nativeEvent.text;
+                setActiveNotes(t);
+                setActiveEditingNotes(false);
+                handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems);
+              }}
+              placeholder="Add session notes…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoFocus
+            />
+          ) : activeNotes.trim() ? (
+            <Text style={[styles.notesText, { color: colors.textSecondary }]}>{activeNotes}</Text>
+          ) : null}
+        </View>
+
+        {/* Location */}
+        <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
+          <View style={{ marginBottom: -SPACING.md }}>
+            <LocationPicker
+              value={activeLocation}
+              onChange={(loc) => {
+                setActiveLocation(loc);
+                handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, loc, activeMediaItems);
+              }}
+            />
+          </View>
+        </View>
+
+        {/* Climbing With */}
+        <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
+          <SessionFriendPicker
+            initialFriends={activeFriends}
+            onSave={(names) => {
+              setActiveFriends(names);
+              handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, names, activeLocation, activeMediaItems);
+            }}
+          />
+        </View>
+
+        {/* Media */}
+        <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
+          {allActiveMedia.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+              {allActiveMedia.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => { setViewerUris(allActiveMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
+                  onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveActiveSessionMediaItem(item.sessionIndex, activeSession.sessionId, activeMediaItems, setActiveMediaItems, activeNotes, activeFriends, activeLocation)}
+                  activeOpacity={0.9}
+                  delayLongPress={400}
+                  style={{ marginRight: SPACING.sm }}
+                >
+                  <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                onPress={() => handlePickActiveSessionMedia(activeSession.sessionId, activeMediaItems, setActiveMediaItems, activeNotes, activeFriends, activeLocation)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : (
+            <TouchableOpacity
+              style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+              onPress={() => handlePickActiveSessionMedia(activeSession.sessionId, activeMediaItems, setActiveMediaItems, activeNotes, activeFriends, activeLocation)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Actions */}
+        <View style={styles.detailActions}>
+          <TouchableOpacity
+            style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
+            onPress={async () => {
+              if (activeSessionId) {
+                await endSession(activeSessionId);
+                const sessions = await import('../utils/storage').then(m => m.getAllSessions());
+                const ended = sessions.find(s => s.id === activeSessionId);
+                if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
+              }
+              await load();
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.logClimbBtnText}>End Session</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { borderColor: colors.border }]}
+            onPress={() => setShareDay(activeSession)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Share</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={[styles.activeDivider, { backgroundColor: colors.border }]} />
-      </>
     );
   }
 
