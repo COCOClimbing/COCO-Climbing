@@ -35,6 +35,7 @@ import {
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
 import { DaySession, climbCount, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel } from '../utils/sessionHelpers';
+import SessionCard from '../components/SessionCard';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
@@ -1140,65 +1141,6 @@ export default function SessionsScreen() {
 
   // ── History row ───────────────────────────────────────────────────────────────
 
-  function renderDay({ item }: { item: DaySession }) {
-    const { sends, hardest, projecting, gradedCount } = sessionStats(item);
-    const label = formatSessionLabel(item);
-    const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
-
-    return (
-      <SwipeToDelete
-        key={item.sessionId}
-        heightOffset={0}
-        onSwipeStart={() => setListScrollEnabled(false)}
-        onSwipeEnd={() => setListScrollEnabled(true)}
-        onDelete={async () => {
-          for (const c of item.climbs) await deleteClimb(c.id);
-          await deleteSession(item.sessionId);
-          triggerStatsRefresh();
-          await load();
-        }}
-      >
-        <TouchableOpacity
-          style={[styles.sessionBlock, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-          onPress={() => setSelectedDay(item)}
-          activeOpacity={0.75}
-        >
-          <View style={styles.sessionHeader}>
-            <View style={styles.sessionLeft}>
-              <Text style={[styles.sessionDay, { color: colors.textMuted, fontFamily: FONTS.family.bold }]}>
-                {label.top}
-              </Text>
-              <Text style={[styles.sessionDate, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>
-                {label.bottom}
-              </Text>
-            </View>
-            <View style={styles.sessionMeta}>
-              {hardest && (
-                <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
-                  <Text style={[styles.hardestText, { color: hardestTypeColor, fontFamily: FONTS.family.bold }]}>{hardest.grade}</Text>
-                </View>
-              )}
-              {projecting
-                ? <Text style={[styles.sessionStatLabel, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
-                : gradedCount > 0 ? <>
-                    <View>
-                      <Text style={[styles.sessionStatVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{gradedCount}</Text>
-                      <Text style={[styles.sessionStatLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>logged</Text>
-                    </View>
-                    <View>
-                      <Text style={[styles.sessionStatVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{sends}</Text>
-                      <Text style={[styles.sessionStatLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>sends</Text>
-                    </View>
-                  </> : null
-              }
-              <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </SwipeToDelete>
-    );
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const photoViewerModal = (
@@ -1270,21 +1212,26 @@ export default function SessionsScreen() {
           </TouchableOpacity>
         </View>
 
-        <FlatList
-          ref={listRef}
-          data={listDays}
-          keyExtractor={item => item.sessionId}
-          renderItem={renderDay}
-          contentContainerStyle={styles.list}
-          scrollEnabled={listScrollEnabled}
-          onScrollToIndexFailed={() => {}}
-          ListHeaderComponent={<ActiveSessionCard />}
-          ListEmptyComponent={
-            !activeSession
-              ? <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
-              : null
-          }
-        />
+        <ScrollView contentContainerStyle={styles.list}>
+          <ActiveSessionCard />
+          {listDays.length === 0 && !activeSession && (
+            <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
+          )}
+          {listDays.map(day => (
+            <SessionCard
+              key={day.sessionId}
+              day={day}
+              colors={colors}
+              currentUserId={user?.id}
+              myAvatar={localAvatarUri ?? avatarUrl}
+              onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
+              onShare={() => setShareDay(day)}
+              onOpenClimb={(climb) => setDetailClimb(climb)}
+              onDeleteClimb={async (climbId) => { await deleteClimb(climbId); triggerStatsRefresh(); load(); }}
+              onViewProfile={viewFriendProfile}
+            />
+          ))}
+        </ScrollView>
 
         <MiniCalendar
           visible={calendarVisible}
