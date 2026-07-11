@@ -746,7 +746,7 @@ const detailStyles = StyleSheet.create({
 
 export default function FriendsScreen() {
   const { colors } = useTheme();
-  const { navigate, screen, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
+  const { navigate, screen, returnTo, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
   const myAvatar = localAvatarUri ?? avatarUrl;
   const insets = useSafeAreaInsets();
@@ -1340,6 +1340,7 @@ export default function FriendsScreen() {
   }
 
   function openFriendProfile(friend: FriendProfile, source: 'activity' | 'friends' = 'activity') {
+    setReturnTo(null);
     setFriendSource(source);
     setViewingFriend(friend);
   }
@@ -1678,8 +1679,13 @@ export default function FriendsScreen() {
           friend={viewingFriend}
           onBack={() => {
             setViewingFriend(null);
-            if (friendSource === 'friends') openFriends();
-            else {
+            if (returnTo && returnTo !== 'friends') {
+              const dest = returnTo;
+              setReturnTo(null);
+              navigate(dest);
+            } else if (friendSource === 'friends') {
+              openFriends();
+            } else {
               const y = feedScrollY.current;
               if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
             }

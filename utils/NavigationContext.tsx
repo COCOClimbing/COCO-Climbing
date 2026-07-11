@@ -96,6 +96,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }
 
   function viewFriendProfile(profile: PendingFriendProfile) {
+    if (screen !== 'friends') setReturnTo(screen);
     setPendingFriendProfile(profile);
     setScreen('friends');
     setDrawerOpen(false);
