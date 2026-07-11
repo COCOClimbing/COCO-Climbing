@@ -15,10 +15,9 @@ interface Props {
   onFocus?: () => void;
   onDropdownChange?: (open: boolean) => void;
   dropup?: boolean;
-  editable?: boolean;
 }
 
-export default function FriendPicker({ selected, onChange, onFocus, onDropdownChange, dropup, editable = true }: Props) {
+export default function FriendPicker({ selected, onChange, onFocus, onDropdownChange, dropup }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
@@ -45,10 +44,6 @@ export default function FriendPicker({ selected, onChange, onFocus, onDropdownCh
     onDropdownChange?.(focused);
   }, [focused]);
 
-  useEffect(() => {
-    if (!editable) setFocused(false);
-  }, [editable]);
-
   function handleSelect(f: FriendProfile) {
     Keyboard.dismiss();
     onChange([...selected, { id: f.id, name: f.name }]);
@@ -70,91 +65,78 @@ export default function FriendPicker({ selected, onChange, onFocus, onDropdownCh
       {selected.length > 0 && (
         <View style={styles.chips}>
           {selected.map(s => (
-            editable ? (
-              <TouchableOpacity
-                key={s.id}
-                onPress={() => handleRemove(s.id)}
-                style={[styles.chip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.chipText, { color: colors.accent }]}>{s.name}</Text>
-                <Text style={[styles.chipX, { color: colors.accent }]}>×</Text>
-              </TouchableOpacity>
-            ) : (
-              <View
-                key={s.id}
-                style={[styles.chip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-              >
-                <Text style={[styles.chipText, { color: colors.accent }]}>{s.name}</Text>
-              </View>
-            )
+            <TouchableOpacity
+              key={s.id}
+              onPress={() => handleRemove(s.id)}
+              style={[styles.chip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, { color: colors.accent }]}>{s.name}</Text>
+              <Text style={[styles.chipX, { color: colors.accent }]}>×</Text>
+            </TouchableOpacity>
           ))}
         </View>
       )}
 
-      {editable && (
-        <>
-          {/* Search input */}
-          <View style={[styles.inputRow, { backgroundColor: colors.bgElevated, borderColor: focused ? colors.accent : colors.border }]}>
-            <TextInput
-              style={[styles.input, { color: colors.textPrimary }]}
-              value={query}
-              onChangeText={setQuery}
-              onFocus={() => { setFocused(true); onFocus?.(); }}
-              onBlur={handleBlur}
-              placeholder="Search friends…"
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="search"
-              autoCorrect={false}
-              autoCapitalize="none"
-            />
-            {loading
-              ? <ActivityIndicator size="small" color={colors.textMuted} style={{ marginRight: SPACING.sm }} />
-              : query.trim().length > 0
-                ? (
-                  <TouchableOpacity onPress={() => setQuery('')} style={{ marginRight: SPACING.sm }}>
-                    <Text style={[styles.clearBtn, { color: colors.textMuted }]}>×</Text>
-                  </TouchableOpacity>
-                )
-                : null
-            }
-          </View>
+      {/* Search input */}
+      <View style={[styles.inputRow, { backgroundColor: colors.bgElevated, borderColor: focused ? colors.accent : colors.border }]}>
+        <TextInput
+          style={[styles.input, { color: colors.textPrimary }]}
+          value={query}
+          onChangeText={setQuery}
+          onFocus={() => { setFocused(true); onFocus?.(); }}
+          onBlur={handleBlur}
+          placeholder="Search friends…"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {loading
+          ? <ActivityIndicator size="small" color={colors.textMuted} style={{ marginRight: SPACING.sm }} />
+          : query.trim().length > 0
+            ? (
+              <TouchableOpacity onPress={() => setQuery('')} style={{ marginRight: SPACING.sm }}>
+                <Text style={[styles.clearBtn, { color: colors.textMuted }]}>×</Text>
+              </TouchableOpacity>
+            )
+            : null
+        }
+      </View>
 
-          {/* Dropdown results */}
-          {focused && (
-            <ScrollView
-              style={[styles.dropdown, { backgroundColor: colors.bgCard, borderColor: colors.border }, dropup && styles.dropup]}
-              keyboardShouldPersistTaps="always"
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-            >
-              {suggestions.length === 0 ? (
-                <Text style={[styles.empty, { color: colors.textMuted }]}>
-                  {following.length === 0 ? 'Follow someone to tag them' : 'No matching friends'}
-                </Text>
-              ) : (
-                suggestions.map((f, i) => (
-                  <TouchableOpacity
-                    key={f.id}
-                    onPress={() => handleSelect(f)}
-                    style={[styles.row, { borderTopColor: colors.border }, i === 0 && { borderTopWidth: 0 }]}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.avatar, { backgroundColor: colors.accentSoft }]}>
-                      <Text style={[styles.avatarLetter, { color: colors.accent }]}>
-                        {f.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.info}>
-                      <Text style={[styles.name, { color: colors.textPrimary }]}>{f.name}</Text>
-                      {f.username ? <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text> : null}
-                    </View>
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+      {/* Dropdown results */}
+      {focused && (
+        <ScrollView
+          style={[styles.dropdown, { backgroundColor: colors.bgCard, borderColor: colors.border }, dropup && styles.dropup]}
+          keyboardShouldPersistTaps="always"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+        >
+          {suggestions.length === 0 ? (
+            <Text style={[styles.empty, { color: colors.textMuted }]}>
+              {following.length === 0 ? 'Follow someone to tag them' : 'No matching friends'}
+            </Text>
+          ) : (
+            suggestions.map((f, i) => (
+              <TouchableOpacity
+                key={f.id}
+                onPress={() => handleSelect(f)}
+                style={[styles.row, { borderTopColor: colors.border }, i === 0 && { borderTopWidth: 0 }]}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.avatar, { backgroundColor: colors.accentSoft }]}>
+                  <Text style={[styles.avatarLetter, { color: colors.accent }]}>
+                    {f.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.info}>
+                  <Text style={[styles.name, { color: colors.textPrimary }]}>{f.name}</Text>
+                  {f.username ? <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))
           )}
-        </>
+        </ScrollView>
       )}
     </View>
   );
