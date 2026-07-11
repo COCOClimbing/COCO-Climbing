@@ -3,10 +3,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
-import { DaySession, sessionStats, mergeClimbs, formatSessionLabel, sessionTimeOfDay } from '../utils/sessionHelpers';
-import ClimbCard from './ClimbCard';
-import SwipeToDelete from './SwipeToDelete';
+import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
+import { DaySession, sessionStats, formatSessionLabel, sessionTimeOfDay } from '../utils/sessionHelpers';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import {
@@ -61,23 +59,16 @@ interface SessionCardProps {
   myAvatar: string | null | undefined;
   onEdit: () => void;
   onShare: () => void;
-  onOpenClimb: (climb: Climb) => void;
-  onDeleteClimb: (climbId: string) => void | Promise<void>;
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
-  onSwipeStart?: () => void;
-  onSwipeEnd?: () => void;
   condensed?: boolean;
 }
 
 export default function SessionCard({
-  day, colors, currentUserId, myAvatar, onEdit, onShare, onOpenClimb, onDeleteClimb, onViewProfile, onSwipeStart, onSwipeEnd, condensed = false,
+  day, colors, currentUserId, myAvatar, onEdit, onShare, onViewProfile, condensed = false,
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount } = sessionStats(day);
   const label = formatSessionLabel(day);
-  const displayClimbs = mergeClimbs(day.climbs);
   const climbTypeLabel = CLIMB_TYPES.find(t => t.id === hardest?.type)?.label ?? '—';
-
-  const [climbsExpanded, setClimbsExpanded] = useState(false);
 
   const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
   const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
@@ -152,7 +143,7 @@ export default function SessionCard({
   const hiddenCommentCount = sessionComments.length - 3;
 
   return (
-    <View style={[styles.card, { borderBottomColor: colors.border }]}>
+    <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.border }]} onPress={onEdit}>
       {/* Header */}
       <View style={styles.headerRow}>
         <Text style={[styles.dateLabel, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
@@ -250,31 +241,6 @@ export default function SessionCard({
         </ScrollView>
       )}
 
-      {/* Climbs — collapsed by default */}
-      <TouchableOpacity
-        onPress={() => setClimbsExpanded(v => !v)}
-        activeOpacity={0.7}
-        style={[styles.cardExpandBtn, { borderColor: colors.border }]}
-      >
-        <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
-          {climbsExpanded ? 'Hide climbs' : 'View climbs'}
-        </Text>
-        <Ionicons name={climbsExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
-      </TouchableOpacity>
-      {climbsExpanded && (
-        <View style={{ gap: SPACING.sm, marginBottom: SPACING.md }}>
-          {displayClimbs.length === 0 ? (
-            <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
-          ) : (
-            displayClimbs.map(c => (
-              <SwipeToDelete key={c.id} heightOffset={0} onDelete={() => onDeleteClimb(c.id)} onSwipeStart={onSwipeStart} onSwipeEnd={onSwipeEnd}>
-                <ClimbCard climb={c} compact onPress={() => onOpenClimb(c)} />
-              </SwipeToDelete>
-            ))
-          )}
-        </View>
-      )}
-
       {/* Likes / comment counts */}
       {!condensed && (sessionLikes.length > 0 || sessionComments.length > 0) && (
         <View style={styles.cardCounts}>
@@ -363,7 +329,7 @@ export default function SessionCard({
           onClose={() => setViewerUris(null)}
         />
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -439,19 +405,6 @@ const styles = StyleSheet.create({
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },
-  cardExpandBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.md,
-  },
-  cardExpandTxt: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
-  noClimbs: { fontSize: FONTS.sizes.sm, textAlign: 'center', paddingVertical: SPACING.md },
   cardCounts: { flexDirection: 'row', gap: SPACING.md, paddingBottom: SPACING.xs, marginTop: SPACING.md, alignItems: 'center' },
   cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
   cardActions: {
