@@ -20,7 +20,14 @@ const TABS: { id: ScreenId; label: string; icon: IoniconName; iconActive: Ionico
 
 export default function BottomTabBar() {
   const { colors } = useTheme();
-  const { screen, navigate } = useNav();
+  const { screen, returnTo, navigate } = useNav();
+  // While viewing a profile opened from another tab, the screen is 'friends'
+  // underneath but you're really looking at a pushed detail view — keep
+  // highlighting the origin tab, since "← Back" lands you there. Only applies
+  // on the 'friends' screen: returnTo is also set by navigateToSession (e.g.
+  // Stats -> a session), where the current screen genuinely is the
+  // destination and should be highlighted normally.
+  const activeScreen = (screen === 'friends' && returnTo) ? returnTo : screen;
 
   const insets = useSafeAreaInsets();
   const [logModalVisible, setLogModalVisible] = useState(false);
@@ -30,7 +37,7 @@ export default function BottomTabBar() {
   const rightTabs = TABS.slice(2);
 
   function renderTab(tab: typeof TABS[number]) {
-    const active = screen === tab.id;
+    const active = activeScreen === tab.id;
     const showBadge = false;
     return (
       <TouchableOpacity
