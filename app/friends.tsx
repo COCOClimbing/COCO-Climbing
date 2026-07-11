@@ -24,13 +24,17 @@ import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
-import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
+import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade, Climb } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
+import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback, deleteClimb, triggerStatsRefresh } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
+import { DaySession } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
 import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
+import SessionCard from '../components/SessionCard';
+import ActivityCard from '../components/ActivityCard';
+import ClimbDetailModal from '../components/ClimbDetailModal';
 import { format, parseISO } from 'date-fns';
 import {
   FriendProfile,
@@ -121,8 +125,6 @@ const avatarStyles = StyleSheet.create({
 
 // ─── FriendDetailView ─────────────────────────────────────────────────────────
 
-type DayGroup = { date: string; climbs: any[] };
-
 const PHOTO_HEIGHT = 220;
 
 function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidth?: number; onPress: () => void }) {
@@ -182,11 +184,13 @@ function FriendDetailView({
   onUnblock?: (friendId: string) => void;
   colors: any;
 }) {
-  const { user } = useAuth();
+  const { user, avatarUrl, localAvatarUri } = useAuth();
+  const myAvatar = localAvatarUri ?? avatarUrl;
+  const { navigateToSession, viewFriendProfile } = useNav();
+  const isSelf = user?.id === friend.id;
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [friendStatus, setFriendStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [listSheetOpen, setListSheetOpen] = useState(false);
@@ -195,9 +199,29 @@ function FriendDetailView({
   const [listSheetFollowers, setListSheetFollowers] = useState<FriendProfile[]>([]);
   const [listSheetLoading, setListSheetLoading] = useState(false);
   const [listSheetProfile, setListSheetProfile] = useState<FriendProfile | null>(null);
+  const [ownDays, setOwnDays] = useState<DaySession[]>([]);
+  const [friendSessions, setFriendSessions] = useState<SessionSummary[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [sessionsDaysLoaded, setSessionsDaysLoaded] = useState(14);
+  const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
+  const [sessionsCaughtUp, setSessionsCaughtUp] = useState(false);
+  const canTriggerLoadMoreSessionsRef = useRef(true);
+  const loadingMoreSessionsRef = useRef(false);
+  const [shareDay, setShareDay] = useState<DaySession | null>(null);
+  const [shareFriendEntry, setShareFriendEntry] = useState<SessionSummary | null>(null);
+  const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
+  const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
+  const [preferredRope, setPreferredRope] = useState('yds');
 
   useEffect(() => {
-    Promise.all([loadClimbs(), loadCounts(), loadFriendStatus()]).catch(() => {});
+    Promise.all([loadClimbs(), loadCounts(), loadFriendStatus(), loadSessions()]).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getPreferredDisplayGrades().then(({ boulder, rope }) => {
+      setPreferredBoulder(boulder);
+      setPreferredRope(rope);
+    });
   }, []);
 
   async function loadClimbs() {
@@ -213,6 +237,62 @@ function FriendDetailView({
   async function loadFriendStatus() {
     if (!user) return;
     try { setFriendStatus(await getFriendshipStatus(user.id, friend.id)); } catch {}
+  }
+
+  async function loadSessions(days: number = sessionsDaysLoaded, showLoading: boolean = true): Promise<number> {
+    if (!user) return 0;
+    if (showLoading) setLoadingSessions(true);
+    try {
+      if (isSelf) {
+        const [sessions, allClimbs] = await Promise.all([getAllSessions(), getAllClimbs()]);
+        const activeId = getActiveSessionId();
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - days);
+        const cutoff = daysAgo.toISOString().slice(0, 10);
+        const sessionIdsWithClimbs = new Set(allClimbs.map(c => c.sessionId));
+        const result: DaySession[] = sessions
+          .filter(s => s.id !== activeId && sessionIdsWithClimbs.has(s.id) && s.date >= cutoff)
+          .map(s => ({
+            date: s.date,
+            sessionId: s.id,
+            climbs: allClimbs.filter(c => c.sessionId === s.id),
+            startedAt: s.startedAt ?? '',
+            lastClimbAt: s.lastClimbAt,
+            title: s.title,
+            notes: s.notes,
+            friends: s.friends,
+            location: s.location,
+            mediaUris: s.mediaUris && s.mediaUris.length > 0 ? s.mediaUris : s.mediaUri ? [s.mediaUri] : [],
+            mediaTypes: s.mediaUris && s.mediaUris.length > 0 ? (s.mediaTypes ?? []) : s.mediaType ? [s.mediaType] : [],
+          }))
+          .sort((a, b) => b.date.localeCompare(a.date));
+        setOwnDays(result);
+        if (showLoading) setLoadingSessions(false);
+        return result.length;
+      } else {
+        const result = await getFriendSessionSummaries(friend, days);
+        setFriendSessions(result);
+        if (showLoading) setLoadingSessions(false);
+        return result.length;
+      }
+    } catch {
+      if (showLoading) setLoadingSessions(false);
+      return 0;
+    }
+  }
+
+  async function loadMoreSessions() {
+    if (loadingMoreSessionsRef.current || !canTriggerLoadMoreSessionsRef.current) return;
+    loadingMoreSessionsRef.current = true;
+    canTriggerLoadMoreSessionsRef.current = false;
+    setLoadingMoreSessions(true);
+    const prevCount = isSelf ? ownDays.length : friendSessions.length;
+    const next = sessionsDaysLoaded + 7;
+    setSessionsDaysLoaded(next);
+    const newCount = await loadSessions(next, false);
+    setSessionsCaughtUp(newCount <= prevCount);
+    setLoadingMoreSessions(false);
+    loadingMoreSessionsRef.current = false;
   }
 
   async function openListSheet(type: 'following' | 'followers') {
@@ -268,6 +348,13 @@ function FriendDetailView({
   const monthClimbs = climbs.filter(c => normDate(c.date) >= monthStart);
   const monthSends = monthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
 
+  const BOULDER_SYSTEMS = new Set(['v-scale', 'font']);
+  function displayGrade(grade: string | null, fromSystem: string | null): string {
+    if (!grade || !fromSystem) return grade ?? '—';
+    const preferred = BOULDER_SYSTEMS.has(fromSystem) ? preferredBoulder : preferredRope;
+    return convertGrade(grade, fromSystem, preferred);
+  }
+
   // Hardest sends by climb type
   const GRADED_TYPES = [
     { id: 'boulder', label: 'Boulder' },
@@ -288,28 +375,6 @@ function FriendDetailView({
     return { label, grade: convertGrade(best.grade, best.grade_system, sys) };
   });
 
-  // Sessions
-  const dayMap: Record<string, any[]> = {};
-  climbs.forEach(c => {
-    const d = normDate(c.date);
-    if (!dayMap[d]) dayMap[d] = [];
-    dayMap[d].push(c);
-  });
-  const dayGroups: DayGroup[] = Object.entries(dayMap)
-    .map(([date, climbList]) => ({ date, climbs: climbList }))
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  function mapToClimb(c: any) {
-    return {
-      id: c.id, date: c.date, sessionId: c.session_id,
-      type: c.type, outcome: c.outcome, styles: c.styles ?? [],
-      environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
-      routeName: c.route_name, location: c.location, notes: c.notes,
-      attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
-      projectId: c.project_id, projectName: c.project_name,
-    };
-  }
-
   const friendBtnLabel = friendStatus === 'accepted' ? 'Following'
     : friendStatus === 'pending_sent' ? 'Requested'
     : friendStatus === 'pending_received' ? 'Follow Back'
@@ -327,7 +392,21 @@ function FriendDetailView({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={detailStyles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={detailStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={e => {
+          const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+          const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+          if (distanceFromBottom < 200) {
+            loadMoreSessions();
+          } else {
+            canTriggerLoadMoreSessionsRef.current = true;
+          }
+        }}
+      >
 
         {/* ── Profile header (account-style) ── */}
         <View style={detailStyles.profileHeader}>
@@ -456,39 +535,62 @@ function FriendDetailView({
 
             {/* ── Sessions ── */}
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>SESSIONS</Text>
-            {dayGroups.length === 0 ? (
-              <Text style={[detailStyles.emptyText, { color: colors.textMuted }]}>No sessions logged yet.</Text>
+            {loadingSessions ? (
+              <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />
+            ) : isSelf ? (
+              ownDays.length === 0 ? (
+                <Text style={[detailStyles.emptyText, { color: colors.textMuted }]}>No sessions logged yet.</Text>
+              ) : (
+                <>
+                  {ownDays.map(day => (
+                    <SessionCard
+                      key={day.sessionId}
+                      day={day}
+                      colors={colors}
+                      currentUserId={user?.id}
+                      myAvatar={myAvatar}
+                      onEdit={() => navigateToSession(day.sessionId)}
+                      onShare={() => setShareDay(day)}
+                      onOpenClimb={(climb) => setDetailClimb(climb)}
+                      onDeleteClimb={async (climbId) => {
+                        await deleteClimb(climbId);
+                        triggerStatsRefresh();
+                        loadClimbs();
+                        loadSessions(sessionsDaysLoaded, false);
+                      }}
+                      onViewProfile={viewFriendProfile}
+                    />
+                  ))}
+                  {loadingMoreSessions && <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />}
+                  {!loadingMoreSessions && sessionsCaughtUp && (
+                    <Text style={[detailStyles.emptyText, { color: colors.textMuted, textAlign: 'center', marginTop: SPACING.md }]}>You're all caught up</Text>
+                  )}
+                </>
+              )
             ) : (
-              dayGroups.map(day => {
-                const isExpanded = expandedDate === day.date;
-                const daySends = day.climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
-                const dayClimbCount = day.climbs.reduce((s: number, c: any) => {
-                  if (c.type === 'hangboard' || c.type === 'lift') return s;
-                  if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1;
-                  return s + (c.attempts ?? 1);
-                }, 0);
-                const date = parseISO(day.date);
-                return (
-                  <View key={day.date} style={[detailStyles.sessionBlock, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                    <TouchableOpacity style={detailStyles.sessionHeader} onPress={() => setExpandedDate(isExpanded ? null : day.date)} activeOpacity={0.75}>
-                      <View>
-                        <Text style={[detailStyles.sessionDate, { color: colors.textPrimary }]}>{format(date, 'EEE, MMM d, yyyy')}</Text>
-                        <Text style={[detailStyles.sessionSub, { color: colors.textMuted }]}>
-                          {dayClimbCount} climb{dayClimbCount !== 1 ? 's' : ''} · {daySends} send{daySends !== 1 ? 's' : ''}
-                        </Text>
-                      </View>
-                      <Text style={[detailStyles.chevron, isExpanded && detailStyles.chevronOpen, { color: colors.textMuted }]}>›</Text>
-                    </TouchableOpacity>
-                    {isExpanded && (
-                      <View style={[detailStyles.sessionContent, { borderTopColor: colors.border }]}>
-                        {day.climbs.map((c, i) => (
-                          <ClimbCard key={c.id ?? i} climb={mapToClimb(c)} compact />
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })
+              friendSessions.length === 0 ? (
+                <Text style={[detailStyles.emptyText, { color: colors.textMuted }]}>No sessions logged yet.</Text>
+              ) : (
+                <>
+                  {friendSessions.map(entry => (
+                    <ActivityCard
+                      key={entry.sessionId ?? entry.sessionDate}
+                      entry={entry}
+                      colors={colors}
+                      currentUserId={user?.id}
+                      myAvatar={myAvatar}
+                      daysBack={sessionsDaysLoaded}
+                      displayGrade={displayGrade}
+                      onShare={() => setShareFriendEntry(entry)}
+                      onViewProfile={viewFriendProfile}
+                    />
+                  ))}
+                  {loadingMoreSessions && <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />}
+                  {!loadingMoreSessions && sessionsCaughtUp && (
+                    <Text style={[detailStyles.emptyText, { color: colors.textMuted, textAlign: 'center', marginTop: SPACING.md }]}>You're all caught up</Text>
+                  )}
+                </>
+              )
             )}
           </View>
         )}
@@ -552,6 +654,40 @@ function FriendDetailView({
           )}
         </View>
       </Modal>
+
+      <ShareModal
+        visible={!!shareDay || !!shareFriendEntry}
+        data={
+          shareDay
+            ? { date: shareDay.date, climbs: shareDay.climbs, location: shareDay.location, title: shareDay.title, climbingWith: shareDay.friends?.map(f => f.name) }
+            : shareFriendEntry
+            ? {
+                date: shareFriendEntry.sessionDate,
+                climbCount: shareFriendEntry.climbCount,
+                sendCount: shareFriendEntry.sends,
+                flashCount: shareFriendEntry.flashes,
+                hardestGrade: shareFriendEntry.hardestGrade,
+                climbType: shareFriendEntry.climbType,
+                friendName: shareFriendEntry.friend.name,
+                location: shareFriendEntry.location,
+                title: shareFriendEntry.title,
+                climbingWith: shareFriendEntry.partners?.map(p => p.name),
+              }
+            : null
+        }
+        accentColor={colors.accent}
+        onDismiss={() => { setShareDay(null); setShareFriendEntry(null); }}
+      />
+      <ClimbDetailModal
+        visible={!!detailClimb}
+        climb={detailClimb}
+        onClose={() => setDetailClimb(null)}
+        onEdit={() => {
+          const sid = detailClimb?.sessionId;
+          setDetailClimb(null);
+          if (sid) navigateToSession(sid);
+        }}
+      />
     </View>
   );
 }
@@ -599,13 +735,6 @@ const detailStyles = StyleSheet.create({
 
   // Sessions
   emptyText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
-  sessionBlock: { borderRadius: 14, borderWidth: 1, marginBottom: SPACING.sm, overflow: 'hidden' },
-  sessionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.lg, paddingVertical: SPACING.xl },
-  sessionDate: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
-  sessionSub: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
-  chevron: { fontSize: 22, fontFamily: FONTS.family.regular },
-  chevronOpen: { transform: [{ rotate: '90deg' }] },
-  sessionContent: { borderTopWidth: 1, padding: SPACING.lg, gap: SPACING.sm },
 });
 
 
@@ -2331,67 +2460,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: SPACING.md,
-  },
-  sessionBlock: {
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: SPACING.sm,
-    overflow: 'hidden',
-  },
-  sessionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.lg,
-    paddingVertical: SPACING.xl,
-  },
-  sessionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-    flex: 1,
-  },
-  sessionMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  sessionStatVal: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.bold,
-    textAlign: 'center',
-  },
-  sessionStatLabel: {
-    fontSize: 10,
-    fontFamily: FONTS.family.regular,
-    textAlign: 'center',
-  },
-  hardestBadge: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 3,
-  },
-  hardestText: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.bold,
-  },
-  chevron: {
-    fontSize: 22,
-    fontFamily: FONTS.family.regular,
-  },
-  chevronOpen: {
-    transform: [{ rotate: '90deg' }],
-  },
-  sessionContent: {
-    borderTopWidth: 1,
-    padding: SPACING.lg,
-  },
-  noClimbs: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.regular,
-    textAlign: 'center',
-    paddingVertical: SPACING.md,
   },
   // ── Activity card (feed-style, no card) ──
   activityCard: {
