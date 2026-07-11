@@ -493,7 +493,7 @@ function FriendDetailView({
       </ScrollView>
 
       {/* Followers / Following list sheet */}
-      <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
+      <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }} onDismiss={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
         <View style={[detailStyles.container, { backgroundColor: colors.bg }]}>
           {listSheetProfile ? (
             <FriendDetailView
@@ -2097,6 +2097,7 @@ export default function FriendsScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => closeFriends()}
+        onDismiss={() => closeFriends()}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.manageModalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.manageModalHeader, { borderBottomColor: colors.border }]}>

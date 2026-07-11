@@ -206,7 +206,7 @@ export default function LocationPicker({ value, onChange }: Props) {
         )}
       </TouchableOpacity>
 
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onDismiss={() => setModalVisible(false)}>
         <KeyboardAvoidingView
           style={[styles.modal, { backgroundColor: colors.bg }]}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

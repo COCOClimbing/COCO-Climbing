@@ -100,7 +100,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
 
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[ss.container, { backgroundColor: colors.bg }]}>
           <View style={[ss.header, { borderBottomColor: colors.border }]}>

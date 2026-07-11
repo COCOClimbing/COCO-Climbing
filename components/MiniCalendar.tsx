@@ -70,7 +70,7 @@ export default function MiniCalendar({ visible, onClose, activeDates, onSelectDa
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>

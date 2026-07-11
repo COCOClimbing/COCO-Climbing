@@ -64,7 +64,7 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
   const maxCount = Math.max(...gradeEntries.map(([, v]) => v.total), 1);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
         <View style={ss.modalHeader}>
           <TouchableOpacity onPress={onClose} style={ss.modalClose}>

@@ -131,7 +131,7 @@ export default function PastProjectsModal({ visible, onClose }: Props) {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.textPrimary, fontFamily: FONTS.family.heavy }]}>Past Projects</Text>
