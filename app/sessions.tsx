@@ -101,6 +101,12 @@ export default function SessionsScreen() {
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editSessionLikes, setEditSessionLikes] = useState<SessionLike[]>([]);
+  const [editSessionComments, setEditSessionComments] = useState<SessionComment[]>([]);
+  const [editCommentLikesMap, setEditCommentLikesMap] = useState<Record<string, string[]>>({});
+  const [editCommentText, setEditCommentText] = useState('');
+  const [editCommentsExpanded, setEditCommentsExpanded] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [modalSessionId, setModalSessionId] = useState<string | undefined>();
   const [editingClimb, setEditingClimb] = useState<Climb | undefined>();
@@ -125,6 +131,52 @@ export default function SessionsScreen() {
   const listRef = useRef<FlatList>(null);
   const [listScrollEnabled, setListScrollEnabled] = useState(true);
   const pendingSessionId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedDay) return;
+    Promise.all([
+      getSessionLikes(selectedDay.sessionId),
+      getSessionComments(selectedDay.sessionId),
+    ]).then(([likes, comments]) => {
+      setEditSessionLikes(likes);
+      setEditSessionComments(comments);
+      if (comments.length > 0) {
+        getCommentLikes(comments.map(c => c.id)).then(setEditCommentLikesMap);
+      }
+    });
+  }, [selectedDay?.sessionId]);
+
+  async function handleEditCommentLikeToggle(commentId: string, commentAuthorId: string) {
+    if (!user) return;
+    const likedBy = editCommentLikesMap[commentId] ?? [];
+    const alreadyLiked = likedBy.includes(user.id);
+    if (alreadyLiked) {
+      await unlikeComment(commentId, user.id);
+      setEditCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== user.id) }));
+    } else {
+      await likeComment(commentId, user.id);
+      setEditCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, user.id] }));
+      if (commentAuthorId !== user.id && selectedDay) {
+        sendCommentLikeNotification(commentAuthorId, user.id, selectedDay.sessionId).catch(() => {});
+      }
+    }
+  }
+
+  async function handleEditDeleteSessionComment(commentId: string) {
+    if (!selectedDay) return;
+    await deleteSessionComment(commentId);
+    const updated = await getSessionComments(selectedDay.sessionId);
+    setEditSessionComments(updated);
+  }
+
+  async function handleEditSendSessionComment() {
+    if (!user || !editCommentText.trim() || !selectedDay) return;
+    await addSessionComment(selectedDay.sessionId, user.id, editCommentText.trim());
+    setEditCommentText('');
+    Keyboard.dismiss();
+    const updated = await getSessionComments(selectedDay.sessionId);
+    setEditSessionComments(updated);
+  }
 
   // Sync editing state when a different session is opened
   useEffect(() => {
@@ -610,6 +662,22 @@ export default function SessionsScreen() {
     setShareDay(day);
   }
 
+  async function handleDeleteSession(day: DaySession) {
+    Alert.alert('Delete Session', 'This will delete the session and all its climbs. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          for (const c of day.climbs) await deleteClimb(c.id);
+          await deleteSession(day.sessionId);
+          triggerStatsRefresh();
+          setEditModalVisible(false);
+          setSelectedDay(null);
+          await load();
+        },
+      },
+    ]);
+  }
+
 
 
   // ── Active Session Card ───────────────────────────────────────────────────────
@@ -903,6 +971,294 @@ export default function SessionsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+    );
+  }
+
+  // ── Session Edit Modal ────────────────────────────────────────────────────────
+
+  function SessionEditModalContent({ day }: { day: DaySession }) {
+    const { sends, hardest, projecting } = sessionStats(day);
+    const label = formatSessionLabel(day);
+    const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
+    const displayClimbs = mergeClimbs(day.climbs);
+
+    const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
+    for (const c of day.climbs) {
+      if (c.mediaUris && c.mediaUris.length > 0) {
+        c.mediaUris.forEach((uri, i) => climbMedia.push({ uri, type: c.mediaTypes?.[i] ?? 'photo', fromClimb: true, climbId: c.id }));
+      } else if (c.mediaUri) {
+        climbMedia.push({ uri: c.mediaUri, type: c.mediaType ?? 'photo', fromClimb: true, climbId: c.id });
+      }
+    }
+    const allMedia = [
+      ...sessionMediaItems.map((m, i) => ({ ...m, fromClimb: false as const, sessionIndex: i })),
+      ...climbMedia,
+    ];
+
+    const visibleEditComments = editCommentsExpanded ? editSessionComments : editSessionComments.slice(0, 3);
+    const hiddenEditCommentCount = editSessionComments.length - 3;
+
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
+        <View style={[styles.detailTopBar, { borderBottomColor: colors.border, justifyContent: 'flex-end' }]}>
+          <TouchableOpacity onPress={() => { setEditModalVisible(false); setSelectedDay(null); }} style={styles.backBtn} activeOpacity={0.7}>
+            <Text style={[styles.backBtnText, { color: colors.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="never">
+          {/* Session header */}
+          <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
+            <View style={styles.detailHeaderTop}>
+              <Text style={[styles.detailDay, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
+            </View>
+
+            {editingTitle ? (
+              <TextInput
+                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={sessionTitle || sessionTimeOfDay(day)}
+                onChangeText={t => { titleInputValue.current = t; }}
+                onEndEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
+                onSubmitEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
+                placeholder={sessionTimeOfDay(day)}
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+                selectTextOnFocus
+                returnKeyType="done"
+              />
+            ) : (
+              <TouchableOpacity
+                style={styles.detailTitleRow}
+                onPress={() => { titleInputValue.current = sessionTitle; setEditingTitle(true); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
+                  {sessionTitle.trim() || sessionTimeOfDay(day)}
+                </Text>
+                <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
+              </TouchableOpacity>
+            )}
+
+            <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
+              {projecting ? (
+                <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
+              ) : (
+                <>
+                  <View style={styles.todayStat}>
+                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{day.climbs.reduce((s, c) => s + climbCount(c), 0)}</Text>
+                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
+                  </View>
+                  <View style={styles.todayStat}>
+                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{sends}</Text>
+                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>sends</Text>
+                  </View>
+                </>
+              )}
+              {hardest && (
+                <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
+                  <Text style={[styles.hardestText, { color: hardestTypeColor }]}>{hardest.grade}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Notes */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={styles.metaLabelRow}>
+              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+              {editingNotes ? (
+                <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
+                  <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
+                  <Text style={[styles.metaAction, { color: colors.accent }]}>
+                    {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {editingNotes ? (
+              <TextInput
+                key={day.sessionId}
+                style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={sessionNotes}
+                onChangeText={(t) => { notesInputValue.current = t; }}
+                onEndEditing={(e) => handleSaveNotes(e.nativeEvent.text)}
+                placeholder="Add session notes…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                textAlignVertical="top"
+                autoFocus
+              />
+            ) : sessionNotes.trim() ? (
+              <Text style={[styles.notesText, { color: colors.textSecondary }]}>{sessionNotes}</Text>
+            ) : null}
+          </View>
+
+          {/* Location */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
+            <View style={{ marginBottom: -SPACING.md }}>
+              <LocationPicker
+                value={sessionLocation}
+                onChange={(loc) => {
+                  setSessionLocation(loc);
+                  handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
+                }}
+              />
+            </View>
+          </View>
+
+          {/* Climbing With */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
+            <SessionFriendPicker
+              initialFriends={sessionFriends}
+              onSave={(names) => {
+                setSessionFriends(names);
+                setSelectedDay(prev => prev ? { ...prev, friends: names } : null);
+                handleSaveSessionMeta(sessionNotes, names, sessionLocation, sessionMediaItems);
+              }}
+            />
+          </View>
+
+          {/* Media */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
+            {allMedia.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+                {allMedia.map((item, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
+                    onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
+                    activeOpacity={0.9}
+                    delayLongPress={400}
+                    style={{ marginRight: SPACING.sm }}
+                  >
+                    <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                  onPress={handlePickSessionMedia}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <TouchableOpacity
+                style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+                onPress={handlePickSessionMedia}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Climbs */}
+          {displayClimbs.length === 0 ? (
+            <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
+          ) : (
+            displayClimbs.map(c => (
+              <SwipeToDelete
+                key={c.id}
+                onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
+              >
+                <ClimbCard
+                  climb={c}
+                  compact
+                  onPress={() => setDetailClimb(c)}
+                />
+              </SwipeToDelete>
+            ))
+          )}
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: SPACING.sm }]}
+            onPress={() => openLogModal(day.sessionId)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
+          </TouchableOpacity>
+
+          {/* Likes + Comments */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>ACTIVITY</Text>
+            <LikesAvatarRow
+              likers={editSessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (localAvatarUri ?? avatarUrl ?? null) : (l.profile?.avatar_url ?? null) }))}
+              onPressLiker={(l) => viewFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
+              currentUserId={user?.id}
+              colors={colors}
+            />
+            {editSessionComments.length > 0 && (
+              <View style={{ marginTop: SPACING.sm }}>
+                {visibleEditComments.map(c => (
+                  <SwipeableComment
+                    key={c.id}
+                    c={c}
+                    isOwn
+                    onDelete={() => handleEditDeleteSessionComment(c.id)}
+                    onReport={() => {}}
+                    onLike={() => handleEditCommentLikeToggle(c.id, c.user_id)}
+                    onNamePress={() => {
+                      if (c.user_id === user?.id) return;
+                      viewFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null });
+                    }}
+                    colors={colors}
+                    commentAvatarUrl={c.user_id === user?.id ? (localAvatarUri ?? avatarUrl ?? null) : (c.profile?.avatar_url ?? null)}
+                    likedByUserIds={editCommentLikesMap[c.id] ?? []}
+                    currentUserId={user?.id ?? ''}
+                  />
+                ))}
+                {!editCommentsExpanded && hiddenEditCommentCount > 0 && (
+                  <TouchableOpacity onPress={() => setEditCommentsExpanded(true)} activeOpacity={0.7}>
+                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenEditCommentCount} more comment{hiddenEditCommentCount > 1 ? 's' : ''}</Text>
+                  </TouchableOpacity>
+                )}
+                {editCommentsExpanded && editSessionComments.length > 3 && (
+                  <TouchableOpacity onPress={() => setEditCommentsExpanded(false)} activeOpacity={0.7}>
+                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            <View style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+              <TextInput
+                style={[styles.viewCommentInputText, { color: colors.textPrimary }]}
+                placeholder="Add a comment..."
+                placeholderTextColor={colors.textMuted}
+                value={editCommentText}
+                onChangeText={setEditCommentText}
+                multiline
+              />
+              <TouchableOpacity onPress={handleEditSendSessionComment} activeOpacity={0.7}>
+                <Ionicons name="send" size={18} color={editCommentText.trim() ? colors.accent : colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Actions */}
+          <View style={styles.detailActions}>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border, flex: 1 }]}
+              onPress={() => setChangeDateSession(day)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Edit Date</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.danger }]}
+              onPress={() => handleDeleteSession(day)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryBtnText, { color: colors.danger }]}>Delete Session</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -1627,6 +1983,14 @@ export default function SessionsScreen() {
         accentColor={colors.accent}
         onDismiss={() => setShareDay(null)}
       />
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setEditModalVisible(false); setSelectedDay(null); }}
+      >
+        {selectedDay && <SessionEditModalContent day={selectedDay} />}
+      </Modal>
 
     </View>
   );
