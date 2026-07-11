@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, PanResponder, TextInput, Modal, Linking, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../utils/supabase';
@@ -1285,11 +1285,6 @@ export default function SessionsScreen() {
     );
   }
 
-  // ── Detail View ───────────────────────────────────────────────────────────────
-
-
-  // ── History row ───────────────────────────────────────────────────────────────
-
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const photoViewerModal = (
@@ -1347,7 +1342,6 @@ export default function SessionsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
 
-      {/* List view — always mounted so FlatList never loses its scroll position */}
       <View style={{ flex: 1 }}>
         <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
           <TouchableOpacity
@@ -1460,21 +1454,6 @@ const styles = StyleSheet.create({
 
   activeBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
   activeDot: { width: 7, height: 7, borderRadius: 4 },
-  endSessionRow: {
-    borderTopWidth: 1,
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  endSessionText: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.semibold,
-  },
-  activeDivider: {
-    height: 1,
-    marginTop: SPACING.md,
-    marginHorizontal: SPACING.lg,
-  },
 
   // Log climb button
   logClimbBtn: {
@@ -1488,16 +1467,6 @@ const styles = StyleSheet.create({
   secondaryBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center' },
   secondaryBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
 
-  // Session row
-  sessionBlock: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
-  sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: 20 },
-  sessionLeft: { gap: 3, flex: 1 },
-  sessionDay: { fontSize: FONTS.sizes.xs, letterSpacing: 1 },
-  sessionDate: { fontSize: FONTS.sizes.md },
-  sessionMeta: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
-  sessionStatVal: { fontSize: FONTS.sizes.md, textAlign: 'center' },
-  sessionStatLabel: { fontSize: FONTS.sizes.xs, textAlign: 'center' },
-  chevron: { fontSize: 22 },
   hardestBadge: { borderRadius: 6, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderWidth: 1 },
   hardestText: { fontSize: FONTS.sizes.sm },
 
@@ -1519,7 +1488,6 @@ const styles = StyleSheet.create({
   todayStatLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textAlign: 'center' },
   detailActions: { flexDirection: 'row', gap: SPACING.sm },
   noClimbs: { fontSize: FONTS.sizes.sm, textAlign: 'center', paddingVertical: SPACING.lg },
-  detailFriends: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
 
   // Media styles
   mediaThumbnail: {
@@ -1546,11 +1514,6 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.sm,
   },
 
-  viewLocationRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  viewLocationText: { flex: 1, fontSize: FONTS.sizes.md },
-  viewChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  viewChip: { borderRadius: 20, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs },
-  viewChipText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
   commentShowMore: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
   viewCommentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginTop: SPACING.sm },
   viewCommentInputText: { flex: 1, fontSize: FONTS.sizes.sm, maxHeight: 80 },
