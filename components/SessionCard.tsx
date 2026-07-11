@@ -16,6 +16,44 @@ import {
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
 
+const PHOTO_HEIGHT = 220;
+
+function NaturalPhoto({ uri, onPress }: { uri: string; onPress: () => void }) {
+  const [imgWidth, setImgWidth] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    Image.getSize(
+      uri,
+      (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)),
+      () => setFailed(true),
+    );
+  }, [uri]);
+
+  if (failed || imgWidth === null) return null;
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
+      <View style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+        <Image
+          source={{ uri }}
+          style={{ width: imgWidth, height: PHOTO_HEIGHT }}
+          resizeMode="cover"
+          onError={() => setFailed(true)}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function InitialsAvatar({ name, colors }: { name: string; colors: any }) {
+  const initials = (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  return (
+    <View style={[styles.partnerAvatar, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+      <Text style={[styles.partnerAvatarText, { color: colors.accent }]}>{initials}</Text>
+    </View>
+  );
+}
+
 interface SessionCardProps {
   day: DaySession;
   colors: any;
@@ -35,8 +73,8 @@ export default function SessionCard({
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount } = sessionStats(day);
   const label = formatSessionLabel(day);
-  const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
   const displayClimbs = mergeClimbs(day.climbs);
+  const climbTypeLabel = CLIMB_TYPES.find(t => t.id === hardest?.type)?.label ?? '—';
 
   const [climbsExpanded, setClimbsExpanded] = useState(false);
 
@@ -116,83 +154,106 @@ export default function SessionCard({
     <View style={[styles.card, { borderBottomColor: colors.border }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.dayLabel, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {day.title?.trim() || sessionTimeOfDay(day)}
-          </Text>
-          {hasFriends && (
-            <Text style={[styles.friendsLine, { color: colors.textMuted }]}>
-              with {day.friends!.map(f => f?.name ?? f).join(', ')}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity onPress={onEdit} style={styles.editBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={[styles.dateLabel, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
+        <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="pencil-outline" size={18} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
 
-      {/* Stats row */}
-      <View style={[styles.statsRow, { borderTopColor: colors.border }]}>
-        {projecting ? (
-          <Text style={[styles.statLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
-        ) : (
-          <>
-            <View style={styles.stat}>
-              <Text style={[styles.statVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
-              <Text style={[styles.statLbl, { color: colors.textMuted }]}>climbs</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={[styles.statVal, { color: colors.textPrimary }]}>{sends}</Text>
-              <Text style={[styles.statLbl, { color: colors.textMuted }]}>sends</Text>
-            </View>
-          </>
-        )}
-        {hardest && (
-          <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
-            <Text style={[styles.hardestText, { color: hardestTypeColor }]}>{hardest.grade}</Text>
-          </View>
-        )}
+      {/* Title */}
+      <View style={styles.cardTitleRow}>
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+          {day.title?.trim() || sessionTimeOfDay(day)}
+        </Text>
       </View>
-
-      {/* Notes */}
-      {hasNotes && (
-        <Text style={[styles.notesText, { color: colors.textSecondary }]}>{day.notes}</Text>
-      )}
 
       {/* Location */}
       {hasLocation && (
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-          <Text style={[styles.locationText, { color: colors.textPrimary }]} numberOfLines={1}>{day.location}</Text>
+        <View style={styles.cardLocationRow}>
+          <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
+          <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{day.location}</Text>
         </View>
       )}
 
-      {/* Media */}
+      {/* Notes */}
+      {hasNotes && (
+        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{day.notes}</Text>
+      )}
+
+      {/* Climbing with */}
+      {hasFriends && (
+        <View style={styles.partnersRow}>
+          <Text style={[styles.partnersLabel, { color: colors.textMuted }]}>with </Text>
+          {day.friends!.map((f, i) => (
+            <View key={f.id} style={styles.partnerChip}>
+              <InitialsAvatar name={f.name} colors={colors} />
+              <Text style={[styles.partnerName, { color: colors.accent }]}>
+                {f.name}{i < day.friends!.length - 1 ? ',' : ''}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Stats */}
+      <View style={styles.cardStatsRow}>
+        {projecting ? (
+          <Text style={[styles.cardStatNum, { color: colors.accent, textAlign: 'left' }]}>Projecting</Text>
+        ) : (
+          <>
+            <View style={styles.cardStat}>
+              <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{climbTypeLabel}</Text>
+              <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
+            </View>
+            <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.cardStat}>
+              <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{gradedCount}</Text>
+              <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+            </View>
+            {hardest && (
+              <>
+                <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.cardStat}>
+                  <Text style={[styles.cardStatNum, { color: colors.accent }]}>{hardest.grade}</Text>
+                  <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Hardest</Text>
+                </View>
+              </>
+            )}
+          </>
+        )}
+      </View>
+
+      {/* Photos */}
       {hasMedia && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.photoStrip}
+          contentContainerStyle={styles.photoStripContent}
+        >
           {allMedia.map((item, idx) => (
-            <TouchableOpacity
+            <NaturalPhoto
               key={idx}
+              uri={item.uri}
               onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); }}
-              activeOpacity={0.9}
-              style={{ marginRight: SPACING.sm }}
-            >
-              <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
-            </TouchableOpacity>
+            />
           ))}
         </ScrollView>
       )}
 
       {/* Climbs — collapsed by default */}
-      <TouchableOpacity onPress={() => setClimbsExpanded(v => !v)} style={styles.climbsToggle} activeOpacity={0.7}>
-        <Text style={[styles.climbsToggleText, { color: colors.textPrimary }]}>
+      <TouchableOpacity
+        onPress={() => setClimbsExpanded(v => !v)}
+        activeOpacity={0.7}
+        style={[styles.cardExpandBtn, { borderColor: colors.border }]}
+      >
+        <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
           {climbsExpanded ? 'Hide climbs' : 'View climbs'}
         </Text>
         <Ionicons name={climbsExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
       </TouchableOpacity>
       {climbsExpanded && (
-        <View style={{ gap: SPACING.sm }}>
+        <View style={{ gap: SPACING.sm, marginBottom: SPACING.md }}>
           {displayClimbs.length === 0 ? (
             <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
           ) : (
@@ -205,72 +266,83 @@ export default function SessionCard({
         </View>
       )}
 
-      {/* Activity: likes + comments */}
-      <View style={[styles.activitySection, { borderTopColor: colors.border }]}>
-        <LikesAvatarRow
-          likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
-          onPressLiker={(l) => onViewProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
-          currentUserId={currentUserId}
-          colors={colors}
-        />
-        {sessionComments.length > 0 && (
-          <View style={{ marginTop: SPACING.sm }}>
-            {visibleComments.map(c => (
-              <SwipeableComment
-                key={c.id}
-                c={c}
-                isOwn // this card only ever shows your own session, so you can always delete
-                onDelete={() => handleDeleteSessionComment(c.id)}
-                onReport={() => {}} // never reportable on your own post
-                onLike={() => handleCommentLikeToggle(c.id, c.user_id)}
-                onNamePress={() => {
-                  if (c.user_id === currentUserId) return;
-                  onViewProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null });
-                }}
-                colors={colors}
-                commentAvatarUrl={c.user_id === currentUserId ? (myAvatar ?? null) : (c.profile?.avatar_url ?? null)}
-                likedByUserIds={commentLikesMap[c.id] ?? []}
-                currentUserId={currentUserId ?? ''}
-              />
-            ))}
-            {!commentsExpanded && hiddenCommentCount > 0 && (
-              <TouchableOpacity onPress={() => setCommentsExpanded(true)} activeOpacity={0.7}>
-                <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenCommentCount} more comment{hiddenCommentCount > 1 ? 's' : ''}</Text>
-              </TouchableOpacity>
-            )}
-            {commentsExpanded && sessionComments.length > 3 && (
-              <TouchableOpacity onPress={() => setCommentsExpanded(false)} activeOpacity={0.7}>
-                <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-        <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-          <TextInput
-            style={[styles.commentInputText, { color: colors.textPrimary }]}
-            placeholder="Add a comment..."
-            placeholderTextColor={colors.textMuted}
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline
+      {/* Likes / comment counts */}
+      {(sessionLikes.length > 0 || sessionComments.length > 0) && (
+        <View style={styles.cardCounts}>
+          <LikesAvatarRow
+            likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+            onPressLiker={(l) => onViewProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
+            currentUserId={currentUserId}
+            colors={colors}
           />
-          <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
-            <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-          </TouchableOpacity>
+          {sessionComments.length > 0 && (
+            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
+              {sessionComments.length} {sessionComments.length === 1 ? 'comment' : 'comments'}
+            </Text>
+          )}
         </View>
+      )}
+
+      {/* Actions */}
+      <View style={styles.cardActions}>
+        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
+          <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
+          <Ionicons name="share-outline" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
-      {/* Action row */}
-      <View style={[styles.actionsRow, { borderTopColor: colors.border }]}>
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
-          <Ionicons name="chatbubble-outline" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onShare}>
-          <Ionicons name="share-outline" size={20} color={colors.textMuted} />
+      {/* Comment thread */}
+      {sessionComments.length > 0 && (
+        <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
+          {visibleComments.map(c => (
+            <SwipeableComment
+              key={c.id}
+              c={c}
+              isOwn // this card only ever shows your own session, so you can always delete
+              onDelete={() => handleDeleteSessionComment(c.id)}
+              onReport={() => {}} // never reportable on your own post
+              onLike={() => handleCommentLikeToggle(c.id, c.user_id)}
+              onNamePress={() => {
+                if (c.user_id === currentUserId) return;
+                onViewProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null });
+              }}
+              colors={colors}
+              commentAvatarUrl={c.user_id === currentUserId ? (myAvatar ?? null) : (c.profile?.avatar_url ?? null)}
+              likedByUserIds={commentLikesMap[c.id] ?? []}
+              currentUserId={currentUserId ?? ''}
+            />
+          ))}
+          {!commentsExpanded && hiddenCommentCount > 0 && (
+            <TouchableOpacity onPress={() => setCommentsExpanded(true)} activeOpacity={0.7}>
+              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenCommentCount} more comment{hiddenCommentCount > 1 ? 's' : ''}</Text>
+            </TouchableOpacity>
+          )}
+          {commentsExpanded && sessionComments.length > 3 && (
+            <TouchableOpacity onPress={() => setCommentsExpanded(false)} activeOpacity={0.7}>
+              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Comment input */}
+      <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+        <TextInput
+          style={[styles.commentInputText, { color: colors.textPrimary }]}
+          placeholder="Add a comment..."
+          placeholderTextColor={colors.textMuted}
+          value={commentText}
+          onChangeText={setCommentText}
+          multiline
+        />
+        <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
+          <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
         </TouchableOpacity>
       </View>
 
-      {/* Photo viewer for this card's media (own lightweight modal — see Step 2) */}
+      {/* Photo viewer for this card's media */}
       {viewerUris && (
         <SessionCardPhotoViewer
           uris={viewerUris}
@@ -328,30 +400,56 @@ function SessionCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string[
 }
 
 const styles = StyleSheet.create({
-  card: { borderBottomWidth: 3, paddingVertical: SPACING.lg, gap: SPACING.md },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  dayLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.bold, letterSpacing: 1 },
-  title: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28, marginTop: SPACING.xs },
-  friendsLine: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
-  editBtn: { padding: 4 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, paddingTop: SPACING.sm, borderTopWidth: 1 },
-  stat: { alignItems: 'center' },
-  statVal: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, textAlign: 'center' },
-  statLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textAlign: 'center' },
-  hardestBadge: { borderRadius: 6, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderWidth: 1 },
-  hardestText: { fontSize: FONTS.sizes.sm },
-  notesText: { fontSize: FONTS.sizes.sm, lineHeight: 20 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  locationText: { flex: 1, fontSize: FONTS.sizes.md },
-  mediaScroll: { flexGrow: 0 },
-  mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
-  climbsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: SPACING.xs },
-  climbsToggleText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
+  card: {
+    borderBottomWidth: 3,
+    paddingVertical: SPACING.xl,
+    marginHorizontal: -SPACING.xl,
+    paddingHorizontal: SPACING.xl,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: SPACING.xs },
+  dateLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardTitleRow: { paddingTop: SPACING.xs, paddingBottom: SPACING.xs },
+  cardTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.2 },
+  cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
+  cardLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardNotes: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 20, paddingBottom: SPACING.sm },
+  partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
+  partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  partnerAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  partnerAvatarText: { fontSize: 9, fontFamily: FONTS.family.bold },
+  partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
+  cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
+  cardStat: { flex: 1, alignItems: 'center' },
+  cardStatNum: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardStatDivider: { width: 1, height: 32 },
+  photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
+  photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },
+  cardExpandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  cardExpandTxt: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   noClimbs: { fontSize: FONTS.sizes.sm, textAlign: 'center', paddingVertical: SPACING.md },
-  activitySection: { borderTopWidth: 1, paddingTop: SPACING.md },
-  commentShowMore: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
+  cardCounts: { flexDirection: 'row', gap: SPACING.md, paddingBottom: SPACING.xs, marginTop: SPACING.md, alignItems: 'center' },
+  cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginTop: SPACING.xs,
+  },
+  cardActionBtn: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md },
+  commentSection: { borderTopWidth: 1, marginTop: SPACING.md, paddingTop: SPACING.lg, gap: SPACING.sm },
+  commentShowMore: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingVertical: 2 },
   commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginTop: SPACING.sm },
   commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, maxHeight: 80 },
-  actionsRow: { flexDirection: 'row', gap: SPACING.lg, borderTopWidth: 1, paddingTop: SPACING.sm },
-  actionBtn: { padding: 4 },
 });

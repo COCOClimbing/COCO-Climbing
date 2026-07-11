@@ -1456,7 +1456,7 @@ const styles = StyleSheet.create({
   addSessionTxt: { fontSize: FONTS.sizes.sm },
   calTextBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   calTxt: { fontSize: FONTS.sizes.sm },
-  list: { padding: SPACING.lg, gap: SPACING.md },
+  list: { padding: SPACING.xl },
 
   activeBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
   activeDot: { width: 7, height: 7, borderRadius: 4 },
