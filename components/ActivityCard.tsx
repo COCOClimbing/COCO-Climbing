@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
 import SwipeableComment from './SwipeableComment';
@@ -111,7 +110,6 @@ interface ActivityCardProps {
 export default function ActivityCard({
   entry, colors, currentUserId, myAvatar, daysBack, displayGrade, onShare, onViewProfile,
 }: ActivityCardProps) {
-  const date = parseISO(entry.sessionDate);
   const isOutdoor = entry.environment === 'outdoor';
 
   const [climbsExpanded, setClimbsExpanded] = useState(false);
