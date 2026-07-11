@@ -73,6 +73,7 @@ function SessionFriendPicker({
 }
 
 let _cachedDays: DaySession[] = [];
+let _cachedCondensed = false;
 
 export default function SessionsScreen() {
   const { colors } = useTheme();
@@ -99,7 +100,7 @@ export default function SessionsScreen() {
     }
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
-  const [sessionsCondensed, setSessionsCondensed] = useState(false);
+  const [sessionsCondensed, setSessionsCondensed] = useState(_cachedCondensed);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editSessionLikes, setEditSessionLikes] = useState<SessionLike[]>([]);
@@ -274,7 +275,7 @@ export default function SessionsScreen() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    getSessionsCondensed().then(setSessionsCondensed);
+    getSessionsCondensed().then(v => { _cachedCondensed = v; setSessionsCondensed(v); });
   }, []);
 
   // Register load() so BottomTabBar can trigger a refresh after saving via FAB
@@ -611,6 +612,7 @@ export default function SessionsScreen() {
 
   async function handleToggleCondensed() {
     const next = !sessionsCondensed;
+    _cachedCondensed = next;
     setSessionsCondensed(next);
     await saveSessionsCondensed(next);
   }
