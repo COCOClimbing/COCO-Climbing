@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import { Image } from 'react-native';
+import { isDeadMediaUrl } from './cloudSync';
+import { getGradeDifficulty } from './theme';
 
 export interface FriendProfile {
   id: string;
@@ -26,6 +29,132 @@ export interface FriendActivity {
 export interface FriendCounts {
   followers: number;
   following: number;
+}
+
+export type SessionSummary = {
+  friend: FriendProfile;
+  sessionDate: string;
+  sessionId?: string;
+  sessionTime?: string;
+  climbCount: number;
+  sends: number;
+  flashes: number;
+  hardestGrade: string | null;
+  hardestGradeSystem: string | null;
+  environment?: string;
+  climbType?: string;
+  partners?: { id: string; name: string; avatar_url?: string | null }[];
+  sessionPhotos?: string[];
+  photoWidths?: Record<string, number>;
+  notes?: string;
+  title?: string;
+  location?: string;
+};
+
+const SUMMARY_PHOTO_HEIGHT = 220;
+
+// Build one friend's session_id-grouped, paginated activity summaries for the
+// last `daysBack` days. Mirrors the per-friend grouping logic in
+// app/friends.tsx's loadFeed (the main Activity feed), but as a standalone
+// call for a single friend instead of a Promise.all over every friend —
+// used by a friend's profile view, which only ever needs this one person's
+// sessions. Deliberately duplicated rather than shared with loadFeed to
+// avoid any risk of regressing the already-shipped main feed.
+export async function getFriendSessionSummaries(friend: FriendProfile, daysBack: number): Promise<SessionSummary[]> {
+  const normDate = (d: string) => (d ?? '').slice(0, 10);
+  const summaries: SessionSummary[] = [];
+
+  const [climbs, friendSessions] = await Promise.all([
+    getFriendRecentClimbs(friend.id, daysBack),
+    getFriendRecentSessions(friend.id, daysBack),
+  ]);
+
+  const sessionMediaMap = new Map<string, string[]>(
+    friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
+  );
+  const sessionFriendsMap = new Map<string, any[]>(
+    friendSessions.map((s: any) => [s.id, s.friends ?? []])
+  );
+  const sessionNotesMap = new Map<string, string>(
+    friendSessions.filter((s: any) => s.notes).map((s: any) => [s.id, s.notes])
+  );
+  const sessionTitleMap = new Map<string, string>(
+    friendSessions.filter((s: any) => s.title).map((s: any) => [s.id, s.title])
+  );
+  const sessionLocationMap = new Map<string, string>(
+    friendSessions.filter((s: any) => s.location).map((s: any) => [s.id, s.location])
+  );
+  const sessionDateMap = new Map<string, string>(
+    friendSessions.filter((s: any) => s.date).map((s: any) => [s.id, normDate(s.date)])
+  );
+  const sessionStartedAtMap = new Map<string, string>(
+    friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
+  );
+
+  const endedSessionIds = new Set(friendSessions.map((s: any) => s.id));
+  const eligibleClimbs = climbs.filter((c: any) => !c.session_id || endedSessionIds.has(c.session_id));
+  if (eligibleClimbs.length === 0) return [];
+
+  const sessionIdByDate = new Map<string, string>(
+    friendSessions.map((s: any) => [normDate(s.date), s.id])
+  );
+
+  const sessionGroups = new Map<string, any[]>();
+  for (const c of eligibleClimbs) {
+    const key = c.session_id ?? sessionIdByDate.get(normDate(c.date)) ?? normDate(c.date);
+    if (!sessionGroups.has(key)) sessionGroups.set(key, []);
+    sessionGroups.get(key)!.push(c);
+  }
+
+  for (const sessionClimbs of sessionGroups.values()) {
+    const sends = sessionClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+    const flashes = sessionClimbs.filter((c: any) => c.outcome === 'flash').length;
+    let hardestGrade: string | null = null;
+    let hardestGradeSystem: string | null = null;
+    let hardestClimb: any = sessionClimbs[0];
+    const gradedClimbs = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
+    if (gradedClimbs.length > 0) {
+      gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
+      hardestGrade = gradedClimbs[0].grade;
+      hardestGradeSystem = gradedClimbs[0].grade_system;
+      hardestClimb = gradedClimbs[0];
+    }
+    const friendSessionId = sessionClimbs[0]?.session_id ?? undefined;
+    const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
+    const environment = sessionClimbs[0]?.environment ?? 'indoor';
+    const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
+    const climbType = hardestClimb?.type ?? undefined;
+    const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
+    const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
+    const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
+    const rawFriends: { id: string; name: string }[] = friendSessionId ? (sessionFriendsMap.get(friendSessionId) ?? []) : [];
+    const partnerIds = rawFriends.map((p: any) => p.id).filter((id: string) => id !== friend.id);
+    let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
+    if (partnerIds.length > 0) {
+      const { data: partnerProfiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', partnerIds);
+      const profileMap = new Map((partnerProfiles ?? []).map((p: any) => [p.id, p]));
+      partners = rawFriends.map((p: any) => ({ id: p.id, name: profileMap.get(p.id)?.name ?? p.name, avatar_url: profileMap.get(p.id)?.avatar_url ?? null }));
+    }
+    const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
+    const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
+    const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
+    summaries.push({ friend, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
+  }
+
+  summaries.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+
+  // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size immediately
+  const allUris = [...new Set(summaries.flatMap(e => e.sessionPhotos ?? []))];
+  const widthCache: Record<string, number> = {};
+  await Promise.all(
+    allUris.map(uri => new Promise<void>(resolve => {
+      Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(SUMMARY_PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
+    }))
+  );
+  return summaries.map(e => ({
+    ...e,
+    photoWidths: e.sessionPhotos ? Object.fromEntries(e.sessionPhotos.filter(u => widthCache[u]).map(u => [u, widthCache[u]])) : undefined,
+  }));
 }
 
 // Search users by username (partial match, exclude self and existing friends)

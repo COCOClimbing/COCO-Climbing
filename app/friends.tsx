@@ -62,6 +62,8 @@ import {
   getCommentLikes,
   likeComment,
   unlikeComment,
+  SessionSummary,
+  getFriendSessionSummaries,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -618,25 +620,6 @@ export default function FriendsScreen() {
   const tabBarHeight = 70 + (insets.bottom || 0);
 
   // Activity feed state
-  type SessionSummary = {
-    friend: FriendProfile;
-    sessionDate: string;
-    sessionId?: string;  // set for own sessions, use to load climbs by id
-    sessionTime?: string; // ISO timestamp used to determine morning/afternoon/evening
-    climbCount: number;
-    sends: number;
-    flashes: number;
-    hardestGrade: string | null;
-    hardestGradeSystem: string | null;
-    environment?: string;
-    climbType?: string;
-    partners?: { id: string; name: string; avatar_url?: string | null }[];
-    sessionPhotos?: string[];
-    photoWidths?: Record<string, number>;
-    notes?: string;
-    title?: string;
-    location?: string;
-  };
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
   const [daysLoaded, setDaysLoaded] = useState(14);
   const [loadingMore, setLoadingMore] = useState(false);
