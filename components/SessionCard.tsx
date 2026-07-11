@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
-import { DaySession, sessionStats, mergeClimbs, formatSessionLabel, sessionTimeOfDay, climbCount } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, mergeClimbs, formatSessionLabel, sessionTimeOfDay } from '../utils/sessionHelpers';
 import ClimbCard from './ClimbCard';
 import SwipeToDelete from './SwipeToDelete';
 import SwipeableComment from './SwipeableComment';
@@ -137,7 +137,7 @@ export default function SessionCard({
         ) : (
           <>
             <View style={styles.stat}>
-              <Text style={[styles.statVal, { color: colors.textPrimary }]}>{day.climbs.reduce((s, c) => s + climbCount(c), 0)}</Text>
+              <Text style={[styles.statVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
               <Text style={[styles.statLbl, { color: colors.textMuted }]}>climbs</Text>
             </View>
             <View style={styles.stat}>
@@ -283,8 +283,8 @@ export default function SessionCard({
 function SessionCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string[]; initialIndex: number; onClose: () => void }) {
   const [index, setIndex] = useState(initialIndex);
   const scrollRef = useRef<ScrollView>(null);
-  const screenWidth = require('react-native').Dimensions.get('window').width;
-  const screenHeight = require('react-native').Dimensions.get('window').height;
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
 
   useEffect(() => {
     const t = setTimeout(() => {
