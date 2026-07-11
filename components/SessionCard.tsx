@@ -198,7 +198,7 @@ export default function SessionCard({
       {/* Stats */}
       <View style={styles.cardStatsRow}>
         {projecting ? (
-          <Text style={[styles.cardStatNum, { color: colors.accent, textAlign: 'left' }]}>Projecting</Text>
+          <Text style={[styles.cardStatNum, { color: colors.accent, textAlign: 'left', fontFamily: FONTS.family.semibold }]}>Projecting</Text>
         ) : (
           <>
             <View style={styles.cardStat}>
