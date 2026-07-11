@@ -176,6 +176,7 @@ function FriendDetailView({
   onBlock,
   onUnblock,
   colors,
+  onViewProfile,
 }: {
   friend: FriendProfile;
   onBack: () => void;
@@ -183,10 +184,12 @@ function FriendDetailView({
   onBlock?: (friendId: string) => void;
   onUnblock?: (friendId: string) => void;
   colors: any;
+  onViewProfile?: (friend: FriendProfile) => void;
 }) {
   const { user, avatarUrl, localAvatarUri } = useAuth();
   const myAvatar = localAvatarUri ?? avatarUrl;
   const { navigateToSession, viewFriendProfile } = useNav();
+  const handleViewProfile = onViewProfile ?? viewFriendProfile;
   const isSelf = user?.id === friend.id;
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
@@ -558,7 +561,7 @@ function FriendDetailView({
                         loadClimbs();
                         loadSessions(sessionsDaysLoaded, false);
                       }}
-                      onViewProfile={viewFriendProfile}
+                      onViewProfile={handleViewProfile}
                     />
                   ))}
                   {loadingMoreSessions && <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />}
@@ -582,7 +585,7 @@ function FriendDetailView({
                       daysBack={sessionsDaysLoaded}
                       displayGrade={displayGrade}
                       onShare={() => setShareFriendEntry(entry)}
-                      onViewProfile={viewFriendProfile}
+                      onViewProfile={handleViewProfile}
                     />
                   ))}
                   {loadingMoreSessions && <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />}
@@ -604,6 +607,7 @@ function FriendDetailView({
               friend={listSheetProfile}
               onBack={() => setListSheetProfile(null)}
               colors={colors}
+              onViewProfile={setListSheetProfile}
             />
           ) : (
             <>
