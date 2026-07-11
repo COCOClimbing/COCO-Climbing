@@ -14,7 +14,7 @@ import {
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
   setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession,
-  triggerFeedRefresh, triggerStatsRefresh,
+  triggerFeedRefresh, triggerStatsRefresh, getSessionsCondensed, saveSessionsCondensed,
 } from '../utils/storage';
 import FriendPicker from '../components/FriendPicker';
 import ClimbCard from '../components/ClimbCard';
@@ -99,6 +99,7 @@ export default function SessionsScreen() {
     }
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
+  const [sessionsCondensed, setSessionsCondensed] = useState(false);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editSessionLikes, setEditSessionLikes] = useState<SessionLike[]>([]);
@@ -271,6 +272,10 @@ export default function SessionsScreen() {
   }, []); // stable — selectedDay accessed via ref
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    getSessionsCondensed().then(setSessionsCondensed);
+  }, []);
 
   // Register load() so BottomTabBar can trigger a refresh after saving via FAB
   useEffect(() => {
@@ -603,6 +608,12 @@ export default function SessionsScreen() {
     handleSaveSessionMeta(text, sessionFriends, sessionLocation, sessionMediaItems);
   }
 
+
+  async function handleToggleCondensed() {
+    const next = !sessionsCondensed;
+    setSessionsCondensed(next);
+    await saveSessionsCondensed(next);
+  }
 
   async function handleNewSession() {
     // If a session is already open, just navigate into it
@@ -1350,6 +1361,13 @@ export default function SessionsScreen() {
           >
             <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleToggleCondensed}
+            style={[styles.condenseToggleBtn, { borderColor: colors.borderLight }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name={sessionsCondensed ? 'expand-outline' : 'contract-outline'} size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
             <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
           </TouchableOpacity>
@@ -1374,6 +1392,7 @@ export default function SessionsScreen() {
                 onViewProfile={viewFriendProfile}
                 onSwipeStart={() => setListScrollEnabled(false)}
                 onSwipeEnd={() => setListScrollEnabled(true)}
+                condensed={sessionsCondensed}
               />
             </View>
           ))}
@@ -1448,6 +1467,7 @@ const styles = StyleSheet.create({
   },
   addSessionBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   addSessionTxt: { fontSize: FONTS.sizes.sm },
+  condenseToggleBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.sm },
   calTextBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   calTxt: { fontSize: FONTS.sizes.sm },
   list: { padding: SPACING.xl },
