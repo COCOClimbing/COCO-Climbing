@@ -186,12 +186,20 @@ export default function SessionCard({
         <View style={styles.partnersRow}>
           <Text style={[styles.partnersLabel, { color: colors.textMuted }]}>with </Text>
           {day.friends!.map((f, i) => (
-            <View key={f.id} style={styles.partnerChip}>
+            <TouchableOpacity
+              key={f.id}
+              style={styles.partnerChip}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (f.id === currentUserId) return;
+                onViewProfile({ id: f.id, name: f.name, username: '', avatar_url: null });
+              }}
+            >
               <InitialsAvatar name={f.name} colors={colors} />
               <Text style={[styles.partnerName, { color: colors.accent }]}>
                 {f.name}{i < day.friends!.length - 1 ? ',' : ''}
               </Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       )}
