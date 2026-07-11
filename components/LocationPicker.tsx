@@ -80,10 +80,9 @@ async function searchPlaces(query: string): Promise<SearchResult[]> {
 interface Props {
   value: string;
   onChange: (value: string) => void;
-  editable?: boolean;
 }
 
-export default function LocationPicker({ value, onChange, editable = true }: Props) {
+export default function LocationPicker({ value, onChange }: Props) {
   const { colors } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -185,9 +184,8 @@ export default function LocationPicker({ value, onChange, editable = true }: Pro
     <>
       <TouchableOpacity
         style={[styles.field, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-        onPress={() => editable && setModalVisible(true)}
-        activeOpacity={editable ? 0.7 : 1}
-        disabled={!editable}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.7}
       >
         <Ionicons name="location-outline" size={16} color={value ? colors.textSecondary : colors.textMuted} />
         <Text
@@ -196,18 +194,16 @@ export default function LocationPicker({ value, onChange, editable = true }: Pro
         >
           {value || 'Location / gym / crag'}
         </Text>
-        {editable ? (
-          value ? (
-            <TouchableOpacity
-              onPress={(e) => { e.stopPropagation(); onChange(''); }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          ) : (
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-          )
-        ) : null}
+        {value ? (
+          <TouchableOpacity
+            onPress={(e) => { e.stopPropagation(); onChange(''); }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : (
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        )}
       </TouchableOpacity>
 
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
