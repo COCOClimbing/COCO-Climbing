@@ -682,7 +682,7 @@ export default function SessionsScreen() {
         await likeComment(commentId, user.id);
         setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, user.id] }));
         if (commentAuthorId !== user.id) {
-          sendCommentLikeNotification(commentAuthorId, user.id, user.id).catch(() => {});
+          sendCommentLikeNotification(commentAuthorId, user.id, day.sessionId).catch(() => {});
         }
       }
     }
@@ -725,6 +725,7 @@ export default function SessionsScreen() {
     const friendsCardY = useRef(0);
     const notesCardY = useRef(0);
     const notesCardRef = useRef<View>(null);
+    const commentInputRef = useRef<View>(null);
 
     useEffect(() => {
       if (editingNotes) {
@@ -1016,13 +1017,23 @@ export default function SessionsScreen() {
             )}
           </View>
         )}
-        <View style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+        <View ref={commentInputRef} style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
           <TextInput
             style={[styles.viewCommentInputText, { color: colors.textPrimary }]}
             placeholder="Add a comment..."
             placeholderTextColor={colors.textMuted}
             value={commentText}
             onChangeText={setCommentText}
+            onFocus={() => {
+              setTimeout(() => {
+                commentInputRef.current?.measure((_fx, _fy, _w, _h, _px, py) => {
+                  const targetScreenY = 300;
+                  const scrollDelta = py - targetScreenY;
+                  const newY = Math.max(0, (_detailScrollY || 0) + scrollDelta);
+                  detailScrollRef.current?.scrollTo({ y: newY, animated: true });
+                });
+              }, 320);
+            }}
             multiline
           />
           <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
