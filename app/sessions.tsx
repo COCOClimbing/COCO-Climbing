@@ -26,14 +26,6 @@ import MiniCalendar from '../components/MiniCalendar';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
-import SwipeableComment from '../components/SwipeableComment';
-import LikesAvatarRow from '../components/LikesAvatarRow';
-import {
-  getSessionLikes, getSessionComments, getCommentLikes,
-  addSessionComment, deleteSessionComment, likeComment, unlikeComment,
-  SessionLike, SessionComment,
-} from '../utils/friendsApi';
-import { sendCommentLikeNotification } from '../utils/notifications';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
 
@@ -103,11 +95,6 @@ export default function SessionsScreen() {
   const [sessionsCondensed, setSessionsCondensed] = useState(_cachedCondensed);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editSessionLikes, setEditSessionLikes] = useState<SessionLike[]>([]);
-  const [editSessionComments, setEditSessionComments] = useState<SessionComment[]>([]);
-  const [editCommentLikesMap, setEditCommentLikesMap] = useState<Record<string, string[]>>({});
-  const [editCommentText, setEditCommentText] = useState('');
-  const [editCommentsExpanded, setEditCommentsExpanded] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [modalSessionId, setModalSessionId] = useState<string | undefined>();
   const [editingClimb, setEditingClimb] = useState<Climb | undefined>();
@@ -134,52 +121,6 @@ export default function SessionsScreen() {
   const sessionsScrollRef = useRef<ScrollView>(null);
   const sessionCardOffsets = useRef<Record<string, number>>({});
   const scrollToSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!selectedDay) return;
-    Promise.all([
-      getSessionLikes(selectedDay.sessionId),
-      getSessionComments(selectedDay.sessionId),
-    ]).then(([likes, comments]) => {
-      setEditSessionLikes(likes);
-      setEditSessionComments(comments);
-      if (comments.length > 0) {
-        getCommentLikes(comments.map(c => c.id)).then(setEditCommentLikesMap);
-      }
-    });
-  }, [selectedDay?.sessionId]);
-
-  async function handleEditCommentLikeToggle(commentId: string, commentAuthorId: string) {
-    if (!user) return;
-    const likedBy = editCommentLikesMap[commentId] ?? [];
-    const alreadyLiked = likedBy.includes(user.id);
-    if (alreadyLiked) {
-      await unlikeComment(commentId, user.id);
-      setEditCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== user.id) }));
-    } else {
-      await likeComment(commentId, user.id);
-      setEditCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, user.id] }));
-      if (commentAuthorId !== user.id && selectedDay) {
-        sendCommentLikeNotification(commentAuthorId, user.id, selectedDay.sessionId).catch(() => {});
-      }
-    }
-  }
-
-  async function handleEditDeleteSessionComment(commentId: string) {
-    if (!selectedDay) return;
-    await deleteSessionComment(commentId);
-    const updated = await getSessionComments(selectedDay.sessionId);
-    setEditSessionComments(updated);
-  }
-
-  async function handleEditSendSessionComment() {
-    if (!user || !editCommentText.trim() || !selectedDay) return;
-    await addSessionComment(selectedDay.sessionId, user.id, editCommentText.trim());
-    setEditCommentText('');
-    Keyboard.dismiss();
-    const updated = await getSessionComments(selectedDay.sessionId);
-    setEditSessionComments(updated);
-  }
 
   // Sync editing state when a different session is opened
   useEffect(() => {
@@ -998,9 +939,6 @@ export default function SessionsScreen() {
     const label = formatSessionLabel(day);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = mergeClimbs(day.climbs);
-    const editModalScrollRef = useRef<ScrollView>(null);
-    const editModalScrollY = useRef(0);
-    const editCommentInputRef = useRef<View>(null);
 
     const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
     for (const c of day.climbs) {
@@ -1015,9 +953,6 @@ export default function SessionsScreen() {
       ...climbMedia,
     ];
 
-    const visibleEditComments = editCommentsExpanded ? editSessionComments : editSessionComments.slice(0, 3);
-    const hiddenEditCommentCount = editSessionComments.length - 3;
-
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
         <View style={[styles.detailTopBar, { borderBottomColor: colors.border, justifyContent: 'flex-end' }]}>
@@ -1027,9 +962,6 @@ export default function SessionsScreen() {
         </View>
 
         <ScrollView
-          ref={editModalScrollRef}
-          scrollEventThrottle={16}
-          onScroll={e => { editModalScrollY.current = e.nativeEvent.contentOffset.y; }}
           contentContainerStyle={styles.detailContent}
           keyboardShouldPersistTaps="never"
         >
@@ -1209,72 +1141,6 @@ export default function SessionsScreen() {
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
           </TouchableOpacity>
-
-          {/* Likes + Comments */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>ACTIVITY</Text>
-            <LikesAvatarRow
-              likers={editSessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (localAvatarUri ?? avatarUrl ?? null) : (l.profile?.avatar_url ?? null) }))}
-              onPressLiker={(l) => viewFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
-              currentUserId={user?.id}
-              colors={colors}
-            />
-            {editSessionComments.length > 0 && (
-              <View style={{ marginTop: SPACING.sm }}>
-                {visibleEditComments.map(c => (
-                  <SwipeableComment
-                    key={c.id}
-                    c={c}
-                    isOwn
-                    onDelete={() => handleEditDeleteSessionComment(c.id)}
-                    onReport={() => {}}
-                    onLike={() => handleEditCommentLikeToggle(c.id, c.user_id)}
-                    onNamePress={() => {
-                      if (c.user_id === user?.id) return;
-                      viewFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null });
-                    }}
-                    colors={colors}
-                    commentAvatarUrl={c.user_id === user?.id ? (localAvatarUri ?? avatarUrl ?? null) : (c.profile?.avatar_url ?? null)}
-                    likedByUserIds={editCommentLikesMap[c.id] ?? []}
-                    currentUserId={user?.id ?? ''}
-                  />
-                ))}
-                {!editCommentsExpanded && hiddenEditCommentCount > 0 && (
-                  <TouchableOpacity onPress={() => setEditCommentsExpanded(true)} activeOpacity={0.7}>
-                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenEditCommentCount} more comment{hiddenEditCommentCount > 1 ? 's' : ''}</Text>
-                  </TouchableOpacity>
-                )}
-                {editCommentsExpanded && editSessionComments.length > 3 && (
-                  <TouchableOpacity onPress={() => setEditCommentsExpanded(false)} activeOpacity={0.7}>
-                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-            <View ref={editCommentInputRef} style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-              <TextInput
-                style={[styles.viewCommentInputText, { color: colors.textPrimary }]}
-                placeholder="Add a comment..."
-                placeholderTextColor={colors.textMuted}
-                value={editCommentText}
-                onChangeText={setEditCommentText}
-                onFocus={() => {
-                  setTimeout(() => {
-                    editCommentInputRef.current?.measure((_fx, _fy, _w, _h, _px, py) => {
-                      const targetScreenY = 300;
-                      const scrollDelta = py - targetScreenY;
-                      const newY = Math.max(0, editModalScrollY.current + scrollDelta);
-                      editModalScrollRef.current?.scrollTo({ y: newY, animated: true });
-                    });
-                  }, 320);
-                }}
-                multiline
-              />
-              <TouchableOpacity onPress={handleEditSendSessionComment} activeOpacity={0.7}>
-                <Ionicons name="send" size={18} color={editCommentText.trim() ? colors.accent : colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
 
           {/* Actions */}
           <View style={styles.detailActions}>
