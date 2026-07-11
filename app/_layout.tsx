@@ -37,6 +37,7 @@ import FriendsScreen from './friends';
 import WelcomeScreen, { hasSeenWelcome } from './welcome';
 import OnboardingScreen, { getOnboardingPrefs } from './onboarding';
 import { getCloudProfile } from '../utils/cloudSync';
+import { restoreActiveSession } from '../utils/storage';
 import { registerForPushNotifications, useNotificationTapRouting } from '../utils/notifications';
 
 SplashScreen.preventAutoHideAsync();
@@ -228,6 +229,14 @@ function RootLayout() {
     'OilvareBase-Regular': require('../assets/fonts/OilvareBase-Regular.ttf'),
   });
   const [fontTimedOut, setFontTimedOut] = useState(false);
+
+  // Restore the in-progress session tracker from disk as early as possible in
+  // the boot sequence, so getActiveSessionId() is populated before any screen
+  // (e.g. the default 'friends' landing screen) reads it — not just when the
+  // Sessions tab happens to mount first.
+  useEffect(() => {
+    restoreActiveSession();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setFontTimedOut(true), 5000);
