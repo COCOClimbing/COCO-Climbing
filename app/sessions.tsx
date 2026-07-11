@@ -981,6 +981,9 @@ export default function SessionsScreen() {
     const label = formatSessionLabel(day);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = mergeClimbs(day.climbs);
+    const editModalScrollRef = useRef<ScrollView>(null);
+    const editModalScrollY = useRef(0);
+    const editCommentInputRef = useRef<View>(null);
 
     const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
     for (const c of day.climbs) {
@@ -1006,7 +1009,13 @@ export default function SessionsScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="never">
+        <ScrollView
+          ref={editModalScrollRef}
+          scrollEventThrottle={16}
+          onScroll={e => { editModalScrollY.current = e.nativeEvent.contentOffset.y; }}
+          contentContainerStyle={styles.detailContent}
+          keyboardShouldPersistTaps="never"
+        >
           {/* Session header */}
           <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.detailHeaderTop}>
@@ -1225,13 +1234,23 @@ export default function SessionsScreen() {
                 )}
               </View>
             )}
-            <View style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+            <View ref={editCommentInputRef} style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
               <TextInput
                 style={[styles.viewCommentInputText, { color: colors.textPrimary }]}
                 placeholder="Add a comment..."
                 placeholderTextColor={colors.textMuted}
                 value={editCommentText}
                 onChangeText={setEditCommentText}
+                onFocus={() => {
+                  setTimeout(() => {
+                    editCommentInputRef.current?.measure((_fx, _fy, _w, _h, _px, py) => {
+                      const targetScreenY = 300;
+                      const scrollDelta = py - targetScreenY;
+                      const newY = Math.max(0, editModalScrollY.current + scrollDelta);
+                      editModalScrollRef.current?.scrollTo({ y: newY, animated: true });
+                    });
+                  }, 320);
+                }}
                 multiline
               />
               <TouchableOpacity onPress={handleEditSendSessionComment} activeOpacity={0.7}>
