@@ -24,10 +24,18 @@ import { EmptyState } from '../components/UI';
 import LogClimbModal from '../components/LogClimbModal';
 import SwipeToDelete from '../components/SwipeToDelete';
 import MiniCalendar from '../components/MiniCalendar';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
+import SwipeableComment from '../components/SwipeableComment';
+import LikesAvatarRow from '../components/LikesAvatarRow';
+import {
+  getSessionLikes, getSessionComments, getCommentLikes,
+  addSessionComment, deleteSessionComment, likeComment, unlikeComment,
+  SessionLike, SessionComment,
+} from '../utils/friendsApi';
+import { sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
 
 interface DaySession {
   date: string;
@@ -49,12 +57,10 @@ function SessionFriendPicker({
   initialFriends,
   onSave,
   scrollToSelf,
-  editable,
 }: {
   initialFriends: { id: string; name: string }[];
   onSave: (friends: { id: string; name: string }[]) => void;
   scrollToSelf?: (keyboardHeight: number) => void;
-  editable?: boolean;
 }) {
   const [friends, setFriends] = useState<{ id: string; name: string }[]>(initialFriends);
   const isFocused = useRef(false);
@@ -76,7 +82,6 @@ function SessionFriendPicker({
       selected={friends}
       onChange={(names) => { setFriends(names); onSave(names); }}
       onFocus={() => { isFocused.current = true; }}
-      editable={editable}
     />
   );
 }
@@ -101,8 +106,8 @@ function formatSessionLabel(s: DaySession): { top: string; bottom: string } {
 
 export default function SessionsScreen() {
   const { colors } = useTheme();
-  const { user } = useAuth();
-  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, returnTo, setReturnTo, navigate } = useNav();
+  const { user, avatarUrl, localAvatarUri } = useAuth();
+  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, returnTo, setReturnTo, navigate, viewFriendProfile } = useNav();
 
   // Keep refs current so load() (stable useCallback with [] deps) can read
   // the latest navPendingSessionId without a stale closure
@@ -644,6 +649,65 @@ export default function SessionsScreen() {
     const isActive = day.sessionId === getActiveSessionId();
     const [editMode, setEditMode] = useState(false);
     const canEditMeta = isActive || editMode;
+    const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
+    const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
+    const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
+    const [commentText, setCommentText] = useState('');
+    const [commentsExpanded, setCommentsExpanded] = useState(false);
+
+    useEffect(() => {
+      if (isActive) return;
+      Promise.all([
+        getSessionLikes(day.sessionId),
+        getSessionComments(day.sessionId),
+      ]).then(([likes, comments]) => {
+        setSessionLikes(likes);
+        setSessionComments(comments);
+        if (comments.length > 0) {
+          getCommentLikes(comments.map(c => c.id)).then(setCommentLikesMap);
+        }
+      });
+    }, [day.sessionId, isActive]);
+
+    const myAvatar = localAvatarUri ?? avatarUrl;
+
+    async function handleCommentLikeToggle(commentId: string, commentAuthorId: string) {
+      if (!user) return;
+      const likedBy = commentLikesMap[commentId] ?? [];
+      const alreadyLiked = likedBy.includes(user.id);
+      if (alreadyLiked) {
+        await unlikeComment(commentId, user.id);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== user.id) }));
+      } else {
+        await likeComment(commentId, user.id);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, user.id] }));
+        if (commentAuthorId !== user.id) {
+          sendCommentLikeNotification(commentAuthorId, user.id, user.id).catch(() => {});
+        }
+      }
+    }
+
+    async function handleDeleteSessionComment(commentId: string) {
+      await deleteSessionComment(commentId);
+      const updated = await getSessionComments(day.sessionId);
+      setSessionComments(updated);
+    }
+
+    async function handleSendSessionComment() {
+      if (!user || !commentText.trim()) return;
+      try {
+        await addSessionComment(day.sessionId, user.id, commentText.trim());
+      } catch (err: any) {
+        Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
+        return;
+      }
+      setCommentText('');
+      Keyboard.dismiss();
+      const updated = await getSessionComments(day.sessionId);
+      setSessionComments(updated);
+      // No notification needed — you're commenting on your own session.
+    }
+
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = isActive ? day.climbs : mergeClimbs(day.climbs);
 
@@ -731,13 +795,13 @@ export default function SessionsScreen() {
             <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
               <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
             </TouchableOpacity>
-          ) : canEditMeta ? (
+          ) : (
             <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
               <Text style={[styles.metaAction, { color: colors.accent }]}>
                 {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
               </Text>
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
         {editingNotes ? (
           <TextInput
@@ -768,7 +832,6 @@ export default function SessionsScreen() {
               setSessionLocation(loc);
               handleSaveSessionMeta(sessionNotes, sessionFriends, loc, sessionMediaItems);
             }}
-            editable={canEditMeta}
           />
         </View>
       </View>
@@ -797,7 +860,6 @@ export default function SessionsScreen() {
               detailScrollRef.current?.scrollTo({ y: Math.max(0, scrollY), animated: true });
             }
           }}
-          editable={canEditMeta}
         />
       </View>
     );
@@ -834,7 +896,7 @@ export default function SessionsScreen() {
               <TouchableOpacity
                 key={idx}
                 onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
-                onLongPress={canEditMeta ? () => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex) : undefined}
+                onLongPress={() => item.fromClimb ? handleRemoveClimbMediaItem(item.climbId, item.uri) : handleRemoveSessionMediaItem(item.sessionIndex)}
                 activeOpacity={0.9}
                 delayLongPress={400}
                 style={{ marginRight: SPACING.sm }}
@@ -842,27 +904,131 @@ export default function SessionsScreen() {
                 <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
               </TouchableOpacity>
             ))}
-            {canEditMeta && (
-              <TouchableOpacity
-                style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
-                onPress={handlePickSessionMedia}
-                activeOpacity={0.7}
-              >
-                <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
-        ) : (
-          canEditMeta && (
             <TouchableOpacity
-              style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+              style={[styles.mediaThumbnail, styles.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bg }]}
               onPress={handlePickSessionMedia}
               activeOpacity={0.7}
             >
-              <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+              <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
             </TouchableOpacity>
-          )
+          </ScrollView>
+        ) : (
+          <TouchableOpacity
+            style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
+            onPress={handlePickSessionMedia}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.mediaBtnText, { color: colors.textSecondary }]}>+ Add Photo</Text>
+          </TouchableOpacity>
         )}
+      </View>
+    );
+
+    const notesViewSection = hasNotes ? (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+        <Text style={[styles.notesText, { color: colors.textSecondary }]}>{sessionNotes}</Text>
+      </View>
+    ) : null;
+
+    const locationViewSection = hasLocation ? (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
+        <View style={styles.viewLocationRow}>
+          <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
+          <Text style={[styles.viewLocationText, { color: colors.textPrimary }]} numberOfLines={1}>{sessionLocation}</Text>
+        </View>
+      </View>
+    ) : null;
+
+    const friendsViewSection = hasFriends ? (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
+        <View style={styles.viewChips}>
+          {sessionFriends.map(f => (
+            <View key={f.id} style={[styles.viewChip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+              <Text style={[styles.viewChipText, { color: colors.accent }]}>{f.name}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    ) : null;
+
+    const mediaViewSection = hasMedia ? (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+          {allMedia.map((item, idx) => (
+            <TouchableOpacity
+              key={idx}
+              onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); setViewerVisible(true); }}
+              activeOpacity={0.9}
+              style={{ marginRight: SPACING.sm }}
+            >
+              <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    ) : null;
+
+    const visibleComments = commentsExpanded ? sessionComments : sessionComments.slice(0, 3);
+    const hiddenCommentCount = sessionComments.length - 3;
+
+    const likesCommentsSection = (
+      <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <Text style={[styles.metaLabel, { color: colors.textMuted }]}>ACTIVITY</Text>
+        <LikesAvatarRow
+          likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+          onPressLiker={(l) => viewFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
+          currentUserId={user?.id}
+          colors={colors}
+        />
+        {sessionComments.length > 0 && (
+          <View style={{ marginTop: SPACING.sm }}>
+            {visibleComments.map(c => (
+              <SwipeableComment
+                key={c.id}
+                c={c}
+                isOwn // this screen only ever shows your own session, so you can always delete
+                onDelete={() => handleDeleteSessionComment(c.id)}
+                onReport={() => {}} // never reportable on your own post
+                onLike={() => handleCommentLikeToggle(c.id, c.user_id)}
+                onNamePress={() => {
+                  if (c.user_id === user?.id) return;
+                  viewFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null });
+                }}
+                colors={colors}
+                commentAvatarUrl={c.user_id === user?.id ? (myAvatar ?? null) : (c.profile?.avatar_url ?? null)}
+                likedByUserIds={commentLikesMap[c.id] ?? []}
+                currentUserId={user?.id ?? ''}
+              />
+            ))}
+            {!commentsExpanded && hiddenCommentCount > 0 && (
+              <TouchableOpacity onPress={() => setCommentsExpanded(true)} activeOpacity={0.7}>
+                <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenCommentCount} more comment{hiddenCommentCount > 1 ? 's' : ''}</Text>
+              </TouchableOpacity>
+            )}
+            {commentsExpanded && sessionComments.length > 3 && (
+              <TouchableOpacity onPress={() => setCommentsExpanded(false)} activeOpacity={0.7}>
+                <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+        <View style={[styles.viewCommentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+          <TextInput
+            style={[styles.viewCommentInputText, { color: colors.textPrimary }]}
+            placeholder="Add a comment..."
+            placeholderTextColor={colors.textMuted}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+          />
+          <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
+            <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
     );
 
@@ -974,13 +1140,23 @@ export default function SessionsScreen() {
               {showFriends && friendsSection}
               {showMedia && mediaSection}
             </>
-          ) : (
+          ) : editMode ? (
             <>
               {showNotes && notesSection}
               {showLocation && locationSection}
               {showFriends && friendsSection}
               {showMedia && mediaSection}
               {climbsSection}
+              {likesCommentsSection}
+            </>
+          ) : (
+            <>
+              {notesViewSection}
+              {locationViewSection}
+              {friendsViewSection}
+              {mediaViewSection}
+              {climbsSection}
+              {likesCommentsSection}
             </>
           )}
 
@@ -1335,6 +1511,15 @@ const styles = StyleSheet.create({
   mediaBtnText: {
     fontSize: FONTS.sizes.sm,
   },
+
+  viewLocationRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  viewLocationText: { flex: 1, fontSize: FONTS.sizes.md },
+  viewChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  viewChip: { borderRadius: 20, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs },
+  viewChipText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
+  commentShowMore: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
+  viewCommentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginTop: SPACING.sm },
+  viewCommentInputText: { flex: 1, fontSize: FONTS.sizes.sm, maxHeight: 80 },
 
   // Notes & Friends meta cards
   metaCard: {
