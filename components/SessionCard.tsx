@@ -26,10 +26,12 @@ interface SessionCardProps {
   onOpenClimb: (climb: Climb) => void;
   onDeleteClimb: (climbId: string) => void | Promise<void>;
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
+  onSwipeStart?: () => void;
+  onSwipeEnd?: () => void;
 }
 
 export default function SessionCard({
-  day, colors, currentUserId, myAvatar, onEdit, onShare, onOpenClimb, onDeleteClimb, onViewProfile,
+  day, colors, currentUserId, myAvatar, onEdit, onShare, onOpenClimb, onDeleteClimb, onViewProfile, onSwipeStart, onSwipeEnd,
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount } = sessionStats(day);
   const label = formatSessionLabel(day);
@@ -195,7 +197,7 @@ export default function SessionCard({
             <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
           ) : (
             displayClimbs.map(c => (
-              <SwipeToDelete key={c.id} heightOffset={0} onDelete={() => onDeleteClimb(c.id)}>
+              <SwipeToDelete key={c.id} heightOffset={0} onDelete={() => onDeleteClimb(c.id)} onSwipeStart={onSwipeStart} onSwipeEnd={onSwipeEnd}>
                 <ClimbCard climb={c} compact onPress={() => onOpenClimb(c)} />
               </SwipeToDelete>
             ))

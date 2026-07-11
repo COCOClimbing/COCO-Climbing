@@ -627,7 +627,6 @@ export default function SessionsScreen() {
     const [activeFriends, setActiveFriends] = useState<{ id: string; name: string }[]>([]);
     const [activeLocation, setActiveLocation] = useState('');
     const [activeMediaItems, setActiveMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
-    const [activeDetailScrollEnabled, setActiveDetailScrollEnabled] = useState(true);
 
     useEffect(() => {
       setActiveTitle(activeSession?.title ?? '');
@@ -736,8 +735,8 @@ export default function SessionsScreen() {
           activeSession.climbs.map(c => (
             <SwipeToDelete
               key={c.id}
-              onSwipeStart={() => setActiveDetailScrollEnabled(false)}
-              onSwipeEnd={() => setActiveDetailScrollEnabled(true)}
+              onSwipeStart={() => setListScrollEnabled(false)}
+              onSwipeEnd={() => setListScrollEnabled(true)}
               onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
               rightAction={c.outcome === 'attempt' ? {
                 label: 'Send',
@@ -1551,7 +1550,7 @@ export default function SessionsScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={styles.list} scrollEnabled={listScrollEnabled}>
           <ActiveSessionCard />
           {listDays.length === 0 && !activeSession && (
             <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
@@ -1568,6 +1567,8 @@ export default function SessionsScreen() {
               onOpenClimb={(climb) => setDetailClimb(climb)}
               onDeleteClimb={async (climbId) => { await deleteClimb(climbId); triggerStatsRefresh(); load(); }}
               onViewProfile={viewFriendProfile}
+              onSwipeStart={() => setListScrollEnabled(false)}
+              onSwipeEnd={() => setListScrollEnabled(true)}
             />
           ))}
         </ScrollView>
