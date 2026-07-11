@@ -894,6 +894,13 @@ export default function SessionsScreen() {
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Share</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { borderColor: colors.border }]}
+            onPress={() => setChangeDateSession(activeSession)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Edit Date</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
