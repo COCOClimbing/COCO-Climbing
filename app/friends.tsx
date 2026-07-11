@@ -24,9 +24,9 @@ import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
-import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade, Climb } from '../utils/theme';
+import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback, deleteClimb, triggerStatsRefresh } from '../utils/storage';
+import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
 import { DaySession } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
@@ -34,7 +34,6 @@ import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
 import SessionCard from '../components/SessionCard';
 import ActivityCard from '../components/ActivityCard';
-import ClimbDetailModal from '../components/ClimbDetailModal';
 import { format, parseISO } from 'date-fns';
 import {
   FriendProfile,
@@ -212,7 +211,6 @@ function FriendDetailView({
   const loadingMoreSessionsRef = useRef(false);
   const [shareDay, setShareDay] = useState<DaySession | null>(null);
   const [shareFriendEntry, setShareFriendEntry] = useState<SessionSummary | null>(null);
-  const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
   const [preferredRope, setPreferredRope] = useState('yds');
 
@@ -554,13 +552,6 @@ function FriendDetailView({
                       myAvatar={myAvatar}
                       onEdit={() => navigateToSession(day.sessionId)}
                       onShare={() => setShareDay(day)}
-                      onOpenClimb={(climb) => setDetailClimb(climb)}
-                      onDeleteClimb={async (climbId) => {
-                        await deleteClimb(climbId);
-                        triggerStatsRefresh();
-                        loadClimbs();
-                        loadSessions(sessionsDaysLoaded, false);
-                      }}
                       onViewProfile={handleViewProfile}
                     />
                   ))}
@@ -681,16 +672,6 @@ function FriendDetailView({
         }
         accentColor={colors.accent}
         onDismiss={() => { setShareDay(null); setShareFriendEntry(null); }}
-      />
-      <ClimbDetailModal
-        visible={!!detailClimb}
-        climb={detailClimb}
-        onClose={() => setDetailClimb(null)}
-        onEdit={() => {
-          const sid = detailClimb?.sessionId;
-          setDetailClimb(null);
-          if (sid) navigateToSession(sid);
-        }}
       />
     </View>
   );
