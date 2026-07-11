@@ -24,7 +24,7 @@ import { EmptyState } from '../components/UI';
 import LogClimbModal from '../components/LogClimbModal';
 import SwipeToDelete from '../components/SwipeToDelete';
 import MiniCalendar from '../components/MiniCalendar';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
@@ -35,7 +35,7 @@ import {
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
-import { sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
+import { sendCommentLikeNotification } from '../utils/notifications';
 
 interface DaySession {
   date: string;
