@@ -614,3 +614,21 @@ export async function getPreferredDisplayGrades(): Promise<{ boulder: string; ro
     };
   } catch { return { boulder: 'v-scale', rope: 'yds' }; }
 }
+
+// ─── Sessions Tab Condensed View ──────────────────────────────────────────────
+
+const SESSIONS_CONDENSED_KEY = 'coco_sessions_condensed';
+
+export async function saveSessionsCondensed(condensed: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SESSIONS_CONDENSED_KEY, JSON.stringify(condensed));
+  } catch {}
+}
+
+export async function getSessionsCondensed(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(SESSIONS_CONDENSED_KEY);
+    if (!raw) return false;
+    return JSON.parse(raw) === true;
+  } catch { return false; }
+}
