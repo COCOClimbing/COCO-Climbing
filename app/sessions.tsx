@@ -1255,11 +1255,7 @@ export default function SessionsScreen() {
                 myAvatar={localAvatarUri ?? avatarUrl}
                 onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
                 onShare={() => setShareDay(day)}
-                onOpenClimb={(climb) => setDetailClimb(climb)}
-                onDeleteClimb={async (climbId) => { await deleteClimb(climbId); triggerStatsRefresh(); load(); }}
                 onViewProfile={viewFriendProfile}
-                onSwipeStart={() => setListScrollEnabled(false)}
-                onSwipeEnd={() => setListScrollEnabled(true)}
                 condensed={sessionsCondensed}
               />
             </View>
