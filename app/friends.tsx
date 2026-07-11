@@ -1670,6 +1670,7 @@ export default function FriendsScreen() {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, zIndex: 100 }]}>
         <FriendDetailView
+          key={viewingFriend.id}
           friend={viewingFriend}
           onBack={() => {
             setViewingFriend(null);
