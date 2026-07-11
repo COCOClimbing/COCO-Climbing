@@ -34,7 +34,7 @@ import {
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
-import { DaySession, climbCount, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
@@ -716,7 +716,7 @@ export default function SessionsScreen() {
 
     if (!activeSession) return null;
 
-    const { sends, hardest, projecting } = sessionStats(activeSession);
+    const { sends, hardest, projecting, gradedCount } = sessionStats(activeSession);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
 
     const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
@@ -784,7 +784,7 @@ export default function SessionsScreen() {
           ) : (
             <>
               <View style={styles.todayStat}>
-                <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{activeSession.climbs.reduce((s, c) => s + climbCount(c), 0)}</Text>
+                <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
                 <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
               </View>
               <View style={styles.todayStat}>
@@ -981,7 +981,7 @@ export default function SessionsScreen() {
   // ── Session Edit Modal ────────────────────────────────────────────────────────
 
   function SessionEditModalContent({ day }: { day: DaySession }) {
-    const { sends, hardest, projecting } = sessionStats(day);
+    const { sends, hardest, projecting, gradedCount } = sessionStats(day);
     const label = formatSessionLabel(day);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = mergeClimbs(day.climbs);
@@ -1058,7 +1058,7 @@ export default function SessionsScreen() {
               ) : (
                 <>
                   <View style={styles.todayStat}>
-                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{day.climbs.reduce((s, c) => s + climbCount(c), 0)}</Text>
+                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
                     <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
                   </View>
                   <View style={styles.todayStat}>
