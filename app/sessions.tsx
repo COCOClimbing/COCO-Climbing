@@ -1402,10 +1402,6 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.sm,
   },
 
-  commentShowMore: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
-  viewCommentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginTop: SPACING.sm },
-  viewCommentInputText: { flex: 1, fontSize: FONTS.sizes.sm, maxHeight: 80 },
-
   // Notes & Friends meta cards
   metaCard: {
     borderRadius: 12,
