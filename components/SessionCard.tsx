@@ -66,10 +66,11 @@ interface SessionCardProps {
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
   onSwipeStart?: () => void;
   onSwipeEnd?: () => void;
+  condensed?: boolean;
 }
 
 export default function SessionCard({
-  day, colors, currentUserId, myAvatar, onEdit, onShare, onOpenClimb, onDeleteClimb, onViewProfile, onSwipeStart, onSwipeEnd,
+  day, colors, currentUserId, myAvatar, onEdit, onShare, onOpenClimb, onDeleteClimb, onViewProfile, onSwipeStart, onSwipeEnd, condensed = false,
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount } = sessionStats(day);
   const label = formatSessionLabel(day);
@@ -168,7 +169,7 @@ export default function SessionCard({
       </View>
 
       {/* Location */}
-      {hasLocation && (
+      {!condensed && hasLocation && (
         <View style={styles.cardLocationRow}>
           <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
           <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{day.location}</Text>
@@ -176,12 +177,12 @@ export default function SessionCard({
       )}
 
       {/* Notes */}
-      {hasNotes && (
+      {!condensed && hasNotes && (
         <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{day.notes}</Text>
       )}
 
       {/* Climbing with */}
-      {hasFriends && (
+      {!condensed && hasFriends && (
         <View style={styles.partnersRow}>
           <Text style={[styles.partnersLabel, { color: colors.textMuted }]}>with </Text>
           {day.friends!.map((f, i) => (
@@ -224,7 +225,7 @@ export default function SessionCard({
       </View>
 
       {/* Photos */}
-      {hasMedia && (
+      {!condensed && hasMedia && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -267,7 +268,7 @@ export default function SessionCard({
       )}
 
       {/* Likes / comment counts */}
-      {(sessionLikes.length > 0 || sessionComments.length > 0) && (
+      {!condensed && (sessionLikes.length > 0 || sessionComments.length > 0) && (
         <View style={styles.cardCounts}>
           <LikesAvatarRow
             likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
@@ -284,17 +285,19 @@ export default function SessionCard({
       )}
 
       {/* Actions */}
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
-          <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
-          <Ionicons name="share-outline" size={22} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+      {!condensed && (
+        <View style={styles.cardActions}>
+          <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
+            <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
+            <Ionicons name="share-outline" size={22} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Comment thread */}
-      {sessionComments.length > 0 && (
+      {!condensed && sessionComments.length > 0 && (
         <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
           {visibleComments.map(c => (
             <SwipeableComment
@@ -328,19 +331,21 @@ export default function SessionCard({
       )}
 
       {/* Comment input */}
-      <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-        <TextInput
-          style={[styles.commentInputText, { color: colors.textPrimary }]}
-          placeholder="Add a comment..."
-          placeholderTextColor={colors.textMuted}
-          value={commentText}
-          onChangeText={setCommentText}
-          multiline
-        />
-        <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
-          <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+      {!condensed && (
+        <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+          <TextInput
+            style={[styles.commentInputText, { color: colors.textPrimary }]}
+            placeholder="Add a comment..."
+            placeholderTextColor={colors.textMuted}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+          />
+          <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
+            <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Photo viewer for this card's media */}
       {viewerUris && (
