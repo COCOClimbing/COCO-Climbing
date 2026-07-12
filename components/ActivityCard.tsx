@@ -131,9 +131,9 @@ export default function ActivityCard({
       setSessionLikes(likes);
       setSessionComments(comments);
       if (comments.length > 0) {
-        getCommentLikes(comments.map(c => c.id)).then(setCommentLikesMap);
+        getCommentLikes(comments.map(c => c.id)).then(setCommentLikesMap).catch(() => {});
       }
-    });
+    }).catch(() => {});
   }, [entry.sessionId]);
 
   async function handleToggleClimbs() {
@@ -174,17 +174,24 @@ export default function ActivityCard({
 
   async function handleCommentLikeToggle(commentId: string, commentAuthorId: string) {
     if (!currentUserId || !entry.sessionId) return;
+    const sessionId = entry.sessionId;
     const likedBy = commentLikesMap[commentId] ?? [];
     const alreadyLiked = likedBy.includes(currentUserId);
-    if (alreadyLiked) {
-      await unlikeComment(commentId, currentUserId);
-      setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== currentUserId) }));
-    } else {
-      await likeComment(commentId, currentUserId);
-      setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
-      if (commentAuthorId !== currentUserId) {
-        sendCommentLikeNotification(commentAuthorId, currentUserId, entry.sessionId, commentId).catch(() => {});
+    try {
+      if (alreadyLiked) {
+        await unlikeComment(commentId, currentUserId);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== currentUserId) }));
+      } else {
+        await likeComment(commentId, currentUserId);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
+        if (commentAuthorId !== currentUserId) {
+          sendCommentLikeNotification(commentAuthorId, currentUserId, sessionId, commentId).catch(() => {});
+        }
       }
+    } catch {
+      // Swallow — state is only updated after the API call succeeds above,
+      // so a failure leaves nothing to roll back, just nothing left to
+      // silently reject.
     }
   }
 

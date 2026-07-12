@@ -51,12 +51,16 @@ export default function AppHeader() {
 
   const loadUnreadCount = useCallback(async () => {
     if (!user) return;
-    const { count } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('recipient_id', user.id)
-      .eq('read', false);
-    setUnreadCount(count ?? 0);
+    try {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('read', false);
+      setUnreadCount(count ?? 0);
+    } catch {
+      // Network failure — leave the count as-is, the next 60s poll will retry.
+    }
   }, [user]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Image as CompressorImage } from 'react-native-compressor';
 import { supabase } from '../utils/supabase';
 import ShareModal from '../components/ShareModal';
 import LocationPicker from '../components/LocationPicker';
@@ -333,7 +334,8 @@ export default function SessionsScreen() {
       const slot = startIdx + i;
       try {
         const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
-        const url = await uploadMedia(item.uri, path, authSession.access_token);
+        const compressedUri = await CompressorImage.compress(item.uri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+        const url = await uploadMedia(compressedUri, path, authSession.access_token);
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
       } catch (uploadErr: any) {
@@ -463,7 +465,8 @@ export default function SessionsScreen() {
       const slot = startIdx + i;
       try {
         const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
-        const url = await uploadMedia(item.uri, path, authSession.access_token);
+        const compressedUri = await CompressorImage.compress(item.uri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+        const url = await uploadMedia(compressedUri, path, authSession.access_token);
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
         // Permanent copy deleted AFTER the R2 URL is saved to local (below).

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
@@ -84,24 +84,30 @@ export default function SessionCard({
       setSessionLikes(likes);
       setSessionComments(comments);
       if (comments.length > 0) {
-        getCommentLikes(comments.map(c => c.id)).then(setCommentLikesMap);
+        getCommentLikes(comments.map(c => c.id)).then(setCommentLikesMap).catch(() => {});
       }
-    });
+    }).catch(() => {});
   }, [day.sessionId]);
 
   async function handleCommentLikeToggle(commentId: string, commentAuthorId: string) {
     if (!currentUserId) return;
     const likedBy = commentLikesMap[commentId] ?? [];
     const alreadyLiked = likedBy.includes(currentUserId);
-    if (alreadyLiked) {
-      await unlikeComment(commentId, currentUserId);
-      setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== currentUserId) }));
-    } else {
-      await likeComment(commentId, currentUserId);
-      setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
-      if (commentAuthorId !== currentUserId) {
-        sendCommentLikeNotification(commentAuthorId, currentUserId, day.sessionId, commentId).catch(() => {});
+    try {
+      if (alreadyLiked) {
+        await unlikeComment(commentId, currentUserId);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: likedBy.filter(id => id !== currentUserId) }));
+      } else {
+        await likeComment(commentId, currentUserId);
+        setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
+        if (commentAuthorId !== currentUserId) {
+          sendCommentLikeNotification(commentAuthorId, currentUserId, day.sessionId, commentId).catch(() => {});
+        }
       }
+    } catch {
+      // Swallow — a failed like/unlike leaves commentLikesMap unchanged
+      // (state is only updated after the API call succeeds above), so
+      // there's nothing to roll back, just nothing left to silently reject.
     }
   }
 
@@ -113,7 +119,12 @@ export default function SessionCard({
 
   async function handleSendSessionComment() {
     if (!currentUserId || !commentText.trim()) return;
-    await addSessionComment(day.sessionId, currentUserId, commentText.trim());
+    try {
+      await addSessionComment(day.sessionId, currentUserId, commentText.trim());
+    } catch (err: any) {
+      Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
+      return;
+    }
     setCommentText('');
     Keyboard.dismiss();
     const updated = await getSessionComments(day.sessionId);
