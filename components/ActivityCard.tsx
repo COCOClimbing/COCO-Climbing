@@ -183,7 +183,7 @@ export default function ActivityCard({
       await likeComment(commentId, currentUserId);
       setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
       if (commentAuthorId !== currentUserId) {
-        sendCommentLikeNotification(commentAuthorId, currentUserId, entry.sessionId).catch(() => {});
+        sendCommentLikeNotification(commentAuthorId, currentUserId, entry.sessionId, commentId).catch(() => {});
       }
     }
   }

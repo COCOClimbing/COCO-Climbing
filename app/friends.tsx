@@ -1437,7 +1437,7 @@ export default function FriendsScreen() {
     }
   }
 
-  async function handleCommentLike(commentId: string, sessionOwnerId: string) {
+  async function handleCommentLike(commentId: string, sessionId: string) {
     if (!user) return;
     const likedBy = commentLikesMap[commentId] ?? [];
     const alreadyLiked = likedBy.includes(user.id);
@@ -1450,7 +1450,7 @@ export default function FriendsScreen() {
       const allComments = Object.values(commentsMap).flat();
       const comment = allComments.find(c => c.id === commentId);
       if (comment && comment.user_id !== user.id) {
-        sendCommentLikeNotification(comment.user_id, user.id, sessionOwnerId).catch(() => {});
+        sendCommentLikeNotification(comment.user_id, user.id, sessionId, commentId).catch(() => {});
       }
     }
   }
@@ -2100,7 +2100,7 @@ export default function FriendsScreen() {
                                       { text: 'Cancel', style: 'cancel' },
                                       { text: 'Report', style: 'destructive', onPress: () => submitReport(c.user_id, c.id, 'comment', 'Inappropriate comment') },
                                     ]) : () => {}}
-                                    onLike={() => entry.sessionId && handleCommentLike(c.id, entry.friend.id)}
+                                    onLike={() => entry.sessionId && handleCommentLike(c.id, entry.sessionId)}
                                     onNamePress={() => {
                                       if (c.user_id === user?.id) return;
                                       openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');

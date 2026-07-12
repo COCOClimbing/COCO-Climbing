@@ -100,7 +100,7 @@ export default function SessionCard({
       await likeComment(commentId, currentUserId);
       setCommentLikesMap(prev => ({ ...prev, [commentId]: [...likedBy, currentUserId] }));
       if (commentAuthorId !== currentUserId) {
-        sendCommentLikeNotification(commentAuthorId, currentUserId, day.sessionId).catch(() => {});
+        sendCommentLikeNotification(commentAuthorId, currentUserId, day.sessionId, commentId).catch(() => {});
       }
     }
   }

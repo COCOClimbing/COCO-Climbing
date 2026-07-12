@@ -141,9 +141,9 @@ export async function sendFollowRequestAcceptedNotification(requesterId: string,
   await sendNotification('follow_request_accepted', requesterId, acceptorId);
 }
 
-export async function sendCommentLikeNotification(commentAuthorId: string, likerId: string, sessionId: string): Promise<void> {
+export async function sendCommentLikeNotification(commentAuthorId: string, likerId: string, sessionId: string, commentId: string): Promise<void> {
   if (likerId === commentAuthorId) return;
-  await sendNotification('comment_like', commentAuthorId, likerId, { sessionId });
+  await sendNotification('comment_like', commentAuthorId, likerId, { sessionId, commentId });
 }
 
 const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request', 'follow_request_accepted']);
