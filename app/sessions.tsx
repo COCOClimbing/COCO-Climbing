@@ -81,7 +81,7 @@ export default function SessionsScreen() {
   clearNavPendingRef.current = clearPendingSessionId;
 
   useEffect(() => {
-    if (tabResetCount['sessions']) setSelectedDay(null);
+    if (tabResetCount['sessions']) { setSelectedDay(null); setActiveSessionExpanded(false); }
   }, [tabResetCount['sessions']]);
 
   useEffect(() => {
@@ -94,6 +94,7 @@ export default function SessionsScreen() {
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
   const [sessionsCondensed, setSessionsCondensed] = useState(_cachedCondensed);
+  const [activeSessionExpanded, setActiveSessionExpanded] = useState(false);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
@@ -656,7 +657,6 @@ export default function SessionsScreen() {
     const [activeFriends, setActiveFriends] = useState<{ id: string; name: string }[]>([]);
     const [activeLocation, setActiveLocation] = useState('');
     const [activeMediaItems, setActiveMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
-    const [activeSessionModalVisible, setActiveSessionModalVisible] = useState(false);
 
     useEffect(() => {
       setActiveTitle(activeSession?.title ?? '');
@@ -690,13 +690,12 @@ export default function SessionsScreen() {
       ...climbMedia,
     ];
 
-    return (
-      <>
-        {/* Compact card — tap to open the full editable view */}
+    if (!activeSessionExpanded) {
+      return (
         <TouchableOpacity
           activeOpacity={0.7}
           style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, gap: SPACING.md, marginBottom: SPACING.md }]}
-          onPress={() => setActiveSessionModalVisible(true)}
+          onPress={() => setActiveSessionExpanded(true)}
         >
           <View style={styles.activeBadgeRow}>
             <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
@@ -727,18 +726,14 @@ export default function SessionsScreen() {
             )}
           </View>
         </TouchableOpacity>
+      );
+    }
 
-        {/* Full editable view */}
-        <Modal
-          visible={activeSessionModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setActiveSessionModalVisible(false)}
-        >
-          <View style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
-            <View style={[styles.detailTopBar, { borderBottomColor: colors.border, justifyContent: 'flex-end' }]}>
-              <TouchableOpacity onPress={() => setActiveSessionModalVisible(false)} style={styles.backBtn} activeOpacity={0.7}>
-                <Text style={[styles.backBtnText, { color: colors.accent }]}>Done</Text>
+    return (
+      <View style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
+            <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity onPress={() => setActiveSessionExpanded(false)} style={styles.backBtn} activeOpacity={0.7}>
+                <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.detailContent}>
@@ -956,7 +951,7 @@ export default function SessionsScreen() {
                   <TouchableOpacity
                     style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
                     onPress={async () => {
-                      setActiveSessionModalVisible(false);
+                      setActiveSessionExpanded(false);
                       if (activeSessionId) {
                         await endSession(activeSessionId);
                         const sessions = await import('../utils/storage').then(m => m.getAllSessions());
@@ -987,8 +982,6 @@ export default function SessionsScreen() {
               </View>
             </ScrollView>
           </View>
-        </Modal>
-      </>
     );
   }
 
@@ -1282,45 +1275,51 @@ export default function SessionsScreen() {
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
 
       <View style={{ flex: 1 }}>
-        <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.addSessionBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
-            onPress={handleNewSession}
-          >
-            <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleToggleCondensed}
-            style={[styles.condenseToggleBtn, { borderColor: colors.borderLight }]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name={sessionsCondensed ? 'expand-outline' : 'contract-outline'} size={18} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
-            <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView ref={sessionsScrollRef} contentContainerStyle={styles.list} scrollEnabled={listScrollEnabled}>
+        {activeSessionExpanded ? (
           <ActiveSessionCard />
-          {listDays.length === 0 && !activeSession && (
-            <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
-          )}
-          {listDays.map(day => (
-            <View key={day.sessionId} onLayout={(e) => { sessionCardOffsets.current[day.sessionId] = e.nativeEvent.layout.y; }}>
-              <SessionCard
-                day={day}
-                colors={colors}
-                currentUserId={user?.id}
-                myAvatar={localAvatarUri ?? avatarUrl}
-                onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
-                onShare={() => setShareDay(day)}
-                onViewProfile={viewFriendProfile}
-                condensed={sessionsCondensed}
-              />
+        ) : (
+          <>
+            <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.addSessionBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
+                onPress={handleNewSession}
+              >
+                <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleToggleCondensed}
+                style={[styles.condenseToggleBtn, { borderColor: colors.borderLight }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name={sessionsCondensed ? 'expand-outline' : 'contract-outline'} size={18} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
+                <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
+
+            <ScrollView ref={sessionsScrollRef} contentContainerStyle={styles.list} scrollEnabled={listScrollEnabled}>
+              <ActiveSessionCard />
+              {listDays.length === 0 && !activeSession && (
+                <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
+              )}
+              {listDays.map(day => (
+                <View key={day.sessionId} onLayout={(e) => { sessionCardOffsets.current[day.sessionId] = e.nativeEvent.layout.y; }}>
+                  <SessionCard
+                    day={day}
+                    colors={colors}
+                    currentUserId={user?.id}
+                    myAvatar={localAvatarUri ?? avatarUrl}
+                    onEdit={() => { setSelectedDay(day); setEditModalVisible(true); }}
+                    onShare={() => setShareDay(day)}
+                    onViewProfile={viewFriendProfile}
+                    condensed={sessionsCondensed}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
 
         <MiniCalendar
           visible={calendarVisible}
