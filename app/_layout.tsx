@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
 import { supabase } from '../utils/supabase';
@@ -203,6 +203,25 @@ function AppShell({ onReady }: { onReady: () => void }) {
   );
 }
 
+// Rendered by the top-level error boundary below when any uncaught render
+// error occurs anywhere in the tree. Deliberately uses hardcoded colors
+// rather than ThemeContext — if the crash originated inside ThemeProvider
+// itself, this still needs to render something usable.
+function ErrorFallback({ resetError }: { resetError: () => void }) {
+  const handleReload = () => {
+    Updates.reloadAsync().catch(() => resetError());
+  };
+  return (
+    <View style={styles.errorFallback}>
+      <Text style={styles.errorTitle}>Something went wrong</Text>
+      <Text style={styles.errorBody}>COCO hit an unexpected error. Tap below to reload.</Text>
+      <TouchableOpacity style={styles.errorButton} onPress={handleReload} activeOpacity={0.8}>
+        <Text style={styles.errorButtonText}>Reload</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // Inner component that has theme access and wraps SafeAreaProvider with the correct bg
 function ThemedRoot({ onReady }: { onReady: () => void }) {
   const { colors } = useTheme();
@@ -256,15 +275,22 @@ function RootLayout() {
   if (!fontsLoaded && !fontError && !fontTimedOut) return null;
 
   return (
-    <ThemeProvider>
-      <ThemedRoot onReady={handleReady} />
-    </ThemeProvider>
+    <Sentry.ErrorBoundary fallback={({ resetError }) => <ErrorFallback resetError={resetError} />}>
+      <ThemeProvider>
+        <ThemedRoot onReady={handleReady} />
+      </ThemeProvider>
+    </Sentry.ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
+  errorFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: '#FFFFFF' },
+  errorTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 8, textAlign: 'center' },
+  errorBody: { fontSize: 15, color: '#666666', marginBottom: 24, textAlign: 'center', lineHeight: 21 },
+  errorButton: { backgroundColor: '#BF5F29', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32 },
+  errorButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
 
 export default Sentry.wrap(RootLayout);
