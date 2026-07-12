@@ -51,7 +51,6 @@ import {
   declineFriendRequest,
   removeFriend,
   getFriendRecentClimbs,
-  getFriendRecentSessions,
   getFriendsRecentClimbsBatch,
   getFriendsRecentSessionsBatch,
   getFriendAllClimbs,
@@ -1009,23 +1008,25 @@ export default function FriendsScreen() {
       const taggedSessions = await getTaggedSessions(user.id, days);
       const validTagged = taggedSessions.filter(({ session: s, profile }) => profile && !allExcluded.includes(s.user_id) && s.user_id !== user.id);
 
-      // Batch-fetch climbs for every valid tagged session in one query instead of one per session
+      // Batch-fetch tagged-session climbs and followed friends' climbs + sessions all at
+      // once — none of these three queries depend on each other's results, so fire them
+      // concurrently instead of serializing the tagged-climbs query in front of the rest.
       const taggedSessionIds = validTagged.map(({ session: s }) => s.id);
-      const { data: taggedClimbsRaw } = taggedSessionIds.length > 0
-        ? await supabase.from('climbs').select('*').in('session_id', taggedSessionIds)
-        : { data: [] as any[] };
+      const followedIds = acceptedFiltered.map(f => f.id);
+      const [taggedClimbsResult, friendsClimbsRaw, friendsSessionsRaw] = await Promise.all([
+        taggedSessionIds.length > 0
+          ? supabase.from('climbs').select('*').in('session_id', taggedSessionIds)
+          : Promise.resolve({ data: [] as any[] }),
+        getFriendsRecentClimbsBatch(followedIds, days),
+        getFriendsRecentSessionsBatch(followedIds, days),
+      ]);
+      const taggedClimbsRaw = taggedClimbsResult.data;
       const taggedClimbsMap = new Map<string, any[]>();
       (taggedClimbsRaw ?? []).forEach((c: any) => {
         if (!taggedClimbsMap.has(c.session_id)) taggedClimbsMap.set(c.session_id, []);
         taggedClimbsMap.get(c.session_id)!.push(c);
       });
 
-      // Batch-fetch followed friends' climbs + sessions in one query each, instead of 2 per friend
-      const followedIds = acceptedFiltered.map(f => f.id);
-      const [friendsClimbsRaw, friendsSessionsRaw] = await Promise.all([
-        getFriendsRecentClimbsBatch(followedIds, days),
-        getFriendsRecentSessionsBatch(followedIds, days),
-      ]);
       const climbsByFriend = new Map<string, any[]>();
       friendsClimbsRaw.forEach((c: any) => {
         if (!climbsByFriend.has(c.user_id)) climbsByFriend.set(c.user_id, []);
@@ -1101,85 +1102,87 @@ export default function FriendsScreen() {
 
       // Add friends' recent sessions
       for (const f of acceptedFiltered) {
-        const climbs = climbsByFriend.get(f.id) ?? [];
-        const friendSessions = sessionsByFriend.get(f.id) ?? [];
-        const sessionMediaMap = new Map<string, string[]>(
-          friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
-        );
-        const sessionFriendsMap = new Map<string, any[]>(
-          friendSessions.map((s: any) => [s.id, s.friends ?? []])
-        );
-        const sessionNotesMap = new Map<string, string>(
-          friendSessions.filter((s: any) => s.notes).map((s: any) => [s.id, s.notes])
-        );
-        const sessionTitleMap = new Map<string, string>(
-          friendSessions.filter((s: any) => s.title).map((s: any) => [s.id, s.title])
-        );
-        const sessionLocationMap = new Map<string, string>(
-          friendSessions.filter((s: any) => s.location).map((s: any) => [s.id, s.location])
-        );
-        const sessionDateMap = new Map<string, string>(
-          friendSessions.filter((s: any) => s.date).map((s: any) => [s.id, normDate(s.date)])
-        );
-        const sessionStartedAtMap = new Map<string, string>(
-          friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
-        );
+        try {
+          const climbs = climbsByFriend.get(f.id) ?? [];
+          const friendSessions = sessionsByFriend.get(f.id) ?? [];
+          const sessionMediaMap = new Map<string, string[]>(
+            friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
+          );
+          const sessionFriendsMap = new Map<string, any[]>(
+            friendSessions.map((s: any) => [s.id, s.friends ?? []])
+          );
+          const sessionNotesMap = new Map<string, string>(
+            friendSessions.filter((s: any) => s.notes).map((s: any) => [s.id, s.notes])
+          );
+          const sessionTitleMap = new Map<string, string>(
+            friendSessions.filter((s: any) => s.title).map((s: any) => [s.id, s.title])
+          );
+          const sessionLocationMap = new Map<string, string>(
+            friendSessions.filter((s: any) => s.location).map((s: any) => [s.id, s.location])
+          );
+          const sessionDateMap = new Map<string, string>(
+            friendSessions.filter((s: any) => s.date).map((s: any) => [s.id, normDate(s.date)])
+          );
+          const sessionStartedAtMap = new Map<string, string>(
+            friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
+          );
 
-        // friendSessions only contains sessions with ended_at set. Climbs whose
-        // session_id isn't in that set belong to a session still in progress —
-        // exclude them so open sessions don't leak into the activity feed.
-        const endedSessionIds = new Set(friendSessions.map((s: any) => s.id));
-        const eligibleClimbs = climbs.filter((c: any) => !c.session_id || endedSessionIds.has(c.session_id));
-        if (eligibleClimbs.length === 0) continue;
+          // friendSessions only contains sessions with ended_at set. Climbs whose
+          // session_id isn't in that set belong to a session still in progress —
+          // exclude them so open sessions don't leak into the activity feed.
+          const endedSessionIds = new Set(friendSessions.map((s: any) => s.id));
+          const eligibleClimbs = climbs.filter((c: any) => !c.session_id || endedSessionIds.has(c.session_id));
+          if (eligibleClimbs.length === 0) continue;
 
-        // Build a date→sessionId lookup from the fetched sessions so climbs
-        // that are missing session_id can still be bucketed into the right session.
-        const sessionIdByDate = new Map<string, string>(
-          friendSessions.map((s: any) => [normDate(s.date), s.id])
-        );
+          // Build a date→sessionId lookup from the fetched sessions so climbs
+          // that are missing session_id can still be bucketed into the right session.
+          const sessionIdByDate = new Map<string, string>(
+            friendSessions.map((s: any) => [normDate(s.date), s.id])
+          );
 
-        const sessionGroups = new Map<string, any[]>();
-        for (const c of eligibleClimbs) {
-          const key = c.session_id ?? sessionIdByDate.get(normDate(c.date)) ?? normDate(c.date);
-          if (!sessionGroups.has(key)) sessionGroups.set(key, []);
-          sessionGroups.get(key)!.push(c);
-        }
-
-        for (const sessionClimbs of sessionGroups.values()) {
-          const sends = sessionClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
-          const flashes = sessionClimbs.filter((c: any) => c.outcome === 'flash').length;
-          let hardestGrade: string | null = null;
-          let hardestGradeSystem: string | null = null;
-          let hardestClimb: any = sessionClimbs[0];
-          const gradedClimbs = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
-          if (gradedClimbs.length > 0) {
-            gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
-            hardestGrade = gradedClimbs[0].grade;
-            hardestGradeSystem = gradedClimbs[0].grade_system;
-            hardestClimb = gradedClimbs[0];
+          const sessionGroups = new Map<string, any[]>();
+          for (const c of eligibleClimbs) {
+            const key = c.session_id ?? sessionIdByDate.get(normDate(c.date)) ?? normDate(c.date);
+            if (!sessionGroups.has(key)) sessionGroups.set(key, []);
+            sessionGroups.get(key)!.push(c);
           }
-          const friendSessionId = sessionClimbs[0]?.session_id ?? undefined;
-          // Use the session record's date (local date when created) rather than the
-          // first climb's UTC timestamp, which can cross a date boundary for users
-          // in non-UTC timezones.
-          const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
-          const environment = sessionClimbs[0]?.environment ?? 'indoor';
-          const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
-          const climbType = hardestClimb?.type ?? undefined;
-          const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
-          const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
-          const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
-          const rawFriends: { id: string; name: string }[] = friendSessionId ? (sessionFriendsMap.get(friendSessionId) ?? []) : [];
-          const partnerIds = rawFriends.map((p: any) => p.id).filter((id: string) => id !== f.id);
-          let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
-          if (partnerIds.length > 0) {
-            partners = rawFriends.map((p: any) => ({ id: p.id, name: partnerProfileMap.get(p.id)?.name ?? p.name, avatar_url: partnerProfileMap.get(p.id)?.avatar_url ?? null }));
+
+          for (const sessionClimbs of sessionGroups.values()) {
+            const sends = sessionClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+            const flashes = sessionClimbs.filter((c: any) => c.outcome === 'flash').length;
+            let hardestGrade: string | null = null;
+            let hardestGradeSystem: string | null = null;
+            let hardestClimb: any = sessionClimbs[0];
+            const gradedClimbs = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
+            if (gradedClimbs.length > 0) {
+              gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
+              hardestGrade = gradedClimbs[0].grade;
+              hardestGradeSystem = gradedClimbs[0].grade_system;
+              hardestClimb = gradedClimbs[0];
+            }
+            const friendSessionId = sessionClimbs[0]?.session_id ?? undefined;
+            // Use the session record's date (local date when created) rather than the
+            // first climb's UTC timestamp, which can cross a date boundary for users
+            // in non-UTC timezones.
+            const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
+            const environment = sessionClimbs[0]?.environment ?? 'indoor';
+            const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
+            const climbType = hardestClimb?.type ?? undefined;
+            const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
+            const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
+            const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
+            const rawFriends: { id: string; name: string }[] = friendSessionId ? (sessionFriendsMap.get(friendSessionId) ?? []) : [];
+            const partnerIds = rawFriends.map((p: any) => p.id).filter((id: string) => id !== f.id);
+            let partners: { id: string; name: string; avatar_url: string | null }[] | undefined;
+            if (partnerIds.length > 0) {
+              partners = rawFriends.map((p: any) => ({ id: p.id, name: partnerProfileMap.get(p.id)?.name ?? p.name, avatar_url: partnerProfileMap.get(p.id)?.avatar_url ?? null }));
+            }
+            const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
+            const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
+            const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
+            summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
           }
-          const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
-          const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
-          const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
-          summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
-        }
+        } catch { continue; }
       }
       summaries.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
       // Deduplicate by key to prevent React key collisions
