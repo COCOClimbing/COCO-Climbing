@@ -535,6 +535,7 @@ export default function AccountScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setFollowListModal(null)}
+        onDismiss={() => setFollowListModal(null)}
       >
         <View style={[styles.followModalContainer, { backgroundColor: colors.bg }]}>
           {/* Header with tab switcher */}
@@ -604,6 +605,7 @@ export default function AccountScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setEditProfileVisible(false)}
+        onDismiss={() => setEditProfileVisible(false)}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
@@ -839,6 +841,7 @@ export default function AccountScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={closeSettings}
+        onDismiss={closeSettings}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>

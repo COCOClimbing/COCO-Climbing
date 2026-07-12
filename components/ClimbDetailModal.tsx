@@ -33,7 +33,7 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
   })();
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <View style={[ss.container, { backgroundColor: colors.bg }]}>
         {/* Header */}
         <View style={[ss.header, { borderBottomColor: colors.border }]}>

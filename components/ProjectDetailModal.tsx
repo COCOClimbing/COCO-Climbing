@@ -101,7 +101,7 @@ export default function ProjectDetailModal({ visible, project, refreshKey, onClo
   const uniqueDays = [...new Set(entries.map(e => e.sessionDate))];
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onClose}>
       <View style={[ss.container, { backgroundColor: colors.bg }]}>
         {/* Header */}
         <View style={[ss.header, { borderBottomColor: colors.border }]}>

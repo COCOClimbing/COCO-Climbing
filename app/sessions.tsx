@@ -1403,6 +1403,7 @@ export default function SessionsScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => { setEditModalVisible(false); setSelectedDay(null); }}
+        onDismiss={() => { setEditModalVisible(false); setSelectedDay(null); }}
       >
         {selectedDay && <SessionEditModalContent day={selectedDay} />}
       </Modal>

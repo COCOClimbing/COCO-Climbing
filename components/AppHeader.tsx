@@ -189,7 +189,7 @@ export default function AppHeader() {
       </View>
 
       {/* Notifications modal */}
-      <Modal visible={notifVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifVisible(false)}>
+      <Modal visible={notifVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifVisible(false)} onDismiss={() => setNotifVisible(false)}>
         <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Notifications</Text>

@@ -330,7 +330,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <Modal visible={blockedOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setBlockedOpen(false)}>
+          <Modal visible={blockedOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setBlockedOpen(false)} onDismiss={() => setBlockedOpen(false)}>
             <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
               <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Blocked Accounts</Text>
