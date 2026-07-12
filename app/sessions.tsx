@@ -725,6 +725,39 @@ export default function SessionsScreen() {
               </View>
             )}
           </View>
+
+          {/* Actions — nested touchables claim their own taps, so these don't trigger the card's own onPress (expand) */}
+          <View style={styles.detailActions}>
+            <TouchableOpacity
+              style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
+              onPress={async () => {
+                if (activeSessionId) {
+                  await endSession(activeSessionId);
+                  const sessions = await import('../utils/storage').then(m => m.getAllSessions());
+                  const ended = sessions.find(s => s.id === activeSessionId);
+                  if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
+                }
+                await load();
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.logClimbBtnText}>End Session</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              onPress={() => setShareDay(activeSession)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              onPress={() => setChangeDateSession(activeSession)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Edit Date</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       );
     }
