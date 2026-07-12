@@ -8,24 +8,28 @@
 --      at all — any authenticated user could dump any account's full
 --      follow/follower list, private or not.
 --   3. "Authenticated users can view accepted friendships" (from
---      supabase_hometown_schema.sql) granted every logged-in user SELECT on
---      ALL accepted friendship rows, a second path to the same leak as #2.
+--      supabase_hometown_schema.sql) — checked directly against the live
+--      database before applying this fix; this policy was NOT actually
+--      present in production, so this finding didn't apply live. Left the
+--      DROP POLICY IF EXISTS in place below as a harmless no-op guard in
+--      case it's ever added.
 --   4. Blocking (blocked_users table) was enforced nowhere at the database
 --      level — a blocked user could immediately re-friend (auto-accepted)
 --      whoever blocked them, and keep liking/commenting on their sessions.
 --
--- UNLIKE the other supabase_*_fix.sql files in this repo, this one is NOT a
--- "just run it" file. It changes core social-graph RLS/trigger behavior.
--- Review each section against your actual production data before running,
--- and ideally test against a staging Supabase project first. Written from
--- the schema files in this repo (supabase_complete_schema.sql,
--- supabase_friends_schema.sql, supabase_hometown_schema.sql,
--- supabase_moderation_schema.sql, supabase_comment_permissions_fix.sql) —
--- if your live database has drifted from those files, verify column/policy
--- names match before running.
+-- STATUS: applied to production (oexaqytotrxqbxmzqabu) on 2026-07-12 via
+-- `supabase db query --linked -f supabase_prelaunch_security_fix.sql`, after
+-- verifying live schema/policies/functions matched what's assumed below and
+-- that the app's accept/decline/remove-friend code paths are compatible with
+-- the new triggers. Verified post-apply via pg_trigger/pg_policies/pg_proc
+-- inspection — all objects created as expected. The search_path/anon-execute
+-- hardening section at the bottom was added after `supabase db advisors`
+-- flagged the newly-created functions for mutable search_path and anon
+-- executability, and has also been applied.
 --
--- Safe to run multiple times (all objects use CREATE OR REPLACE / DROP...IF
--- EXISTS / IF NOT EXISTS).
+-- Kept in the repo as a record of what was run and why. Safe to re-run
+-- (all objects use CREATE OR REPLACE / DROP...IF EXISTS / IF NOT EXISTS),
+-- but there should be nothing left to apply against the linked project.
 
 
 -- ─── Helper: bidirectional block check ───────────────────────────────────────
@@ -75,6 +79,11 @@ CREATE TRIGGER friendships_enforce_insert_status
 -- UPDATE: only the receiver may move a request from 'pending' to 'accepted'
 -- (stops a sender from self-accepting their own outbound request), and
 -- reject any update that would (re)activate a friendship across a block.
+-- Verified compatible with the app's actual UPDATE calls: acceptFriendRequest
+-- (utils/friendsApi.ts) is only ever invoked by the receiver after reading
+-- their own pending requests; declineFriendRequest sets status='declined'
+-- (untouched by this trigger's accept-specific check); removeFriend uses
+-- DELETE, not UPDATE, so it's unaffected entirely.
 
 CREATE OR REPLACE FUNCTION public.enforce_friendship_update_status()
 RETURNS trigger
@@ -97,14 +106,10 @@ CREATE TRIGGER friendships_enforce_update_status
 
 
 -- ─── Fix 2: remove the blanket "view all accepted friendships" policy ───────
--- This was added (supabase_hometown_schema.sql) to compute follower/following
--- counts on a friend's profile, but grants every logged-in user SELECT on
--- every accepted friendship row in the table. The app now reads counts via
--- profiles.following_count/followers_count (denormalized, kept in sync by
--- sync_follow_counts()) and via the get_following/get_followers RPCs fixed
--- below — this blanket policy is redundant as well as a leak. The existing
--- "Users can view own friendships" policy (auth.uid() IN (sender_id,
--- receiver_id)) remains and is sufficient.
+-- See the STATUS note at the top — this policy was not actually present in
+-- production. Left as a no-op guard in case it's ever (re)added; the app
+-- reads counts via profiles.following_count/followers_count and the
+-- get_following/get_followers RPCs fixed below, so it's not needed.
 
 DROP POLICY IF EXISTS "Authenticated users can view accepted friendships" ON public.friendships;
 
@@ -200,18 +205,54 @@ CREATE POLICY "Users can like comments"
   );
 
 
+-- ─── Hardening: search_path pinning + anon execution ────────────────────────
+-- `supabase db advisors --linked`, run immediately after applying the fixes
+-- above, flagged all 5 SECURITY DEFINER functions touched by this file for
+-- mutable search_path (a search-path-hijacking risk: a caller could create a
+-- same-named object earlier in their search_path to redirect what the
+-- function resolves against) and for being executable by the unauthenticated
+-- `anon` role. Pin search_path on all of them, and revoke anon execution on
+-- the three that are directly callable by clients (is_blocked, get_following,
+-- get_followers) — trigger functions can't be called directly by clients at
+-- all (Postgres rejects calling a trigger-return-type function outside
+-- trigger context), so revoking anon there isn't meaningful.
+
+ALTER FUNCTION public.is_blocked(uuid, uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.enforce_friendship_insert_status() SET search_path = public, pg_temp;
+ALTER FUNCTION public.enforce_friendship_update_status() SET search_path = public, pg_temp;
+ALTER FUNCTION public.get_following(uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.get_followers(uuid) SET search_path = public, pg_temp;
+
+-- New functions get an implicit EXECUTE grant to the PUBLIC pseudo-role,
+-- which anon/authenticated inherit from unless revoked directly — revoking
+-- from `anon` alone (a first attempt, left here as a lesson) is a no-op
+-- while PUBLIC still has it. Revoke from PUBLIC, then re-grant to
+-- authenticated only.
+REVOKE EXECUTE ON FUNCTION public.is_blocked(uuid, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_following(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_followers(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_blocked(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_following(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_followers(uuid) TO authenticated;
+
+
 -- ─── Not fixed here — needs an app-level decision, not just SQL ─────────────
 -- - send-notification edge function trusts client-supplied recipientId(s)
 --   and senderId with no relationship/friendship check — a caller can push-
---   spam or spoof-attribute notifications to anyone. Needs a code change in
---   supabase/functions/send-notification/index.ts (verify an accepted
---   friendship exists between the authenticated caller and each recipient,
---   and force senderId = the authenticated caller's id rather than trusting
---   the request body).
+--   spam or spoof-attribute notifications to anyone. Being addressed
+--   separately as a code change to supabase/functions/send-notification.
 -- - Media (R2 bucket) is served from a fully public, unauthenticated URL —
 --   a leaked link is viewable by anyone regardless of privacy/block state.
 --   Fixing this properly means signed/expiring URLs, a bigger change than a
 --   policy tweak.
+-- - `supabase db advisors --linked` also surfaced a number of pre-existing,
+--   lower-severity WARN-level items unrelated to this fix: auth_rls_initplan
+--   (auth.uid() not wrapped in a subselect in several older policies — a
+--   query-planner performance nit, not a security hole) and
+--   multiple_permissive_policies (several tables have more than one
+--   permissive policy for the same action, which Postgres evaluates as OR'd
+--   — correct but slightly less efficient than consolidating). Neither is
+--   urgent; worth a cleanup pass separately from this security fix.
 -- - No rate limiting found in-repo for friend requests, comments, likes, or
 --   edge-function calls. Worth confirming Supabase-project-level protections
 --   (or adding application-level throttling) before a traffic spike.
