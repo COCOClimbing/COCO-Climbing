@@ -13,7 +13,7 @@
       "fallbackToCacheTimeout": 0
     },
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "splash": {
       "image": "./assets/splash.png",
@@ -37,7 +37,7 @@
         "FacebookAppID": "2188945488595075",
         "FacebookDisplayName": "COCO"
       },
-      "buildNumber": "11"
+      "buildNumber": "12"
     },
     "android": {
       "versionCode": 1,
