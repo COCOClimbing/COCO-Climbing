@@ -12,7 +12,9 @@
       "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "cover",
