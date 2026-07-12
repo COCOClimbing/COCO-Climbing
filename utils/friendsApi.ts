@@ -318,6 +318,42 @@ export async function getFriendRecentSessions(friendId: string, daysBack: number
   return data ?? [];
 }
 
+// Same as getFriendRecentClimbs, but for every friend id in one query instead of
+// one query per friend. RLS still filters per-row against each row's own user_id,
+// so this returns exactly the union of what N individual calls would have returned.
+export async function getFriendsRecentClimbsBatch(friendIds: string[], daysBack: number): Promise<any[]> {
+  if (friendIds.length === 0) return [];
+  const daysAgo = new Date();
+  daysAgo.setDate(daysAgo.getDate() - daysBack);
+  const cutoff = daysAgo.toISOString().split('T')[0];
+
+  const { data } = await supabase
+    .from('climbs')
+    .select('*')
+    .in('user_id', friendIds)
+    .gte('date', cutoff)
+    .order('date', { ascending: false });
+  return data ?? [];
+}
+
+// Same as getFriendRecentSessions, but for every friend id in one query instead of
+// one query per friend. Includes user_id (unlike getFriendRecentSessions) so callers
+// can group the flat result back per friend.
+export async function getFriendsRecentSessionsBatch(friendIds: string[], daysBack: number): Promise<any[]> {
+  if (friendIds.length === 0) return [];
+  const daysAgo = new Date();
+  daysAgo.setDate(daysAgo.getDate() - daysBack);
+  const cutoff = daysAgo.toISOString().split('T')[0];
+
+  const { data } = await supabase
+    .from('sessions')
+    .select('id, date, started_at, media_uris, media_types, friends, notes, title, location, user_id')
+    .in('user_id', friendIds)
+    .gte('date', cutoff)
+    .not('ended_at', 'is', null);
+  return data ?? [];
+}
+
 // Get ended sessions from the last `daysBack` days where userId was tagged, with the session owner's profile
 export async function getTaggedSessions(userId: string, daysBack: number): Promise<{ session: any; profile: any }[]> {
   const daysAgo = new Date();
