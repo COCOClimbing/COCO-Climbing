@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
-  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Dimensions,
+  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,8 +11,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useSlideSheet } from '../utils/useSlideSheet';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const RECENT_KEY = 'coco_recent_locations';
 const MAX_RECENT = 8;
@@ -218,12 +217,12 @@ export default function LocationPicker({ value, onChange }: Props) {
         animationType="none"
         onRequestClose={close}
       >
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={close} />
+        <GestureHandlerRootView style={styles.backdrop}>
+          <GHTouchableOpacity style={styles.backdropSpacer} activeOpacity={1} onPress={close} />
           <Animated.View
             style={[
               styles.sheetCard,
-              { backgroundColor: colors.bg, height: SCREEN_HEIGHT - insets.top - 24, transform: [{ translateY }] },
+              { backgroundColor: colors.bg, transform: [{ translateY }] },
             ]}
           >
           <KeyboardAvoidingView
@@ -232,19 +231,19 @@ export default function LocationPicker({ value, onChange }: Props) {
           >
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={close} style={styles.headerBtn}>
+            <GHTouchableOpacity onPress={close} style={styles.headerBtn}>
               <Text style={[styles.cancelText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>
                 Cancel
               </Text>
-            </TouchableOpacity>
+            </GHTouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Location
             </Text>
-            <TouchableOpacity onPress={() => handleConfirm(searchText)} style={styles.headerBtn}>
+            <GHTouchableOpacity onPress={() => handleConfirm(searchText)} style={styles.headerBtn}>
               <Text style={[styles.doneText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>
                 Done
               </Text>
-            </TouchableOpacity>
+            </GHTouchableOpacity>
           </View>
 
           {/* Search input */}
@@ -266,14 +265,14 @@ export default function LocationPicker({ value, onChange }: Props) {
               autoCorrect={false}
             />
             {searchText.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <GHTouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-              </TouchableOpacity>
+              </GHTouchableOpacity>
             )}
           </View>
 
           {/* GPS button */}
-          <TouchableOpacity
+          <GHTouchableOpacity
             style={[styles.gpsBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
             onPress={handleUseCurrentLocation}
             activeOpacity={0.7}
@@ -287,7 +286,7 @@ export default function LocationPicker({ value, onChange }: Props) {
             <Text style={[styles.gpsBtnText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>
               {locating ? 'Finding location…' : 'Use current location'}
             </Text>
-          </TouchableOpacity>
+          </GHTouchableOpacity>
 
           {locationError ? (
             <Text style={[styles.errorText, { color: colors.danger }]}>{locationError}</Text>
@@ -302,7 +301,7 @@ export default function LocationPicker({ value, onChange }: Props) {
                 keyExtractor={(item) => item.id}
                 keyboardShouldPersistTaps="always"
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <GHTouchableOpacity
                     style={[styles.resultRow, { borderBottomColor: colors.border }]}
                     onPress={() => handleSelect(item.fullName)}
                     activeOpacity={0.7}
@@ -318,7 +317,7 @@ export default function LocationPicker({ value, onChange }: Props) {
                         </Text>
                       ) : null}
                     </View>
-                  </TouchableOpacity>
+                  </GHTouchableOpacity>
                 )}
               />
             </>
@@ -335,7 +334,7 @@ export default function LocationPicker({ value, onChange }: Props) {
                 keyExtractor={(item) => item}
                 keyboardShouldPersistTaps="always"
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <GHTouchableOpacity
                     style={[styles.resultRow, { borderBottomColor: colors.border }]}
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.7}
@@ -346,7 +345,7 @@ export default function LocationPicker({ value, onChange }: Props) {
                         {item}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </GHTouchableOpacity>
                 )}
               />
             </>
@@ -354,16 +353,16 @@ export default function LocationPicker({ value, onChange }: Props) {
 
           {/* Clear location option */}
           {value ? (
-            <TouchableOpacity style={styles.clearLocation} onPress={handleClear} activeOpacity={0.7}>
+            <GHTouchableOpacity style={styles.clearLocation} onPress={handleClear} activeOpacity={0.7}>
               <Text style={[styles.clearLocationText, { color: colors.danger, fontFamily: FONTS.family.regular }]}>
                 Remove location
               </Text>
-            </TouchableOpacity>
+            </GHTouchableOpacity>
           ) : null}
-          <View style={{ height: insets.bottom }} />
+          <View style={{ height: Math.max(insets.bottom, 20) }} />
           </KeyboardAvoidingView>
           </Animated.View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </>
   );
@@ -383,10 +382,13 @@ const styles = StyleSheet.create({
   fieldText: { flex: 1, fontSize: FONTS.sizes.md },
   backdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
+  backdropSpacer: {
+    height: 60,
+  },
   sheetCard: {
+    flex: 1,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',

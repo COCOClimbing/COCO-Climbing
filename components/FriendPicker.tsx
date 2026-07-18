@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Modal, KeyboardAvoidingView, Platform, Animated, Dimensions,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Modal, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
 import { getFollowing, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING } from '../utils/theme';
 import { useSlideSheet } from '../utils/useSlideSheet';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 interface SelectedFriend { id: string; name: string; }
 
@@ -97,12 +96,12 @@ export default function FriendPicker({ selected, onChange }: Props) {
         animationType="none"
         onRequestClose={close}
       >
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={close} />
+        <GestureHandlerRootView style={styles.backdrop}>
+          <GHTouchableOpacity style={styles.backdropSpacer} activeOpacity={1} onPress={close} />
           <Animated.View
             style={[
               styles.sheetCard,
-              { backgroundColor: colors.bg, height: SCREEN_HEIGHT - insets.top - 24, transform: [{ translateY }] },
+              { backgroundColor: colors.bg, transform: [{ translateY }] },
             ]}
           >
           <KeyboardAvoidingView
@@ -114,15 +113,15 @@ export default function FriendPicker({ selected, onChange }: Props) {
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Climbing With
             </Text>
-            <TouchableOpacity onPress={close} style={styles.headerBtn}>
+            <GHTouchableOpacity onPress={close} style={styles.headerBtn}>
               <Text style={[styles.doneText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
-            </TouchableOpacity>
+            </GHTouchableOpacity>
           </View>
 
           {selected.length > 0 && (
             <View style={[styles.chips, styles.modalChips]}>
               {selected.map(s => (
-                <TouchableOpacity
+                <GHTouchableOpacity
                   key={s.id}
                   onPress={() => handleRemove(s.id)}
                   style={[styles.chip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
@@ -130,7 +129,7 @@ export default function FriendPicker({ selected, onChange }: Props) {
                 >
                   <Text style={[styles.chipText, { color: colors.accent }]}>{s.name}</Text>
                   <Text style={[styles.chipX, { color: colors.accent }]}>×</Text>
-                </TouchableOpacity>
+                </GHTouchableOpacity>
               ))}
             </View>
           )}
@@ -148,9 +147,9 @@ export default function FriendPicker({ selected, onChange }: Props) {
               autoCapitalize="none"
             />
             {query.trim().length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <GHTouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={[styles.clearBtn, { color: colors.textMuted }]}>×</Text>
-              </TouchableOpacity>
+              </GHTouchableOpacity>
             )}
           </View>
 
@@ -161,14 +160,14 @@ export default function FriendPicker({ selected, onChange }: Props) {
               data={suggestions}
               keyExtractor={f => f.id}
               keyboardShouldPersistTaps="always"
-              contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + SPACING.md }]}
+              contentContainerStyle={[styles.list, { paddingBottom: Math.max(insets.bottom, 20) + SPACING.md }]}
               ListEmptyComponent={
                 <Text style={[styles.empty, { color: colors.textMuted }]}>
                   {following.length === 0 ? 'Follow someone to tag them' : 'No matching friends'}
                 </Text>
               }
               renderItem={({ item: f }) => (
-                <TouchableOpacity
+                <GHTouchableOpacity
                   onPress={() => handleSelect(f)}
                   style={[styles.row, { borderBottomColor: colors.border }]}
                   activeOpacity={0.7}
@@ -182,13 +181,13 @@ export default function FriendPicker({ selected, onChange }: Props) {
                     <Text style={[styles.name, { color: colors.textPrimary }]}>{f.name}</Text>
                     {f.username ? <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text> : null}
                   </View>
-                </TouchableOpacity>
+                </GHTouchableOpacity>
               )}
             />
           )}
           </KeyboardAvoidingView>
           </Animated.View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </>
   );
@@ -238,10 +237,13 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
+  backdropSpacer: {
+    height: 60,
+  },
   sheetCard: {
+    flex: 1,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
