@@ -51,13 +51,16 @@ async function verifyRecipientsAllowed(
     const owned = recipientIds.filter(id => id === session.user_id)
     if (!owned.length) return { ids: [], sessionId }
     if (session.user_id === callerId) return { ids: owned, sessionId } // liking/commenting your own session
+    // Mutual follows create two separate accepted rows (A→B and B→A), so this
+    // can legitimately match more than one row — .maybeSingle() would error
+    // on that (returning data: null) and silently drop the notification.
     const { data: friendship } = await adminClient
       .from('friendships')
       .select('id')
       .eq('status', 'accepted')
       .or(`and(sender_id.eq.${callerId},receiver_id.eq.${session.user_id}),and(sender_id.eq.${session.user_id},receiver_id.eq.${callerId})`)
-      .maybeSingle()
-    return { ids: friendship ? owned : [], sessionId }
+      .limit(1)
+    return { ids: (friendship && friendship.length > 0) ? owned : [], sessionId }
   }
 
   if (type === 'comment_like') {
@@ -154,6 +157,24 @@ Deno.serve(async (req) => {
     // client-supplied senderId, which would let a caller attribute a
     // notification (and its "from" identity) to anyone they choose.
     const effectiveSenderId = user.id
+
+    // Rate limit: cap how many notifications a single sender can cause in a
+    // short window. Counts actual notification rows created by this sender
+    // recently (not edge-function calls), so a legitimate burst — tagging a
+    // dozen friends in one session, or quickly liking several sessions while
+    // scrolling the feed — stays well under the limit, while a scripted
+    // rapid-fire loop (e.g. repeatedly liking/unliking the same session to
+    // spam one recipient with pushes) gets cut off.
+    const RATE_LIMIT_WINDOW_SECONDS = 60
+    const RATE_LIMIT_MAX = 30
+    const { count: recentCount } = await adminClient
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', effectiveSenderId)
+      .gte('created_at', new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString())
+    if ((recentCount ?? 0) >= RATE_LIMIT_MAX) {
+      return new Response(JSON.stringify({ sent: false, reason: 'rate_limited' }), { headers: corsHeaders })
+    }
 
     // Look up sender name
     const { data: profile } = await adminClient
