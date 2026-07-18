@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
-  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform,
+  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
+import { useSlideSheet } from '../utils/useSlideSheet';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const RECENT_KEY = 'coco_recent_locations';
 const MAX_RECENT = 8;
@@ -93,6 +97,8 @@ export default function LocationPicker({ value, onChange }: Props) {
   const [locationError, setLocationError] = useState('');
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
+  const { translateY, close } = useSlideSheet(modalVisible, () => setModalVisible(false));
 
   useEffect(() => {
     if (modalVisible) {
@@ -163,18 +169,18 @@ export default function LocationPicker({ value, onChange }: Props) {
     const trimmed = text.trim();
     if (trimmed) saveRecentLocation(trimmed);
     onChange(trimmed);
-    setModalVisible(false);
+    close();
   }
 
   function handleSelect(name: string) {
     saveRecentLocation(name);
     onChange(name);
-    setModalVisible(false);
+    close();
   }
 
   function handleClear() {
     onChange('');
-    setModalVisible(false);
+    close();
   }
 
   const showSearchResults = searchResults.length > 0;
@@ -206,14 +212,27 @@ export default function LocationPicker({ value, onChange }: Props) {
         )}
       </TouchableOpacity>
 
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
-        <KeyboardAvoidingView
-          style={[styles.modal, { backgroundColor: colors.bg }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="none"
+        onRequestClose={close}
+      >
+        <View style={styles.backdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={close} />
+          <Animated.View
+            style={[
+              styles.sheetCard,
+              { backgroundColor: colors.bg, height: SCREEN_HEIGHT - insets.top - 24, transform: [{ translateY }] },
+            ]}
+          >
+          <KeyboardAvoidingView
+            style={styles.modal}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.headerBtn}>
+            <TouchableOpacity onPress={close} style={styles.headerBtn}>
               <Text style={[styles.cancelText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>
                 Cancel
               </Text>
@@ -281,7 +300,7 @@ export default function LocationPicker({ value, onChange }: Props) {
               <FlatList
                 data={searchResults}
                 keyExtractor={(item) => item.id}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.resultRow, { borderBottomColor: colors.border }]}
@@ -314,7 +333,7 @@ export default function LocationPicker({ value, onChange }: Props) {
               <FlatList
                 data={filteredRecent}
                 keyExtractor={(item) => item}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.resultRow, { borderBottomColor: colors.border }]}
@@ -341,7 +360,10 @@ export default function LocationPicker({ value, onChange }: Props) {
               </Text>
             </TouchableOpacity>
           ) : null}
-        </KeyboardAvoidingView>
+          <View style={{ height: insets.bottom }} />
+          </KeyboardAvoidingView>
+          </Animated.View>
+        </View>
       </Modal>
     </>
   );
@@ -359,6 +381,16 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   fieldText: { flex: 1, fontSize: FONTS.sizes.md },
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheetCard: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
   modal: { flex: 1 },
   modalHeader: {
     flexDirection: 'row',
