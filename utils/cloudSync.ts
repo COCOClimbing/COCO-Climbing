@@ -814,6 +814,15 @@ export async function cleanupOrphanedCloudRecords(userId: string): Promise<void>
       getAllSessions(),
     ]);
 
+    // Safety guard: local storage is completely empty on a fresh install (or
+    // after AsyncStorage is cleared) — that looks identical to "user deleted
+    // everything," but treating it that way would wipe the cloud copy before
+    // mergeData ever gets a chance to restore it locally. Genuine single-record
+    // deletions are already handled safely via tombstones (deletedClimbIds/
+    // deletedSessionIds) and the pending-deletes retry queue, so it's safe to
+    // skip this heuristic sweep whenever local has nothing to compare against.
+    if (localClimbs.length === 0 && localSessions.length === 0) return;
+
     const localClimbIds = new Set(localClimbs.map(c => c.id));
     const localSessionIds = new Set(localSessions.map(s => s.id));
 
