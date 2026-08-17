@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import SwipeToDelete from './SwipeToDelete';
+import Avatar from './Avatar';
 import { FONTS, SPACING } from '../utils/theme';
 
 export default function SwipeableComment({
@@ -38,10 +39,14 @@ export default function SwipeableComment({
         delayLongPress={500}
       >
         <TouchableOpacity onPress={onNamePress} activeOpacity={0.7}>
-          {commentAvatarUrl
-            ? <Image source={{ uri: commentAvatarUrl }} style={swipeCommentStyles.avatar} />
-            : <View style={[swipeCommentStyles.avatar, { backgroundColor: colors.border }]} />
-          }
+          <Avatar
+            name={c.profile?.name ?? '?'}
+            avatarUrl={commentAvatarUrl}
+            size={20}
+            backgroundColor={colors.accentSoft}
+            textColor={colors.accent}
+            style={swipeCommentStyles.avatar}
+          />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={[swipeCommentStyles.name, { color: colors.textPrimary }]}>

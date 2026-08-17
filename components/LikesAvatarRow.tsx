@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Modal, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { FONTS, SPACING } from '../utils/theme';
+import Avatar from './Avatar';
 
 export interface Liker {
   id: string;
@@ -29,9 +30,15 @@ export default function LikesAvatarRow({
       <TouchableOpacity style={styles.likeCountRow} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
         <View style={styles.avatarStack}>
           {likers.slice(0, 3).map((l, i) => (
-            l.avatarUrl
-              ? <Image key={l.id} source={{ uri: l.avatarUrl }} style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]} />
-              : <View key={l.id} style={[styles.likeAvatar, styles.likeAvatarFallback, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i, backgroundColor: colors.border }]} />
+            <Avatar
+              key={l.id}
+              name={l.name}
+              avatarUrl={l.avatarUrl}
+              size={20}
+              backgroundColor={colors.accentSoft}
+              textColor={colors.accent}
+              style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]}
+            />
           ))}
         </View>
         <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
@@ -63,15 +70,13 @@ export default function LikesAvatarRow({
                   disabled={isSelf}
                   onPress={() => { setModalVisible(false); onPressLiker?.(l); }}
                 >
-                  <View style={[styles.modalAvatar, { backgroundColor: colors.accentSoft }]}>
-                    {l.avatarUrl ? (
-                      <Image source={{ uri: l.avatarUrl }} style={styles.modalAvatarImage} />
-                    ) : (
-                      <Text style={[styles.modalAvatarText, { color: colors.accent }]}>
-                        {(l.name || '?')[0].toUpperCase()}
-                      </Text>
-                    )}
-                  </View>
+                  <Avatar
+                    name={l.name}
+                    avatarUrl={l.avatarUrl}
+                    size={44}
+                    backgroundColor={colors.accentSoft}
+                    textColor={colors.accent}
+                  />
                   <Text style={[styles.modalName, { color: colors.textPrimary }]}>{l.name}</Text>
                 </TouchableOpacity>
               );
@@ -87,7 +92,6 @@ const styles = StyleSheet.create({
   likeCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   avatarStack: { flexDirection: 'row', alignItems: 'center' },
   likeAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#fff' },
-  likeAvatarFallback: {},
   cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
   modalContainer: { flex: 1 },
   modalHeader: {
@@ -108,8 +112,5 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  modalAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  modalAvatarImage: { width: '100%', height: '100%', borderRadius: 22 },
-  modalAvatarText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold },
   modalName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
 });

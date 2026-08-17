@@ -7,6 +7,7 @@ import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
+import Avatar from './Avatar';
 import {
   getSessionLikes, getSessionComments, getCommentLikes,
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
@@ -46,38 +47,16 @@ function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidt
   );
 }
 
-const AVATAR_MAX_RETRIES = 3;
-
 function ProfileAvatar({ name, avatarUrl, size, colors }: { name: string; avatarUrl: string | null; size: number; colors: any }) {
-  const [retryCount, setRetryCount] = useState(0);
-  const initials = (name || '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
-  const isUrl = avatarUrl && (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://') || avatarUrl.startsWith('file://'));
-
-  // A failed load used to latch permanently (imgError never reset), so once a
-  // single transient failure hit — e.g. a flaky request against the R2.dev
-  // subdomain — that avatar showed initials for the rest of the app session,
-  // even on later renders with a perfectly good URL. Reset retries whenever
-  // the URL itself changes, and retry a few times (via a changing key, which
-  // forces Image to mount fresh and issue a brand new request) before giving
-  // up and falling back to initials.
-  useEffect(() => { setRetryCount(0); }, [avatarUrl]);
-
-  const failed = retryCount > AVATAR_MAX_RETRIES;
-
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.accentSoft, borderWidth: 2, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-      {isUrl && !failed
-        ? (
-          <Image
-            key={`${avatarUrl}-${retryCount}`}
-            source={{ uri: avatarUrl! }}
-            style={{ width: size, height: size }}
-            onError={() => setTimeout(() => setRetryCount(c => c + 1), 600)}
-          />
-        )
-        : <Text style={{ color: colors.accent, fontSize: size * 0.32, fontFamily: FONTS.family.bold }}>{initials}</Text>
-      }
-    </View>
+    <Avatar
+      name={name}
+      avatarUrl={avatarUrl}
+      size={size}
+      backgroundColor={colors.accentSoft}
+      textColor={colors.accent}
+      style={{ borderWidth: 2, borderColor: colors.accent }}
+    />
   );
 }
 
