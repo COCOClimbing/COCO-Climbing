@@ -16,27 +16,59 @@ import { sendCommentLikeNotification } from '../utils/notifications';
 
 const PHOTO_HEIGHT = 220;
 
+const NATURAL_PHOTO_MAX_RETRIES = 3;
+
 function NaturalPhoto({ uri, onPress }: { uri: string; onPress: () => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [failed, setFailed] = useState(false);
 
+  // Reset fully whenever the photo itself changes, so one photo's failure
+  // can never hide a different, unrelated one rendered by a reused instance.
   useEffect(() => {
+    setImgWidth(null);
+    setRetryCount(0);
+    setFailed(false);
+  }, [uri]);
+
+  // A failed Image.getSize used to latch permanently (same bug as
+  // ActivityCard's avatar): one transient hiccup — e.g. a flaky request
+  // against the R2.dev subdomain — hid the photo for the rest of the app
+  // session even though a later attempt at the same URL would've worked.
+  // Retry a few times with backoff before actually giving up.
+  useEffect(() => {
+    let cancelled = false;
     Image.getSize(
       uri,
-      (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)),
-      () => setFailed(true),
+      (w, h) => { if (!cancelled) setImgWidth(Math.round(PHOTO_HEIGHT * w / h)); },
+      () => {
+        if (cancelled) return;
+        if (retryCount < NATURAL_PHOTO_MAX_RETRIES) {
+          setTimeout(() => { if (!cancelled) setRetryCount(c => c + 1); }, 600);
+        } else {
+          setFailed(true);
+        }
+      },
     );
-  }, [uri]);
+    return () => { cancelled = true; };
+  }, [uri, retryCount]);
 
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
       <View style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
         <Image
+          key={`${uri}-${retryCount}`}
           source={{ uri }}
           style={{ width: imgWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
-          onError={() => setFailed(true)}
+          onError={() => {
+            if (retryCount < NATURAL_PHOTO_MAX_RETRIES) {
+              setTimeout(() => setRetryCount(c => c + 1), 600);
+            } else {
+              setFailed(true);
+            }
+          }}
         />
       </View>
     </TouchableOpacity>
