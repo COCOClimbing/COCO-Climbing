@@ -29,11 +29,15 @@ export default function LikesAvatarRow({
     <>
       <TouchableOpacity style={styles.likeCountRow} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
         <View style={[styles.avatarStack, { width: 20 + (Math.min(likers.length, 3) - 1) * 12 }]}>
-          {/* zIndex alone doesn't reliably win against a neighbor's border on
-              every platform — render in reverse so the leftmost (front-most)
-              avatar is simply the last sibling painted, which always wins.
-              Position stays correct via the absolute `left` computed from the
-              original index, not render order. */}
+          {/* Two redundant signals for paint order, since neither alone proved
+              reliable across every avatar-content combination on iOS: render
+              in reverse so the front-most avatar is simply the last sibling
+              painted (works for plain-View/Text content), AND set explicit
+              zIndex (authoritative once children are position:absolute,
+              unlike on normal-flow siblings — covers Image content, which
+              can get layer-promoted and ignore plain render order). Position
+              stays correct via the absolute `left` computed from the
+              original index regardless of render/paint order. */}
           {likers.slice(0, 3).map((l, i) => (
             <Avatar
               key={l.id}
@@ -42,7 +46,7 @@ export default function LikesAvatarRow({
               size={20}
               backgroundColor={colors.accentSoft}
               textColor={colors.accent}
-              style={[styles.likeAvatar, { position: 'absolute', left: i * 12 }]}
+              style={[styles.likeAvatar, { position: 'absolute', left: i * 12, zIndex: 3 - i }]}
             />
           )).reverse()}
         </View>
