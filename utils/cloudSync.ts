@@ -697,9 +697,10 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
   }
 
   // Select both array and singular columns — climbs have a legacy media_uri field
-  const [sessionsRes, climbsRes] = await Promise.all([
+  const [sessionsRes, climbsRes, profileRes] = await Promise.all([
     supabase.from('sessions').select('media_uris').eq('user_id', userId),
     supabase.from('climbs').select('media_uris, media_uri').eq('user_id', userId),
+    supabase.from('profiles').select('avatar_url').eq('id', userId).single(),
   ]);
 
   const prefix = `${R2_PUBLIC_BASE_URL}/`;
@@ -717,6 +718,16 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
     });
     if (row.media_uri?.startsWith(prefix)) validKeys.add(row.media_uri.slice(prefix.length));
   });
+
+  // Avatars were never included here, so every avatar.jpg looked orphaned and
+  // got deleted on the very next sweep after upload — every account's avatar
+  // was on a ~24h countdown to being wiped. Protect it two ways: from the DB
+  // value (handles any future path convention) and unconditionally by its
+  // fixed, reserved filename (handles today's already-broken/stale DB values
+  // where the row still points at whatever got deleted).
+  const avatarUrl: string | undefined = profileRes.data?.avatar_url;
+  if (avatarUrl?.startsWith(prefix)) validKeys.add(avatarUrl.slice(prefix.length));
+  validKeys.add(`${userId}/avatar.jpg`);
 
   const orphaned = allKeys.filter(k => !validKeys.has(k));
   if (orphaned.length > 0) {
