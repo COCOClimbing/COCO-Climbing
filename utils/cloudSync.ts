@@ -313,7 +313,10 @@ export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
 
 export async function deleteClimbFromCloud(id: string, r2Uris?: string[]): Promise<void> {
   if (r2Uris?.length) await deleteR2MediaUrls(r2Uris);
-  const { error } = await supabase.from('climbs').delete().eq('id', id);
+  // Soft delete: RLS no longer grants the client a DELETE policy on climbs at
+  // all (see supabase_soft_delete_climbs_sessions.sql) — this hides the row
+  // from all reads immediately while keeping it recoverable for 30 days.
+  const { error } = await supabase.from('climbs').update({ deleted_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
 }
 
@@ -397,9 +400,11 @@ export async function deleteSessionFromCloud(
       );
     }
   }
+  // Soft delete: see deleteClimbFromCloud for why this is an UPDATE, not a DELETE.
+  const deletedAt = new Date().toISOString();
   const [climbsRes, sessionsRes] = await Promise.all([
-    supabase.from('climbs').delete().eq('session_id', id),
-    supabase.from('sessions').delete().eq('id', id),
+    supabase.from('climbs').update({ deleted_at: deletedAt }).eq('session_id', id),
+    supabase.from('sessions').update({ deleted_at: deletedAt }).eq('id', id),
   ]);
   if (climbsRes.error) throw climbsRes.error;
   if (sessionsRes.error) throw sessionsRes.error;
@@ -838,11 +843,15 @@ export async function cleanupOrphanedCloudRecords(userId: string): Promise<void>
       .map((r: { id: string }) => r.id)
       .filter((id: string) => !localSessionIds.has(id));
 
+    // Soft delete here too: even though the empty-local guard above already
+    // closes the main data-loss scenario, this keeps any future misfire of
+    // this heuristic sweep recoverable for 30 days instead of permanent.
+    const deletedAt = new Date().toISOString();
     if (orphanClimbIds.length > 0) {
-      await supabase.from('climbs').delete().in('id', orphanClimbIds).eq('user_id', userId);
+      await supabase.from('climbs').update({ deleted_at: deletedAt }).in('id', orphanClimbIds).eq('user_id', userId);
     }
     if (orphanSessionIds.length > 0) {
-      await supabase.from('sessions').delete().in('id', orphanSessionIds).eq('user_id', userId);
+      await supabase.from('sessions').update({ deleted_at: deletedAt }).in('id', orphanSessionIds).eq('user_id', userId);
     }
 
     await AsyncStorage.setItem(CLOUD_RECORD_CLEANUP_TS_KEY, String(Date.now()));
