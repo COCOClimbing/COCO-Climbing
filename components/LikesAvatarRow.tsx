@@ -28,7 +28,12 @@ export default function LikesAvatarRow({
   return (
     <>
       <TouchableOpacity style={styles.likeCountRow} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
-        <View style={styles.avatarStack}>
+        <View style={[styles.avatarStack, { width: 20 + (Math.min(likers.length, 3) - 1) * 12 }]}>
+          {/* zIndex alone doesn't reliably win against a neighbor's border on
+              every platform — render in reverse so the leftmost (front-most)
+              avatar is simply the last sibling painted, which always wins.
+              Position stays correct via the absolute `left` computed from the
+              original index, not render order. */}
           {likers.slice(0, 3).map((l, i) => (
             <Avatar
               key={l.id}
@@ -37,9 +42,9 @@ export default function LikesAvatarRow({
               size={20}
               backgroundColor={colors.accentSoft}
               textColor={colors.accent}
-              style={[styles.likeAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]}
+              style={[styles.likeAvatar, { position: 'absolute', left: i * 12 }]}
             />
-          ))}
+          )).reverse()}
         </View>
         <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
           {likers.length} {likers.length === 1 ? 'like' : 'likes'}
@@ -90,7 +95,7 @@ export default function LikesAvatarRow({
 
 const styles = StyleSheet.create({
   likeCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  avatarStack: { flexDirection: 'row', alignItems: 'center' },
+  avatarStack: { height: 20 },
   likeAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#fff' },
   cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
   modalContainer: { flex: 1 },
