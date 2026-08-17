@@ -42,10 +42,14 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
           <Text style={[styles.routeName, { color: colors.textPrimary }]} numberOfLines={1}>{climb.projectName || climb.routeName}</Text>
         )}
       </View>
-      {climb.styles.length > 0 && !compact && (
-        <View style={styles.stylesRow}>
+      {climb.styles.length > 0 && (
+        // Only cards that actually have a style tagged grow at all — this row
+        // doesn't exist otherwise. Compact cards use a tighter variant
+        // (no row margin, slimmer tag padding) to keep that growth as small
+        // as legibly possible.
+        <View style={compact ? styles.stylesRowCompact : styles.stylesRow}>
           {climb.styles.map(s => (
-            <View key={s} style={[styles.styleTag, { backgroundColor: colors.bgElevated }]}>
+            <View key={s} style={[compact ? styles.styleTagCompact : styles.styleTag, { backgroundColor: colors.bgElevated }]}>
               <Text style={[styles.styleTagText, { color: colors.textMuted }]}>{s}</Text>
             </View>
           ))}
@@ -92,7 +96,9 @@ const styles = StyleSheet.create({
   typeLine: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium, marginBottom: 3 },
   routeName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
   stylesRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.sm, gap: 4 },
+  stylesRowCompact: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 4, gap: 3 },
   styleTag: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  styleTagCompact: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   styleTagText: { fontSize: FONTS.sizes.xs, textTransform: 'capitalize' },
   bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.xs },
   date: { fontSize: FONTS.sizes.xs },
