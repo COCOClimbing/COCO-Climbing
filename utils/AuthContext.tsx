@@ -7,6 +7,7 @@ import { deleteMedia } from './mediaUpload';
 import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import { updateCheckSettled } from './updateGate';
 
 const LOCAL_AVATAR_FILE = FileSystem.documentDirectory + 'avatar_cache.jpg';
 const CACHED_AVATAR_URL_KEY = 'coco_cached_avatar_url';
@@ -106,7 +107,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshPendingCount(user.id);
       if (!syncedRef.current) {
         syncedRef.current = true;
-        handleSyncOnLogin(user.id);
+        // Wait for the startup OTA update check to settle before running
+        // cloud sync — a freshly (re)installed app is still running the old
+        // embedded bundle for the first few seconds, and any sync fix that
+        // only shipped via OTA wouldn't be active yet otherwise. See
+        // utils/updateGate.ts for why this matters.
+        updateCheckSettled.then(() => handleSyncOnLogin(user.id));
       }
     } else {
       setProfileName(null);

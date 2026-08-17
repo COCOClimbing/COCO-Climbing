@@ -39,20 +39,26 @@ import OnboardingScreen, { getOnboardingPrefs } from './onboarding';
 import { getCloudProfile } from '../utils/cloudSync';
 import { restoreActiveSession } from '../utils/storage';
 import { registerForPushNotifications, useNotificationTapRouting } from '../utils/notifications';
+import { markUpdateCheckSettled } from '../utils/updateGate';
 
 SplashScreen.preventAutoHideAsync();
 
 async function checkAndApplyUpdate() {
-  if (__DEV__) return;
+  if (__DEV__) {
+    markUpdateCheckSettled();
+    return;
+  }
   try {
     const check = await Updates.checkForUpdateAsync();
     if (check.isAvailable) {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
+      return; // this JS context is tearing down — the new bundle re-runs its own check
     }
   } catch (e) {
     Sentry.captureException(e);
   }
+  markUpdateCheckSettled();
 }
 
 function AppShell({ onReady }: { onReady: () => void }) {
