@@ -10,6 +10,11 @@ export interface Liker {
   avatarUrl: string | null;
 }
 
+const STACK_AVATAR = 20;
+const STACK_RING = 1.5;
+const STACK_OUTER = STACK_AVATAR + STACK_RING * 2;
+const STACK_STEP = 12;
+
 export default function LikesAvatarRow({
   likers,
   onPressLiker,
@@ -28,26 +33,27 @@ export default function LikesAvatarRow({
   return (
     <>
       <TouchableOpacity style={styles.likeCountRow} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
-        <View style={[styles.avatarStack, { width: 20 + (Math.min(likers.length, 3) - 1) * 12 }]}>
-          {/* Two redundant signals for paint order, since neither alone proved
-              reliable across every avatar-content combination on iOS: render
-              in reverse so the front-most avatar is simply the last sibling
-              painted (works for plain-View/Text content), AND set explicit
-              zIndex (authoritative once children are position:absolute,
-              unlike on normal-flow siblings — covers Image content, which
-              can get layer-promoted and ignore plain render order). Position
-              stays correct via the absolute `left` computed from the
-              original index regardless of render/paint order. */}
+        <View style={[styles.avatarStack, { width: STACK_OUTER + (Math.min(likers.length, 3) - 1) * STACK_STEP }]}>
+          {/* Two rounds of z-order/render-order fixes here (zIndex, then
+              reverse-render) changed nothing visually — the real culprit
+              wasn't paint order at all. React Native can render a View's
+              borderWidth stroke on a different compositing pass than its
+              fill, so a bordered circle's ring can visually leak across an
+              overlapping sibling regardless of z-order. Fixed by dropping
+              borderWidth entirely: each avatar sits inside its own solid
+              white "ring" circle (a plain filled View, not a border stroke),
+              so there's no separate stroke layer left to leak. */}
           {likers.slice(0, 3).map((l, i) => (
-            <Avatar
+            <View
               key={l.id}
-              name={l.name}
-              avatarUrl={l.avatarUrl}
-              size={20}
-              backgroundColor={colors.accentSoft}
-              textColor={colors.accent}
-              style={[styles.likeAvatar, { position: 'absolute', left: i * 12, zIndex: 3 - i }]}
-            />
+              style={{
+                position: 'absolute', left: i * STACK_STEP, zIndex: 3 - i,
+                width: STACK_OUTER, height: STACK_OUTER, borderRadius: STACK_OUTER / 2,
+                backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Avatar name={l.name} avatarUrl={l.avatarUrl} size={STACK_AVATAR} backgroundColor={colors.accentSoft} textColor={colors.accent} />
+            </View>
           )).reverse()}
         </View>
         <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
@@ -99,8 +105,7 @@ export default function LikesAvatarRow({
 
 const styles = StyleSheet.create({
   likeCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  avatarStack: { height: 20 },
-  likeAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#fff' },
+  avatarStack: { height: STACK_OUTER },
   cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
   modalContainer: { flex: 1 },
   modalHeader: {
