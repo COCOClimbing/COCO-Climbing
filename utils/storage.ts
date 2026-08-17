@@ -330,6 +330,11 @@ export async function getOrCreateSessionForDate(date: string, environment: strin
 }
 
 export async function deleteSession(id: string): Promise<void> {
+  // Unlike endSession, this never cleared the active-session pointer when the
+  // deleted session was the active one — leaving _activeSessionId/
+  // ACTIVE_SESSION_ID pointing at an id that no longer exists anywhere.
+  if (_activeSessionId === id) setActiveSessionId(null);
+
   const sessions = await getAllSessions();
   const climbs = await getAllClimbs();
 
