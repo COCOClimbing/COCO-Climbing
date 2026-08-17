@@ -4,7 +4,7 @@ import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav } from '../utils/NavigationContext';
-import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions } from '../utils/storage';
+import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
 import { gradeToNum } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
 import { EmptyState } from '../components/UI';
@@ -137,12 +137,20 @@ export default function StatsScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const userId = session.user.id;
-        const [climbsRes, sessionsRes] = await Promise.all([
+        // Cloud reads here race a still-in-flight (not awaited) background
+        // delete: navigate here right after deleting something and the row
+        // can still come back with deleted_at unset, get written straight
+        // into local storage below, and undo the deletion. mergeData()
+        // guards against this with the local tombstone list; this path never
+        // did, so apply the same guard here.
+        const [climbsRes, sessionsRes, deletedClimbIds, deletedSessionIds] = await Promise.all([
           supabase.from('climbs').select('*').eq('user_id', userId),
           supabase.from('sessions').select('*').eq('user_id', userId),
+          getDeletedClimbIds(),
+          getDeletedSessionIds(),
         ]);
         if (climbsRes.data) {
-          const mapped: Climb[] = climbsRes.data.map((r: any) => ({
+          const mapped: Climb[] = climbsRes.data.filter((r: any) => !deletedClimbIds.has(r.id)).map((r: any) => ({
             id: r.id, date: r.date, sessionId: r.session_id,
             type: r.type, outcome: r.outcome, styles: r.styles ?? [],
             environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
@@ -156,7 +164,7 @@ export default function StatsScreen() {
           cloudClimbs = mapped;
         }
         if (sessionsRes.data) {
-          const mapped = sessionsRes.data.map((r: any) => ({
+          const mapped = sessionsRes.data.filter((r: any) => !deletedSessionIds.has(r.id)).map((r: any) => ({
             id: r.id, date: r.date, environment: r.environment,
             location: r.location ?? undefined, notes: r.notes ?? undefined,
             title: r.title ?? undefined,
