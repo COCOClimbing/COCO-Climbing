@@ -696,23 +696,22 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
     return;
   }
 
-  // Select both array and singular columns — climbs have a legacy media_uri field
-  const [sessionsRes, climbsRes, profileRes] = await Promise.all([
-    supabase.from('sessions').select('media_uris').eq('user_id', userId),
-    supabase.from('climbs').select('media_uris, media_uri').eq('user_id', userId),
+  // Use an RPC instead of plain table selects: the normal RLS-scoped query
+  // can no longer see a soft-deleted row's media_uris (its SELECT policy
+  // requires deleted_at IS NULL), which would make a soft-deleted session's
+  // photos look orphaned and get purged from R2 well before the 30-day
+  // recovery window the soft-delete is meant to provide. This RPC always
+  // scopes to auth.uid() (no user_id parameter to spoof), so it's exactly as
+  // safe as the query it replaces, just not blind to soft-deleted rows.
+  const [mediaRes, profileRes] = await Promise.all([
+    supabase.rpc('get_own_media_refs_including_deleted'),
     supabase.from('profiles').select('avatar_url').eq('id', userId).single(),
   ]);
 
   const prefix = `${R2_PUBLIC_BASE_URL}/`;
   const validKeys = new Set<string>();
 
-  (sessionsRes.data ?? []).forEach((row: any) => {
-    (row.media_uris ?? []).forEach((url: string) => {
-      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
-    });
-  });
-
-  (climbsRes.data ?? []).forEach((row: any) => {
+  (mediaRes.data ?? []).forEach((row: any) => {
     (row.media_uris ?? []).forEach((url: string) => {
       if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
     });
