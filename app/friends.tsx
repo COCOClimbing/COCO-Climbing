@@ -984,7 +984,11 @@ export default function FriendsScreen() {
           ? s.friends.map((f: any) => {
               const raw = typeof f === 'string' ? { id: f, name: f } : f;
               const match = acceptedFiltered.find(a => a.id === raw.id || a.name?.toLowerCase() === raw.name?.toLowerCase());
-              return { ...raw, avatar_url: match?.avatar_url ?? null };
+              // Prefer the friend's current name, same as we already do for
+              // avatar_url — s.friends stores a snapshot taken when they were
+              // tagged, so without this a renamed friend shows their old name
+              // forever on any session tagged before the rename.
+              return { ...raw, name: match?.name ?? raw.name, avatar_url: match?.avatar_url ?? null };
             })
           : undefined;
         // Use local storage directly — same source as sessions.tsx detail view where photos ARE visible.
