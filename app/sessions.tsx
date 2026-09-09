@@ -14,7 +14,7 @@ import {
   getAllSessions, getAllClimbs, deleteSession, deleteClimb,
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
-  setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession,
+  setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession, isInitialSyncSettled,
   triggerFeedRefresh, triggerStatsRefresh, getSessionsCondensed, saveSessionsCondensed,
 } from '../utils/storage';
 import FriendPicker from '../components/FriendPicker';
@@ -144,11 +144,16 @@ export default function SessionsScreen() {
     const activeId = getActiveSessionId();
 
     const sessionIdsWithClimbs = new Set(allClimbs.map(c => c.sessionId));
-    // Batch-delete empty sessions in one write instead of one per session
-    const emptyIds = sessions
-      .filter(s => !sessionIdsWithClimbs.has(s.id) && s.id !== activeId)
-      .map(s => s.id);
-    await cleanupEmptySessions(emptyIds);
+    // Batch-delete empty sessions in one write instead of one per session.
+    // Skipped while a post-login cloud merge is still in flight: mergeData
+    // writes sessions before their climbs, so a session that looks empty here
+    // may just be mid-sync, not actually abandoned — see isInitialSyncSettled.
+    if (isInitialSyncSettled()) {
+      const emptyIds = sessions
+        .filter(s => !sessionIdsWithClimbs.has(s.id) && s.id !== activeId)
+        .map(s => s.id);
+      await cleanupEmptySessions(emptyIds);
+    }
 
     const activeSessions = sessions.filter(s => sessionIdsWithClimbs.has(s.id) || s.id === activeId);
 

@@ -4,7 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls, recoverOrphanedR2Media, cleanupOrphanedR2Media, cleanupOrphanedCloudRecords, cleanupOrphanedLocalRecords, processPendingDeletes } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
-import { setCloudUserId, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
+import { setCloudUserId, setInitialSyncSettled, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { updateCheckSettled } from './updateGate';
@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsPrivate(false);
       setPendingRequestCount(0);
       syncedRef.current = false;
+      setInitialSyncSettled(true);
     }
   }, [user]);
 
@@ -177,6 +178,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function handleSyncOnLogin(userId: string) {
+    // Block anything that infers "no local climbs = abandoned session" (see
+    // cleanupEmptySessions's caller in app/sessions.tsx) until mergeData below
+    // has finished writing both sessions and climbs to local storage — mergeData
+    // writes them in two separate awaited steps, and a screen that reads local
+    // storage in between would see freshly-pulled sessions with no climbs yet
+    // and wrongly conclude they're empty and delete them from the cloud too.
+    setInitialSyncSettled(false);
     try {
       const migrated = await migrateLocalMediaUrls();
       if (migrated) {
@@ -198,6 +206,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       triggerFeedRefresh();
     } catch (e) {
       console.warn('Sync error:', e);
+    } finally {
+      setInitialSyncSettled(true);
+      // Sessions/Stats screens may have skipped their own refresh while sync
+      // was in flight (see the isInitialSyncSettled() guard in sessions.tsx);
+      // now that local storage is consistent, make sure they pick it up.
+      triggerSessionsRefresh();
+      triggerStatsRefresh();
     }
   }
 

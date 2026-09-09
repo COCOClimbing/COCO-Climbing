@@ -72,6 +72,20 @@ let _cloudUserId: string | null = null;
 export function setCloudUserId(id: string | null) { _cloudUserId = id; }
 export function getCloudUserId(): string | null { return _cloudUserId; }
 
+// Set by AuthContext while the post-login cloud merge (cloudSync.mergeData, via
+// handleSyncOnLogin) is in flight. mergeData writes sessions and climbs to
+// AsyncStorage in two separate awaited steps, so there's a window right after
+// login/reinstall where a session has been pulled down locally but its climbs
+// haven't landed yet. Anything that reads local storage during that window and
+// infers "this session has zero climbs, it must be abandoned" is looking at a
+// half-merged snapshot, not reality — see cleanupEmptySessions's caller in
+// app/sessions.tsx, which used to soft-delete exactly these sessions (and their
+// climbs) from the cloud because it ran mid-merge and found them "empty".
+// Defaults to settled so local-only usage (no cloud account) is never gated.
+let _initialSyncSettled = true;
+export function setInitialSyncSettled(settled: boolean) { _initialSyncSettled = settled; }
+export function isInitialSyncSettled(): boolean { return _initialSyncSettled; }
+
 // ─── Sessions refresh hook ────────────────────────────────────────────────────
 // index.tsx registers its load() here; triggerClimbsRefresh() forces a reload after local migrations
 let _onClimbsRefresh: (() => void) | null = null;
