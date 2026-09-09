@@ -186,6 +186,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // and wrongly conclude they're empty and delete them from the cloud too.
     setInitialSyncSettled(false);
     try {
+      // mergeData goes first, ahead of the media/cleanup housekeeping below —
+      // it's the one step that actually puts the user's sessions and climbs
+      // back on screen (everything else is background maintenance they can't
+      // see). On a fresh reinstall, running it last meant the user stared at
+      // an empty app through several housekeeping calls before their real
+      // data ever showed up, easily long enough to think it was gone for
+      // good. Refresh the screens the instant it's done instead of waiting
+      // for the rest of this function to finish.
+      await mergeData(userId);
+      triggerSessionsRefresh();
+      triggerStatsRefresh();
+      triggerFeedRefresh();
+
       const migrated = await migrateLocalMediaUrls();
       if (migrated) {
         triggerClimbsRefresh();
@@ -198,12 +211,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await processPendingDeletes();
       await recoverOrphanedR2Media(userId);
       await cleanupOrphanedR2Media(userId);
+      // Runs after mergeData (not before, despite the historical ordering
+      // here) so local storage has fully caught up with the cloud first —
+      // see cleanupOrphanedCloudRecords for why that matters.
       await cleanupOrphanedCloudRecords(userId);
-      await mergeData(userId);
       await cleanupOrphanedLocalRecords(userId);
-      // Always refresh the feed after full sync so the activity feed picks up
-      // any data that mergeData pulled from the cloud into local storage
-      triggerFeedRefresh();
     } catch (e) {
       console.warn('Sync error:', e);
     } finally {

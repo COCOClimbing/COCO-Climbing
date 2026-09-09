@@ -815,8 +815,22 @@ export async function processPendingDeletes(): Promise<void> {
   }
 }
 
-// Daily cleanup: delete cloud climbs/sessions that no longer exist locally.
-// Runs before mergeData so deleted records don't get re-imported.
+// Daily cleanup: finishes off cloud-side deletes that were made locally but
+// never made it to Supabase (e.g. the delete happened offline, or the app was
+// closed/uninstalled before the fire-and-forget network call completed —
+// processPendingDeletes retries the same-session queue for this, but that
+// queue is local-only and doesn't survive a reinstall, so this is the backstop
+// for once the user is back on a device that still has the tombstone).
+//
+// Only acts on IDs the user actually tombstoned locally (deletedClimbIds/
+// deletedSessionIds) — NOT merely "not present in local storage right now".
+// An earlier version used bare absence-from-local as the signal, which is
+// indistinguishable from local storage simply not having caught up yet (a
+// fresh install, an interrupted previous sync, a partial merge) and ended up
+// soft-deleting perfectly live sessions/climbs that just hadn't synced down
+// yet. Runs after mergeData (see handleSyncOnLogin) so local storage has had
+// a chance to catch up with the cloud before this ever draws a conclusion
+// from what's missing from it.
 const CLOUD_RECORD_CLEANUP_TS_KEY = 'coco_cloud_record_cleanup_ts';
 
 export async function cleanupOrphanedCloudRecords(userId: string): Promise<void> {
@@ -824,38 +838,31 @@ export async function cleanupOrphanedCloudRecords(userId: string): Promise<void>
   if (last && Date.now() - Number(last) < 24 * 60 * 60 * 1000) return;
 
   try {
-    const [localClimbs, localSessions] = await Promise.all([
-      getAllClimbs(),
-      getAllSessions(),
+    const [deletedClimbIds, deletedSessionIds] = await Promise.all([
+      getDeletedClimbIds(),
+      getDeletedSessionIds(),
     ]);
-
-    // Safety guard: local storage is completely empty on a fresh install (or
-    // after AsyncStorage is cleared) — that looks identical to "user deleted
-    // everything," but treating it that way would wipe the cloud copy before
-    // mergeData ever gets a chance to restore it locally. Genuine single-record
-    // deletions are already handled safely via tombstones (deletedClimbIds/
-    // deletedSessionIds) and the pending-deletes retry queue, so it's safe to
-    // skip this heuristic sweep whenever local has nothing to compare against.
-    if (localClimbs.length === 0 && localSessions.length === 0) return;
-
-    const localClimbIds = new Set(localClimbs.map(c => c.id));
-    const localSessionIds = new Set(localSessions.map(s => s.id));
+    if (deletedClimbIds.size === 0 && deletedSessionIds.size === 0) {
+      await AsyncStorage.setItem(CLOUD_RECORD_CLEANUP_TS_KEY, String(Date.now()));
+      return;
+    }
 
     const [climbsRes, sessionsRes] = await Promise.all([
       supabase.from('climbs').select('id').eq('user_id', userId),
       supabase.from('sessions').select('id').eq('user_id', userId),
     ]);
 
+    // Orphans are cloud rows that are STILL ACTIVE (RLS already hides anything
+    // with deleted_at set, so anything returned here has deleted_at IS NULL)
+    // whose ID is also in a local tombstone — i.e. the user deleted it locally
+    // and the cloud side of that delete never completed.
     const orphanClimbIds = (climbsRes.data ?? [])
       .map((r: { id: string }) => r.id)
-      .filter((id: string) => !localClimbIds.has(id));
+      .filter((id: string) => deletedClimbIds.has(id));
     const orphanSessionIds = (sessionsRes.data ?? [])
       .map((r: { id: string }) => r.id)
-      .filter((id: string) => !localSessionIds.has(id));
+      .filter((id: string) => deletedSessionIds.has(id));
 
-    // Soft delete here too: even though the empty-local guard above already
-    // closes the main data-loss scenario, this keeps any future misfire of
-    // this heuristic sweep recoverable for 30 days instead of permanent.
     const deletedAt = new Date().toISOString();
     if (orphanClimbIds.length > 0) {
       await supabase.from('climbs').update({ deleted_at: deletedAt }).in('id', orphanClimbIds).eq('user_id', userId);
