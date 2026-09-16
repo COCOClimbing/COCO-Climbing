@@ -313,10 +313,14 @@ export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
 
 export async function deleteClimbFromCloud(id: string, r2Uris?: string[]): Promise<void> {
   if (r2Uris?.length) await deleteR2MediaUrls(r2Uris);
-  // Soft delete: RLS no longer grants the client a DELETE policy on climbs at
-  // all (see supabase_soft_delete_climbs_sessions.sql) — this hides the row
-  // from all reads immediately while keeping it recoverable for 30 days.
-  const { error } = await supabase.from('climbs').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  // Soft delete via RPC (see supabase_soft_delete_via_rpc.sql): every SELECT
+  // policy on climbs requires deleted_at IS NULL, and Postgres re-checks that
+  // same combined policy against the row an UPDATE produces — so a plain
+  // client-side `.update({ deleted_at })` can never succeed, since the
+  // resulting row can never satisfy deleted_at IS NULL. The RPC runs as
+  // SECURITY DEFINER to bypass that recheck, while still scoping the update
+  // to auth.uid() internally.
+  const { error } = await supabase.rpc('soft_delete_climb', { p_climb_id: id });
   if (error) throw error;
 }
 
@@ -400,14 +404,10 @@ export async function deleteSessionFromCloud(
       );
     }
   }
-  // Soft delete: see deleteClimbFromCloud for why this is an UPDATE, not a DELETE.
-  const deletedAt = new Date().toISOString();
-  const [climbsRes, sessionsRes] = await Promise.all([
-    supabase.from('climbs').update({ deleted_at: deletedAt }).eq('session_id', id),
-    supabase.from('sessions').update({ deleted_at: deletedAt }).eq('id', id),
-  ]);
-  if (climbsRes.error) throw climbsRes.error;
-  if (sessionsRes.error) throw sessionsRes.error;
+  // Soft delete via RPC — see deleteClimbFromCloud for why a plain
+  // client-side UPDATE of deleted_at can never pass RLS.
+  const { error } = await supabase.rpc('soft_delete_session', { p_session_id: id });
+  if (error) throw error;
 }
 
 export async function syncProjectToCloud(project: NamedProject, userId: string): Promise<void> {
@@ -863,12 +863,13 @@ export async function cleanupOrphanedCloudRecords(userId: string): Promise<void>
       .map((r: { id: string }) => r.id)
       .filter((id: string) => deletedSessionIds.has(id));
 
-    const deletedAt = new Date().toISOString();
+    // Via RPC — see deleteClimbFromCloud for why a plain UPDATE of deleted_at
+    // can never pass RLS on these tables.
     if (orphanClimbIds.length > 0) {
-      await supabase.from('climbs').update({ deleted_at: deletedAt }).in('id', orphanClimbIds).eq('user_id', userId);
+      await Promise.all(orphanClimbIds.map((id: string) => supabase.rpc('soft_delete_climb', { p_climb_id: id })));
     }
     if (orphanSessionIds.length > 0) {
-      await supabase.from('sessions').update({ deleted_at: deletedAt }).in('id', orphanSessionIds).eq('user_id', userId);
+      await Promise.all(orphanSessionIds.map((id: string) => supabase.rpc('soft_delete_session', { p_session_id: id })));
     }
 
     await AsyncStorage.setItem(CLOUD_RECORD_CLEANUP_TS_KEY, String(Date.now()));
