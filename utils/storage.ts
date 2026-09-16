@@ -17,13 +17,29 @@ export interface PendingDelete {
   r2Uris?: string[];
 }
 
+// addPendingDelete/removePendingDelete/addToTombstone are all read-modify-write
+// against a single AsyncStorage key. Deleting a whole session fires several of
+// these concurrently (one per climb, plus the session itself), and without
+// serializing them a write based on a stale read can silently clobber another
+// call's just-written update — permanently dropping an entry from the pending-
+// delete queue with no error and nothing left to retry on next launch. Chain
+// each key's operations onto a private promise so they run one at a time.
+const keyLocks: Record<string, Promise<any>> = {};
+function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (keyLocks[key] ?? Promise.resolve()).then(fn, fn);
+  keyLocks[key] = run.catch(() => {});
+  return run;
+}
+
 export async function addPendingDelete(item: PendingDelete): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(KEYS.PENDING_DELETES);
-    const items: PendingDelete[] = raw ? JSON.parse(raw) : [];
-    if (!items.some(i => i.id === item.id)) items.push(item);
-    await AsyncStorage.setItem(KEYS.PENDING_DELETES, JSON.stringify(items));
-  } catch {}
+  return withKeyLock(KEYS.PENDING_DELETES, async () => {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.PENDING_DELETES);
+      const items: PendingDelete[] = raw ? JSON.parse(raw) : [];
+      if (!items.some(i => i.id === item.id)) items.push(item);
+      await AsyncStorage.setItem(KEYS.PENDING_DELETES, JSON.stringify(items));
+    } catch {}
+  });
 }
 
 export async function getPendingDeletes(): Promise<PendingDelete[]> {
@@ -34,22 +50,26 @@ export async function getPendingDeletes(): Promise<PendingDelete[]> {
 }
 
 export async function removePendingDelete(id: string): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(KEYS.PENDING_DELETES);
-    const items: PendingDelete[] = raw ? JSON.parse(raw) : [];
-    await AsyncStorage.setItem(KEYS.PENDING_DELETES, JSON.stringify(items.filter(i => i.id !== id)));
-  } catch {}
+  return withKeyLock(KEYS.PENDING_DELETES, async () => {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.PENDING_DELETES);
+      const items: PendingDelete[] = raw ? JSON.parse(raw) : [];
+      await AsyncStorage.setItem(KEYS.PENDING_DELETES, JSON.stringify(items.filter(i => i.id !== id)));
+    } catch {}
+  });
 }
 
 async function addToTombstone(key: string, id: string): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(key);
-    const ids: string[] = raw ? JSON.parse(raw) : [];
-    if (!ids.includes(id)) {
-      ids.push(id);
-      await AsyncStorage.setItem(key, JSON.stringify(ids));
-    }
-  } catch {}
+  return withKeyLock(key, async () => {
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      const ids: string[] = raw ? JSON.parse(raw) : [];
+      if (!ids.includes(id)) {
+        ids.push(id);
+        await AsyncStorage.setItem(key, JSON.stringify(ids));
+      }
+    } catch {}
+  });
 }
 
 export async function getDeletedClimbIds(): Promise<Set<string>> {
