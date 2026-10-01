@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
+import { isCustomGrade } from '../utils/gradeUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
@@ -34,6 +35,7 @@ import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
 import SessionCard from '../components/SessionCard';
 import ActivityCard from '../components/ActivityCard';
+import { formatRelativeDate } from '../utils/formatRelativeDate';
 import { format, parseISO } from 'date-fns';
 import {
   FriendProfile,
@@ -366,7 +368,7 @@ function FriendDetailView({
   ];
   const allSends = climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
   const hardestByType = GRADED_TYPES.map(({ id, label }) => {
-    const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system);
+    const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (typeSends.length === 0) return { label, grade: null };
     const sys = id === 'boulder' ? 'v-scale' : 'yds';
     const best = [...typeSends].sort((a, b) => {
@@ -1403,6 +1405,7 @@ export default function FriendsScreen() {
             grade: c.grade,
             gradeSystem: c.grade_system,
             routeName: c.route_name,
+            holdColor: c.hold_color,
             location: c.location,
             notes: c.notes,
             attempts: c.attempts,
@@ -1443,7 +1446,7 @@ export default function FriendsScreen() {
               id: c.id, date: c.date, sessionId: c.session_id,
               type: c.type, outcome: c.outcome, styles: c.styles ?? [],
               environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
-              routeName: c.route_name, location: c.location, notes: c.notes,
+              routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes,
               attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
               mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
               mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),
@@ -1630,21 +1633,6 @@ export default function FriendsScreen() {
     if (hour < 12) return 'Morning Climb';
     if (hour < 17) return 'Afternoon Climb';
     return 'Evening Climb';
-  }
-
-  function formatRelativeDate(dateStr: string): string {
-    try {
-      const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
-      const dateDay = new Date(y, m - 1, d);
-      const today = new Date();
-      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const diffDays = Math.round((todayDay.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
-      if (diffDays === 0) return 'Today';
-      if (diffDays === 1) return 'Yesterday';
-      return `${diffDays} days ago`;
-    } catch {
-      return dateStr;
-    }
   }
 
   function renderAddFriendButton(item: SearchResult) {
@@ -2085,8 +2073,8 @@ export default function FriendsScreen() {
                         >
                           <Ionicons
                             name={liked ? 'thumbs-up' : 'thumbs-up-outline'}
-                            size={22}
-                            color={liked ? colors.accent : colors.textMuted}
+                            size={24}
+                            color={liked ? colors.accent : colors.textPrimary}
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -2104,8 +2092,8 @@ export default function FriendsScreen() {
                         >
                           <Ionicons
                             name={isCommenting ? 'chatbubble' : 'chatbubble-outline'}
-                            size={22}
-                            color={isCommenting ? colors.accent : colors.textMuted}
+                            size={24}
+                            color={isCommenting ? colors.accent : colors.textPrimary}
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -2113,7 +2101,7 @@ export default function FriendsScreen() {
                           activeOpacity={0.7}
                           onPress={() => setShareEntry(entry)}
                         >
-                          <Ionicons name="share-outline" size={22} color={colors.textMuted} />
+                          <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
                         </TouchableOpacity>
                       </View>
 
@@ -2570,17 +2558,17 @@ const styles = StyleSheet.create({
   },
   cardStat: { flex: 1, alignItems: 'center' },
   cardStatNum: {
-    fontSize: FONTS.sizes.md,
+    fontSize: FONTS.sizes.lg,
     fontFamily: FONTS.family.bold,
     letterSpacing: -0.3,
     marginBottom: 2,
     textAlign: 'center',
   },
   cardStatLbl: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.regular,
+    fontSize: 10,
+    fontFamily: FONTS.family.medium,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   cardStatDivider: { width: 1, height: 32 },
   cardExpandTxt: {

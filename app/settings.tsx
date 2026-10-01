@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
 import { useNav } from '../utils/NavigationContext';
-import { ACCENT_COLORS, AccentId, FONTS, SPACING } from '../utils/theme';
+import { FONTS, SPACING } from '../utils/theme';
 import { getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { upsertProfile } from '../utils/cloudSync';
 import { getBlockedUsers, unblockUser, BlockedUser } from '../utils/moderationApi';
@@ -12,7 +12,7 @@ import { getNotificationPrefs, saveNotificationPrefs, NotificationPrefs } from '
 import { registerForPushNotifications } from '../utils/notifications';
 
 export default function SettingsScreen() {
-  const { mode, accentId, colors, setMode, setAccent } = useTheme();
+  const { mode, colors, setMode } = useTheme();
   const { user, profileName, avatarUrl, username, hometown, bio, isPrivate, deleteAccount, signOut, syncNow, refreshProfile } = useAuth();
   const { closeSettings } = useNav();
   const [deleting, setDeleting] = useState(false);
@@ -141,7 +141,7 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>APPEARANCE</Text>
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.md }]}>
         <View style={styles.modeRow}>
-          {(['dark', 'light'] as const).map(m => {
+          {(['light', 'dark'] as const).map(m => {
             const isDarkBtn = m === 'dark';
             const isActive = mode === m;
             const bg = isDarkBtn ? '#141414' : '#F5F5F2';
@@ -160,26 +160,6 @@ export default function SettingsScreen() {
                 <Text style={[styles.modeLabel, { color: isActive ? colors.accent : textColor }]}>
                   {m === 'dark' ? 'Dark' : 'Light'}
                 </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <View style={styles.accentRow}>
-          {(Object.keys(ACCENT_COLORS) as AccentId[]).map(id => {
-            const active = accentId === id;
-            return (
-              <TouchableOpacity
-                key={id}
-                style={[
-                  styles.accentDot,
-                  { backgroundColor: ACCENT_COLORS[id].color },
-                  active && styles.accentDotActive,
-                ]}
-                onPress={() => setAccent(id)}
-                activeOpacity={0.8}
-              >
-                {active && <Text style={styles.accentCheck}>✓</Text>}
               </TouchableOpacity>
             );
           })}
@@ -480,28 +460,6 @@ const styles = StyleSheet.create({
   modeLabel: {
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.semibold,
-  },
-  accentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    paddingVertical: SPACING.xs,
-  },
-  accentDot: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accentDotActive: {
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  accentCheck: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: FONTS.family.bold,
   },
   aboutAppName: {
     fontSize: FONTS.sizes.xl,

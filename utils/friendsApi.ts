@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { Image } from 'react-native';
 import { isDeadMediaUrl } from './cloudSync';
 import { getGradeDifficulty } from './theme';
+import { isCustomGrade } from './gradeUtils';
 
 export interface FriendProfile {
   id: string;
@@ -112,7 +113,7 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
     let hardestGrade: string | null = null;
     let hardestGradeSystem: string | null = null;
     let hardestClimb: any = sessionClimbs[0];
-    const gradedClimbs = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
+    const gradedClimbs = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (gradedClimbs.length > 0) {
       gradedClimbs.sort((a: any, b: any) => getGradeDifficulty(b.grade, b.grade_system) - getGradeDifficulty(a.grade, a.grade_system));
       hardestGrade = gradedClimbs[0].grade;

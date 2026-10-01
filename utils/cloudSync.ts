@@ -460,6 +460,9 @@ function climbToRow(c: Climb, userId: string) {
     grade: c.grade,
     grade_system: c.gradeSystem,
     route_name: c.routeName ?? null,
+    // Only sent when set, so climbs without a hold color keep syncing even
+    // if the hold_color column hasn't been added to the database yet.
+    ...(c.holdColor ? { hold_color: c.holdColor } : {}),
     location: c.location ?? null,
     notes: c.notes ?? null,
     attempts: c.attempts ?? 1,
@@ -514,6 +517,7 @@ function rowToClimb(row: any): Climb {
     grade: row.grade,
     gradeSystem: row.grade_system,
     routeName: row.route_name ?? undefined,
+    holdColor: row.hold_color ?? undefined,
     location: row.location ?? undefined,
     notes: row.notes ?? undefined,
     attempts: row.attempts ?? 1,

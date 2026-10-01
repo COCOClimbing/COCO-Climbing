@@ -1,5 +1,5 @@
 import { Climb } from './theme';
-import { gradeToNum } from './gradeUtils';
+import { gradeToNum, isCustomGrade } from './gradeUtils';
 import { getTodayISO } from './storage';
 import { format, parseISO } from 'date-fns';
 
@@ -27,7 +27,7 @@ export function sessionStats(day: DaySession) {
   const gradedClimbs = day.climbs.filter(c => c.type !== 'hangboard' && c.type !== 'lift');
   const sends = gradedClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
   const hardest = [...gradedClimbs]
-    .filter(c => c.outcome === 'send' || c.outcome === 'flash')
+    .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isCustomGrade(c.gradeSystem))
     .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0];
   const projecting = sends === 0 && gradedClimbs.length > 0 && gradedClimbs.every(c => c.projectId);
   const gradedCount = day.climbs.reduce((sum, c) => sum + climbCount(c), 0);

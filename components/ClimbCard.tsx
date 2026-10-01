@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
-import { GradeBadge, OutcomeBadge } from './UI';
+import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
 
 interface Props {
@@ -29,7 +29,12 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
       ]}
     >
       <View style={styles.topRow}>
-        {!isTraining && <GradeBadge grade={climb.grade} outcome={climb.outcome} />}
+        {!isTraining && (
+          <View style={styles.gradeGroup}>
+            <GradeBadge grade={climb.grade} outcome={climb.outcome} />
+            {climb.holdColor ? <HoldColorDot colorId={climb.holdColor} /> : null}
+          </View>
+        )}
         {!isTraining && <OutcomeBadge outcome={climb.outcome} />}
       </View>
       <View style={styles.midRow}>
@@ -92,6 +97,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 12, borderWidth: 1, padding: SPACING.lg, marginBottom: SPACING.md },
   cardCompact: { padding: SPACING.md, marginBottom: SPACING.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACING.sm },
+  gradeGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   midRow: { marginBottom: SPACING.sm },
   typeLine: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium, marginBottom: 3 },
   routeName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },

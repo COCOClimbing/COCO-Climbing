@@ -10,6 +10,7 @@ import LikesAvatarRow from './LikesAvatarRow';
 import {
   getSessionLikes, getSessionComments, getCommentLikes,
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
+  likeSession, unlikeSession,
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
@@ -100,13 +101,16 @@ export default function SessionCard({
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount } = sessionStats(day);
   const label = formatSessionLabel(day);
-  const climbTypeLabel = CLIMB_TYPES.find(t => t.id === hardest?.type)?.label ?? '—';
+  // A session of only custom-graded climbs has no "hardest", so fall back to its first non-training climb.
+  const typeSource = hardest ?? day.climbs.find(c => c.type !== 'hangboard' && c.type !== 'lift');
+  const climbTypeLabel = CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—';
 
   const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
   const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
   const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
   const [commentText, setCommentText] = useState('');
   const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [isCommenting, setIsCommenting] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -120,6 +124,20 @@ export default function SessionCard({
       }
     }).catch(() => {});
   }, [day.sessionId]);
+
+  const liked = sessionLikes.some(l => l.user_id === currentUserId);
+
+  function handleLikeToggle() {
+    if (!currentUserId) return;
+    const alreadyLiked = sessionLikes.some(l => l.user_id === currentUserId);
+    if (alreadyLiked) {
+      setSessionLikes(prev => prev.filter(l => l.user_id !== currentUserId));
+      unlikeSession(day.sessionId, currentUserId).catch(() => {});
+    } else {
+      setSessionLikes(prev => [...prev, { user_id: currentUserId, session_id: day.sessionId, created_at: new Date().toISOString() } as SessionLike]);
+      likeSession(day.sessionId, currentUserId).catch(() => {});
+    }
+  }
 
   async function handleCommentLikeToggle(commentId: string, commentAuthorId: string) {
     if (!currentUserId) return;
@@ -191,7 +209,7 @@ export default function SessionCard({
       <View style={styles.headerRow}>
         <Text style={[styles.dateLabel, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
         <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="pencil-outline" size={18} color={colors.textMuted} />
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
 
@@ -288,7 +306,7 @@ export default function SessionCard({
       {!condensed && (sessionLikes.length > 0 || sessionComments.length > 0) && (
         <View style={styles.cardCounts}>
           <LikesAvatarRow
-            likers={sessionLikes.map(l => ({ id: l.id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+            likers={sessionLikes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
             onPressLiker={(l) => onViewProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
             currentUserId={currentUserId}
             colors={colors}
@@ -304,11 +322,14 @@ export default function SessionCard({
       {/* Actions */}
       {!condensed && (
         <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
-            <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
+          <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
+            <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setIsCommenting(prev => !prev)}>
+            <Ionicons name={isCommenting ? 'chatbubble' : 'chatbubble-outline'} size={24} color={isCommenting ? colors.accent : colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
-            <Ionicons name="share-outline" size={22} color={colors.textMuted} />
+            <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
       )}
@@ -348,7 +369,7 @@ export default function SessionCard({
       )}
 
       {/* Comment input */}
-      {!condensed && (
+      {!condensed && isCommenting && (
         <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
           <TextInput
             style={[styles.commentInputText, { color: colors.textPrimary }]}
@@ -443,8 +464,8 @@ const styles = StyleSheet.create({
   partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatNum: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
-  cardStatLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardStatNum: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: 10, fontFamily: FONTS.family.medium, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },

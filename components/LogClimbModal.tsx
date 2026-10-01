@@ -6,8 +6,8 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import {
   FONTS, SPACING, CLIMB_TYPES, CLIMB_OUTCOMES,
-  CLIMB_STYLES, ENVIRONMENTS,
-  Climb, ClimbTypeId, OutcomeId, StyleId, EnvironmentId
+  CLIMB_STYLES, ENVIRONMENTS, HOLD_COLORS,
+  Climb, ClimbTypeId, OutcomeId, StyleId, EnvironmentId, HoldColorId
 } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import {
@@ -20,8 +20,8 @@ import {
 import { Image as CompressorImage } from 'react-native-compressor';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../utils/AuthContext';
-import { Pill, Divider } from './UI';
-import GradePicker from './GradePicker';
+import { Pill, Divider, HoldColorDot } from './UI';
+import GradePicker, { GradeSystem } from './GradePicker';
 import FriendPicker from './FriendPicker';
 import LocationPicker from './LocationPicker';
 
@@ -51,7 +51,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const [climbType, setClimbType]           = useState<ClimbTypeId>('boulder');
   const [outcome, setOutcome]               = useState<OutcomeId>(_lastUsedOutcome);
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
-  const [gradeSystem, setGradeSystem]       = useState<'v-scale' | 'yds' | 'french' | 'british'>('v-scale');
+  const [gradeSystem, setGradeSystem]       = useState<GradeSystem>('v-scale');
   const [grade, setGrade]                   = useState('V3');
   const [routeName, setRouteName]           = useState('');
   const [location, setLocation]             = useState('');
@@ -59,6 +59,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const [attempts, setAttempts]             = useState('1');
   const [showGradePicker, setShowGradePicker] = useState(false);
   const [routine, setRoutine]               = useState('');
+  const [holdColor, setHoldColor]           = useState<HoldColorId | undefined>();
   const [mediaItems, setMediaItems]         = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
 
   // Friends state
@@ -95,14 +96,14 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   async function restoreLastGrade(type: ClimbTypeId) {
     if (type === 'boulder') {
       const sys = await getLastGradeSystem('boulder');
-      const resolved = sys && ['v-scale', 'font'].includes(sys) ? sys : 'v-scale';
-      setGradeSystem(resolved as any);
-      setGrade((await getLastGrade(type)) ?? (resolved === 'font' ? '6a' : 'V3'));
+      const resolved = sys && ['v-scale', 'font', 'custom'].includes(sys) ? sys : 'v-scale';
+      setGradeSystem(resolved as GradeSystem);
+      setGrade((await getLastGrade(type)) ?? (resolved === 'font' ? '6a' : resolved === 'custom' ? '' : 'V3'));
     } else if (type !== 'hangboard' && type !== 'lift') {
       const sys = await getLastGradeSystem(type);
-      const resolved = sys && ['yds', 'french', 'british'].includes(sys) ? sys : 'yds';
-      setGradeSystem(resolved as any);
-      setGrade((await getLastGrade(type)) ?? (resolved === 'yds' ? '5.10a' : resolved === 'french' ? '6a' : 'VS'));
+      const resolved = sys && ['yds', 'french', 'british', 'custom'].includes(sys) ? sys : 'yds';
+      setGradeSystem(resolved as GradeSystem);
+      setGrade((await getLastGrade(type)) ?? (resolved === 'yds' ? '5.10a' : resolved === 'french' ? '6a' : resolved === 'custom' ? '' : 'VS'));
     }
   }
 
@@ -129,6 +130,16 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     restoreLastGrade(climbType);
   }, [climbType]);
 
+  // Custom grades aren't offered for projects (project records only store grade text
+  // and re-infer the system from it), so drop back to a standard grade if Project is picked.
+  useEffect(() => {
+    if (isProject && gradeSystem === 'custom') {
+      const boulder = climbType === 'boulder';
+      setGradeSystem(boulder ? 'v-scale' : 'yds');
+      setGrade(boulder ? 'V3' : '5.10a');
+    }
+  }, [isProject, gradeSystem]);
+
   // Load existing climb data
   useEffect(() => {
     if (existingClimb) {
@@ -137,6 +148,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setClimbType(existingClimb.type);
       setOutcome(existingClimb.outcome === 'project' ? 'attempt' : existingClimb.outcome);
       setSelectedStyles(existingClimb.styles);
+      setHoldColor(existingClimb.holdColor);
       setGradeSystem(existingClimb.gradeSystem);
       setGrade(existingClimb.grade);
       setRouteName(existingClimb.routeName || '');
@@ -166,6 +178,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     setClimbType('boulder');
     setOutcome(_lastUsedOutcome);
     setSelectedStyles([]);
+    setHoldColor(undefined);
     setGradeSystem('v-scale');
     setGrade('V3');
     setRouteName('');
@@ -251,6 +264,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }
 
   async function handleSave() {
+    if (!isTraining && gradeSystem === 'custom' && !grade.trim()) {
+      Alert.alert('Enter a grade', 'Type the grade your gym uses, or pick another grade system.');
+      return;
+    }
     setSaving(true);
     try {
       // In editProjectMode, only update the project registry + linked climbs — no session touch
@@ -305,7 +322,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       await saveLastEnvironment(environment);
       if (!isTraining) {
         await saveLastGradeSystem(climbType, gradeSystem);
-        await saveLastGrade(climbType, grade);
+        await saveLastGrade(climbType, grade.trim());
       }
 
       const climbId = existingClimb?.id || generateId();
@@ -339,7 +356,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         outcome: finalOutcome,
         styles: selectedStyles,
         environment,
-        grade: isTraining ? '' : grade,
+        grade: isTraining ? '' : grade.trim(),
         gradeSystem: isTraining ? 'v-scale' : gradeSystem,
         routeName: routeName || undefined,
         location: location || undefined,
@@ -351,6 +368,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         mediaType: finalMediaTypes[0] || undefined,
         projectId: isProject ? projId : undefined,
         projectName: isProject ? projName : undefined,
+        // Hold color only applies to indoor, non-training climbs — this also drops
+        // a color picked earlier and then hidden by switching to outdoor/training.
+        holdColor: environment === 'indoor' && !isTraining ? holdColor : undefined,
       };
 
       await saveClimb(climb);
@@ -501,6 +521,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                       onSystemChange={(sys) => { setGradeSystem(sys); }}
                       onChange={setGrade}
                       isBoulder={climbType === 'boulder'}
+                      allowCustom={!isProject && !editProjectMode}
                     />
                     <Divider />
                   </>
@@ -548,6 +569,34 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                   {CLIMB_STYLES.map(s => (
                     <Pill key={s.id} label={s.label} selected={selectedStyles.includes(s.id)} onPress={() => toggleStyle(s.id)} small />
                   ))}
+                </View>
+                <Divider />
+              </>
+            )}
+
+            {/* Hold color — indoor, non-training only */}
+            {!isTraining && environment === 'indoor' && (
+              <>
+                <Text style={[styles.label, { color: colors.textMuted }]}>HOLD COLOR (optional)</Text>
+                <View style={styles.row}>
+                  {HOLD_COLORS.map(c => {
+                    const selected = holdColor === c.id;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        onPress={() => setHoldColor(selected ? undefined : c.id)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${c.label} holds${selected ? ', selected' : ''}`}
+                        style={[
+                          styles.swatchWrap,
+                          { borderColor: selected ? colors.textPrimary : 'transparent' },
+                        ]}
+                      >
+                        <HoldColorDot colorId={c.id} size={28} />
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
                 <Divider />
               </>
@@ -661,6 +710,7 @@ const styles = StyleSheet.create({
   mediaBtnText: { fontSize: FONTS.sizes.md },
   mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
   mediaAddTile: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  swatchWrap: { borderWidth: 3, borderRadius: 22, padding: 2, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pill: { borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.md },

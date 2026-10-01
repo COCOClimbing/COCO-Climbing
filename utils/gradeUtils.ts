@@ -15,3 +15,9 @@ export function gradeToNum(grade: string, system: string): number {
   if (system === 'yds') return ydsGradeToNum(grade);
   return 0;
 }
+
+// Custom (gym-specific) grades are free text and can't be ranked, so they're
+// left out of every "hardest"/average calculation. They still count as climbs.
+export function isCustomGrade(system?: string | null): boolean {
+  return system === 'custom';
+}

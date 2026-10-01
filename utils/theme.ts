@@ -2,18 +2,14 @@
 
 export type ThemeId = 'obsidian' | 'slate' | 'forest' | 'crimson' | 'arctic' | 'sand' | 'meadow' | 'rose';
 export type ThemeMode = 'dark' | 'light';
-export type AccentId = 'orange' | 'green' | 'crimson' | 'lavender' | 'blue';
+export type AccentId = 'orange';
 
 export const ACCENT_COLORS: Record<AccentId, { name: string; color: string }> = {
-  orange:  { name: 'Orange',       color: '#BF5F29' },
-  green:   { name: 'Green',        color: '#3A8C5C' },
-  crimson: { name: 'Crimson',      color: '#C0394B' },
-  lavender:{ name: 'Lavender',     color: '#9B5DE5' },
-  blue:    { name: 'Blue',         color: '#7B9EE0' },
+  orange: { name: 'Orange', color: '#BF5F29' },
 };
 
-export function buildColorScheme(mode: ThemeMode, accentId: AccentId): ColorScheme {
-  const accent = ACCENT_COLORS[accentId].color;
+export function buildColorScheme(mode: ThemeMode): ColorScheme {
+  const accent = ACCENT_COLORS.orange.color;
   const accentSoft = accent + '22';
   if (mode === 'dark') {
     return {
@@ -30,7 +26,7 @@ export function buildColorScheme(mode: ThemeMode, accentId: AccentId): ColorSche
   } else {
     return {
       id: 'arctic', name: 'Custom', preview: accent,
-      bg: '#F5F5F2', bgCard: '#FFFFFF', bgElevated: '#EBEBE8',
+      bg: '#FFFFFF', bgCard: '#FFFFFF', bgElevated: '#EBEBE8',
       border: '#DCDCD8', borderLight: '#D0D0CC',
       accent, accentSoft,
       accentGold: '#D4A017', accentGoldSoft: '#D4A01720',
@@ -321,6 +317,20 @@ export const CLIMB_STYLES = [
   { id: 'balance',   label: 'Balance' },
 ] as const;
 
+export const HOLD_COLORS = [
+  { id: 'red',    label: 'Red',    hex: '#E03131' },
+  { id: 'orange', label: 'Orange', hex: '#F76707' },
+  { id: 'yellow', label: 'Yellow', hex: '#FAB005' },
+  { id: 'green',  label: 'Green',  hex: '#2F9E44' },
+  { id: 'teal',   label: 'Teal',   hex: '#12A594' },
+  { id: 'blue',   label: 'Blue',   hex: '#1C7ED6' },
+  { id: 'purple', label: 'Purple', hex: '#7048E8' },
+  { id: 'pink',   label: 'Pink',   hex: '#E64980' },
+  { id: 'white',  label: 'White',  hex: '#FFFFFF' },
+  { id: 'black',  label: 'Black',  hex: '#1A1A1A' },
+  { id: 'gray',   label: 'Gray',   hex: '#868E96' },
+] as const;
+
 export const ENVIRONMENTS = [
   { id: 'indoor',  label: 'Indoor',  icon: '' },
   { id: 'outdoor', label: 'Outdoor', icon: '' },
@@ -432,6 +442,7 @@ export function convertGrade(grade: string, fromSystem: string, toSystem: string
 export type ClimbTypeId  = typeof CLIMB_TYPES[number]['id'];
 export type OutcomeId    = typeof CLIMB_OUTCOMES[number]['id'];
 export type StyleId      = typeof CLIMB_STYLES[number]['id'];
+export type HoldColorId  = typeof HOLD_COLORS[number]['id'];
 export type EnvironmentId = typeof ENVIRONMENTS[number]['id'];
 
 export interface Climb {
@@ -443,7 +454,7 @@ export interface Climb {
   styles: StyleId[];
   environment: EnvironmentId;
   grade: string;
-  gradeSystem: 'v-scale' | 'yds' | 'french' | 'british' | 'font';
+  gradeSystem: 'v-scale' | 'yds' | 'french' | 'british' | 'font' | 'custom';
   notes?: string;
   routeName?: string;
   location?: string;
@@ -454,6 +465,7 @@ export interface Climb {
   mediaTypes?: ('photo' | 'video')[];
   projectId?: string;    // links this climb to a named project
   projectName?: string;  // display name of the project
+  holdColor?: HoldColorId;  // gym hold color of the route (indoor climbs only)
 }
 
 export interface Session {

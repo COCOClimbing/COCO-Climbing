@@ -148,7 +148,7 @@ export default function AppHeader() {
       <View style={styles.side}>
         <View style={styles.leftGroup}>
           <TouchableOpacity onPress={() => navigate('account')} activeOpacity={0.7}>
-            <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}>
+            <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
               {(localAvatarUri ?? avatarUrl) ? (
                 <Image source={{ uri: localAvatarUri ?? avatarUrl! }} style={styles.avatarImage} />
               ) : (

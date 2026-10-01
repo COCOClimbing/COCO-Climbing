@@ -155,6 +155,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               onSystemChange={(sys) => { setGradeSystem(sys as any); }}
               onChange={setGrade}
               isBoulder={climbType === 'boulder'}
+              allowCustom={false}
             />
             <Divider />
 

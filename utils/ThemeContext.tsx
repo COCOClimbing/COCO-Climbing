@@ -1,112 +1,74 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ThemeMode, AccentId, ColorScheme, buildColorScheme, setActiveColors, ACCENT_COLORS } from './theme';
+import { ThemeMode, AccentId, ColorScheme, buildColorScheme, setActiveColors } from './theme';
 
 interface ThemeContextType {
   mode: ThemeMode;
   accentId: AccentId;
   colors: ColorScheme;
   setMode: (mode: ThemeMode) => void;
-  setAccent: (id: AccentId) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   mode: 'light',
   accentId: 'orange',
-  colors: buildColorScheme('light', 'orange'),
+  colors: buildColorScheme('light'),
   setMode: () => {},
-  setAccent: () => {},
 });
 
-const MODE_KEY   = 'coco_theme_mode';
-const ACCENT_KEY = 'coco_theme_accent';
-const OLD_KEY    = 'coco_theme';
+const MODE_KEY = 'coco_theme_mode';
+const OLD_KEY  = 'coco_theme';
 
-// Migrate old accent/theme IDs to the new set
-const ACCENT_MIGRATION: Record<string, AccentId> = {
-  orange:  'orange',
-  blue:    'blue',
-  amber:   'orange',
-  sage:    'green',
-  rose:    'crimson',
-  purple:  'lavender',
-  pink:    'lavender',
-  obsidian:'orange',
-  slate:   'orange',
-  forest:  'green',
-  crimson: 'crimson',
-  arctic:  'orange',
-  sand:    'orange',
-  meadow:  'green',
+// Migrate old single-theme IDs to the new mode system
+const OLD_THEME_MAP: Record<string, ThemeMode> = {
+  obsidian: 'dark',
+  slate:    'dark',
+  forest:   'dark',
+  crimson:  'dark',
+  arctic:   'light',
+  sand:     'light',
+  meadow:   'light',
+  rose:     'light',
 };
-
-// Migrate old single-theme IDs to the new mode + accent system
-const OLD_THEME_MAP: Record<string, { mode: ThemeMode; accentId: AccentId }> = {
-  obsidian: { mode: 'dark',  accentId: 'orange'  },
-  slate:    { mode: 'dark',  accentId: 'blue'    },
-  forest:   { mode: 'dark',  accentId: 'green'   },
-  crimson:  { mode: 'dark',  accentId: 'crimson' },
-  arctic:   { mode: 'light', accentId: 'blue'    },
-  sand:     { mode: 'light', accentId: 'orange'  },
-  meadow:   { mode: 'light', accentId: 'green'   },
-  rose:     { mode: 'light', accentId: 'crimson' },
-};
-
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState]     = useState<ThemeMode>('light');
-  const [accentId, setAccentState] = useState<AccentId>('orange');
+  const [mode, setModeState] = useState<ThemeMode>('light');
 
   useEffect(() => {
     (async () => {
-      const [savedMode, savedAccent, oldTheme] = await Promise.all([
+      const [savedMode, oldTheme] = await Promise.all([
         AsyncStorage.getItem(MODE_KEY),
-        AsyncStorage.getItem(ACCENT_KEY),
         AsyncStorage.getItem(OLD_KEY),
       ]);
 
       let m: ThemeMode = 'light';
-      let a: AccentId  = 'orange';
 
-      if (savedMode && savedAccent) {
+      if (savedMode) {
         m = savedMode as ThemeMode;
-        // Migrate removed accents to the closest new one, fall back to amber
-        a = (savedAccent in ACCENT_COLORS)
-          ? savedAccent as AccentId
-          : (ACCENT_MIGRATION[savedAccent] ?? 'amber');
       } else if (oldTheme && OLD_THEME_MAP[oldTheme]) {
         // Migrate from old system
-        m = OLD_THEME_MAP[oldTheme].mode;
-        a = OLD_THEME_MAP[oldTheme].accentId;
+        m = OLD_THEME_MAP[oldTheme];
         await Promise.all([
           AsyncStorage.setItem(MODE_KEY, m),
-          AsyncStorage.setItem(ACCENT_KEY, a),
           AsyncStorage.removeItem(OLD_KEY),
         ]);
       }
 
       setModeState(m);
-      setAccentState(a);
-      setActiveColors(buildColorScheme(m, a));
+      setActiveColors(buildColorScheme(m));
     })();
   }, []);
 
   function setMode(m: ThemeMode) {
     setModeState(m);
-    setActiveColors(buildColorScheme(m, accentId));
+    setActiveColors(buildColorScheme(m));
     AsyncStorage.setItem(MODE_KEY, m);
   }
 
-  function setAccent(a: AccentId) {
-    setAccentState(a);
-    setActiveColors(buildColorScheme(mode, a));
-    AsyncStorage.setItem(ACCENT_KEY, a);
-  }
-
-  const colors = buildColorScheme(mode, accentId);
+  const colors = buildColorScheme(mode);
 
   return (
-    <ThemeContext.Provider value={{ mode, accentId, colors, setMode, setAccent }}>
+    <ThemeContext.Provider value={{ mode, accentId: 'orange', colors, setMode }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -9,7 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FONTS, SPACING, ACCENT_COLORS, AccentId } from '../utils/theme';
+import { FONTS, SPACING } from '../utils/theme';
 import { useNav } from '../utils/NavigationContext';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
@@ -43,7 +43,7 @@ export const TERMS_ACCEPTED_KEY = '@coco_terms_accepted';
 
 export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const { navigate } = useNav();
-  const { colors, mode, accentId, setMode, setAccent } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   const { user, profileName, avatarUrl, username, hometown, bio, refreshProfile } = useAuth();
 
   const [step, setStep] = useState(0);
@@ -286,7 +286,7 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
             {/* Dark / Light */}
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>APPEARANCE</Text>
             <View style={styles.modeRow}>
-              {(['dark', 'light'] as const).map(m => {
+              {(['light', 'dark'] as const).map(m => {
                 const selected = mode === m;
                 return (
                   <TouchableOpacity
@@ -304,28 +304,6 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
                     <Text style={[styles.modeLabel, { color: selected ? accent : colors.textPrimary }]}>
                       {m === 'dark' ? 'Dark' : 'Light'}
                     </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Accent color */}
-            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ACCENT COLOR</Text>
-            <View style={styles.accentGrid}>
-              {(Object.entries(ACCENT_COLORS) as [AccentId, { name: string; color: string }][]).map(([id, val]) => {
-                const selected = accentId === id;
-                return (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.accentSwatch,
-                      { backgroundColor: val.color },
-                      selected && styles.accentSwatchSelected,
-                    ]}
-                    onPress={() => setAccent(id)}
-                    activeOpacity={0.8}
-                  >
-                    {selected && <Text style={styles.accentCheck}>✓</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -482,27 +460,6 @@ const styles = StyleSheet.create({
   modeLabel: {
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.semibold,
-  },
-  accentGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.md,
-    marginBottom: SPACING.xl,
-  },
-  accentSwatch: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accentSwatchSelected: {
-    transform: [{ scale: 1.2 }],
-  },
-  accentCheck: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: FONTS.family.bold,
   },
   previewPill: {
     flexDirection: 'row',

@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator
 } from 'react-native';
-import { FONTS, SPACING, COLORS } from '../utils/theme';
+import { FONTS, SPACING, COLORS, HOLD_COLORS, HoldColorId } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 
 // ─── Pill / Chip ─────────────────────────────────────────────────────────────
@@ -81,6 +81,23 @@ export function GradeBadge({ grade, outcome }: { grade: string; outcome: string 
     <View style={[styles.gradeBadge, { backgroundColor: color + '20', borderColor: color }]}>
       <Text style={[styles.gradeText, { color }]}>{grade}</Text>
     </View>
+  );
+}
+
+// ─── Hold Color Dot ──────────────────────────────────────────────────────────
+
+export function HoldColorDot({ colorId, size = 14 }: { colorId: HoldColorId; size?: number }) {
+  const hex = HOLD_COLORS.find(c => c.id === colorId)?.hex;
+  if (!hex) return null;
+  return (
+    <View
+      style={{
+        width: size, height: size, borderRadius: size / 2,
+        backgroundColor: hex,
+        // Neutral ring so white/black stay visible on both light and dark themes.
+        borderWidth: 1, borderColor: 'rgba(128,128,128,0.55)',
+      }}
+    />
   );
 }
 

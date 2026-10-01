@@ -5,7 +5,7 @@ import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } 
 import { useTheme } from '../utils/ThemeContext';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
-import { gradeToNum } from '../utils/gradeUtils';
+import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
 import { EmptyState } from '../components/UI';
 import { parseISO, differenceInDays } from 'date-fns';
@@ -154,7 +154,8 @@ export default function StatsScreen() {
             id: r.id, date: r.date, sessionId: r.session_id,
             type: r.type, outcome: r.outcome, styles: r.styles ?? [],
             environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
-            routeName: r.route_name ?? undefined, location: r.location ?? undefined,
+            routeName: r.route_name ?? undefined, holdColor: r.hold_color ?? undefined,
+            location: r.location ?? undefined,
             notes: r.notes ?? undefined, attempts: r.attempts ?? 1,
             projectId: r.project_id ?? undefined, projectName: r.project_name ?? undefined,
             mediaUri: r.media_uri ?? undefined, mediaType: r.media_type ?? undefined,
@@ -229,7 +230,7 @@ export default function StatsScreen() {
     const indoorPct = Math.round((indoorCount / climbs.length) * 100);
 
     const sysCounts: Record<string, number> = {};
-    sends.forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
+    sends.filter(c => !isCustomGrade(c.gradeSystem)).forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
     const systems = Object.entries(sysCounts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
 
     const climbDate = (c: Climb) => new Date((c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10));
@@ -581,7 +582,7 @@ export default function StatsScreen() {
             <SectionLabel title="CLIMB STYLE" />
             {topStyles.map(([style, count]) => {
               const allStyleClimbs = climbs.filter(c => c.styles.includes(style));
-              const hardest = [...allStyleClimbs].sort((a, b) => gradeNum(b) - gradeNum(a))[0];
+              const hardest = allStyleClimbs.filter(c => !isCustomGrade(c.gradeSystem)).sort((a, b) => gradeNum(b) - gradeNum(a))[0];
               const maxStyleCount = topStyles[0][1];
               const pct = Math.round((count / maxStyleCount) * 100);
               const styleLabel = CLIMB_STYLES.find(s => s.id === style)?.label ?? style;

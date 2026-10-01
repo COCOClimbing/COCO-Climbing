@@ -709,8 +709,8 @@ export default function SessionsScreen() {
             <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
             <Text style={[styles.detailDay, { color: colors.accent }]}>ACTIVE SESSION</Text>
           </View>
-          <Text style={[styles.detailTitle, { color: colors.textPrimary }]}>
-            {activeTitle.trim() || sessionTimeOfDay(activeSession)}
+          <Text style={[styles.detailTitle, { color: activeTitle.trim() ? colors.textPrimary : colors.textMuted }]}>
+            {activeTitle.trim() || 'Add a Title'}
           </Text>
           <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
             {projecting ? (
@@ -788,7 +788,7 @@ export default function SessionsScreen() {
             {activeEditingTitle ? (
               <TextInput
                 style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={activeTitle || sessionTimeOfDay(activeSession)}
+                defaultValue={activeTitle}
                 onChangeText={t => { activeTitleInputValue.current = t; }}
                 onEndEditing={e => {
                   const t = e.nativeEvent.text.trim();
@@ -814,8 +814,8 @@ export default function SessionsScreen() {
                 onPress={() => { activeTitleInputValue.current = activeTitle; setActiveEditingTitle(true); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.detailTitle, { color: colors.textPrimary, flex: 1 }]}>
-                  {activeTitle.trim() || sessionTimeOfDay(activeSession)}
+                <Text style={[styles.detailTitle, { color: activeTitle.trim() ? colors.textPrimary : colors.textMuted, flex: 1 }]}>
+                  {activeTitle.trim() || 'Add a Title'}
                 </Text>
                 <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
               </TouchableOpacity>
@@ -1067,7 +1067,7 @@ export default function SessionsScreen() {
             {editingTitle ? (
               <TextInput
                 style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={sessionTitle || sessionTimeOfDay(day)}
+                defaultValue={sessionTitle}
                 onChangeText={t => { titleInputValue.current = t; }}
                 onEndEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
                 onSubmitEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}

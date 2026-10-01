@@ -8,6 +8,7 @@ import ClimbCard from './ClimbCard';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import Avatar from './Avatar';
+import { formatRelativeDate } from '../utils/formatRelativeDate';
 import {
   getSessionLikes, getSessionComments, getCommentLikes,
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
@@ -68,27 +69,12 @@ function sessionTimeOfDay(isoTime?: string): string {
   return 'Evening Climb';
 }
 
-function formatRelativeDate(dateStr: string): string {
-  try {
-    const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
-    const dateDay = new Date(y, m - 1, d);
-    const today = new Date();
-    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const diffDays = Math.round((todayDay.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
-  } catch {
-    return dateStr;
-  }
-}
-
 function mapToClimb(c: any): Climb {
   return {
     id: c.id, date: c.date, sessionId: c.session_id,
     type: c.type, outcome: c.outcome, styles: c.styles ?? [],
     environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
-    routeName: c.route_name, location: c.location, notes: c.notes,
+    routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes,
     attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
     mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
     mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),
@@ -121,6 +107,7 @@ export default function ActivityCard({
   const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
   const [commentText, setCommentText] = useState('');
   const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [isCommenting, setIsCommenting] = useState(false);
 
   useEffect(() => {
     if (!entry.sessionId) return;
@@ -420,13 +407,13 @@ export default function ActivityCard({
       {/* Actions */}
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
-          <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={22} color={liked ? colors.accent : colors.textMuted} />
+          <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setCommentsExpanded(true)}>
-          <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
+        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setIsCommenting(prev => !prev)}>
+          <Ionicons name={isCommenting ? 'chatbubble' : 'chatbubble-outline'} size={24} color={isCommenting ? colors.accent : colors.textPrimary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
-          <Ionicons name="share-outline" size={22} color={colors.textMuted} />
+          <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -465,19 +452,21 @@ export default function ActivityCard({
       )}
 
       {/* Comment input */}
-      <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-        <TextInput
-          style={[styles.commentInputText, { color: colors.textPrimary }]}
-          placeholder="Add a comment..."
-          placeholderTextColor={colors.textMuted}
-          value={commentText}
-          onChangeText={setCommentText}
-          multiline
-        />
-        <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
-          <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+      {isCommenting && (
+        <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
+          <TextInput
+            style={[styles.commentInputText, { color: colors.textPrimary }]}
+            placeholder="Add a comment..."
+            placeholderTextColor={colors.textMuted}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+          />
+          <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
+            <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Photo viewer for this card's media */}
       {viewerUris && (
@@ -558,8 +547,8 @@ const styles = StyleSheet.create({
   partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatNum: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
-  cardStatLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardStatNum: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: 10, fontFamily: FONTS.family.medium, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },

@@ -22,13 +22,13 @@ import { upsertProfile } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { supabase } from '../utils/supabase';
 import { isUsernameAvailable, getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
-import { FONTS, SPACING, ACCENT_COLORS, AccentId, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
-import { gradeToNum } from '../utils/gradeUtils';
+import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
+import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 
 
 export default function AccountScreen() {
-  const { colors, mode, accentId, setMode, setAccent } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   const { settingsOpen, closeSettings, navigate, screen, friendsOpen, viewFriendProfile } = useNav();
   const { user, profileName, avatarUrl, localAvatarUri, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
 
@@ -142,7 +142,7 @@ export default function AccountScreen() {
     ] as const;
 
     const hardestByType: HardestByType[] = GRADED_TYPES.map(({ id, label }) => {
-      const typeSends = sends.filter(c => c.type === id);
+      const typeSends = sends.filter(c => c.type === id && !isCustomGrade(c.gradeSystem));
       if (typeSends.length === 0) return { label, grade: null, gradeSystem: null };
       const preferredSys = id === 'boulder' ? boulderSys : ropeSys;
       const best = typeSends
@@ -156,7 +156,7 @@ export default function AccountScreen() {
     });
 
     const sysCounts: Record<string, number> = {};
-    sends.forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
+    sends.filter(c => !isCustomGrade(c.gradeSystem)).forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
     const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
 
     const recentSessions = [...sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30).reverse();
@@ -866,7 +866,7 @@ export default function AccountScreen() {
             <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</Text>
               <View style={styles.modeRow}>
-                {(['dark', 'light'] as const).map(m => {
+                {(['light', 'dark'] as const).map(m => {
                   const isDarkBtn = m === 'dark';
                   const isActive = mode === m;
                   const bg = isDarkBtn ? '#141414' : '#F5F5F2';
@@ -889,30 +889,6 @@ export default function AccountScreen() {
                   );
                 })}
               </View>
-            </View>
-
-            {/* Accent color */}
-            <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ACCENT COLOR</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accentRow}>
-                {(Object.keys(ACCENT_COLORS) as AccentId[]).map(id => {
-                  const active = accentId === id;
-                  return (
-                    <TouchableOpacity
-                      key={id}
-                      style={[
-                        styles.accentDot,
-                        { backgroundColor: ACCENT_COLORS[id].color },
-                        active && styles.accentDotActive,
-                      ]}
-                      onPress={() => setAccent(id)}
-                      activeOpacity={0.8}
-                    >
-                      {active && <Text style={styles.accentCheck}>✓</Text>}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
             </View>
 
             {/* Grades */}
@@ -1701,26 +1677,5 @@ const styles = StyleSheet.create({
   modeLabel: {
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.semibold,
-  },
-  accentRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-    paddingVertical: SPACING.xs,
-  },
-  accentDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accentDotActive: {
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  accentCheck: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: FONTS.family.bold,
   },
 });

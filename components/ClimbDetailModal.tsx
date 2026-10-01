@@ -4,8 +4,8 @@ import {
   ScrollView, Image,
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
-import { FONTS, SPACING, CLIMB_TYPES, CLIMB_OUTCOMES, Climb } from '../utils/theme';
-import { GradeBadge, OutcomeBadge } from './UI';
+import { FONTS, SPACING, CLIMB_TYPES, CLIMB_OUTCOMES, HOLD_COLORS, Climb } from '../utils/theme';
+import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
 
 interface Props {
@@ -102,6 +102,19 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
               </View>
             </View>
           )}
+
+          {/* Hold color */}
+          {climb.holdColor ? (
+            <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[ss.sectionLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>HOLD COLOR</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+                <HoldColorDot colorId={climb.holdColor} size={18} />
+                <Text style={[ss.notesText, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>
+                  {HOLD_COLORS.find(c => c.id === climb.holdColor)?.label ?? climb.holdColor}
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {/* Notes */}
           {climb.notes ? (

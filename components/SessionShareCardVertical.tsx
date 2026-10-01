@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { format, parseISO } from 'date-fns';
-import { gradeToNum } from '../utils/gradeUtils';
+import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 
 interface Props {
   date: string;
@@ -36,7 +36,7 @@ export default function SessionShareCardVertical({
     ? climbs.filter(c => c.outcome === 'flash').length
     : (flashCount ?? 0);
   const hardestLabel = climbs
-    ? ([...climbs].filter(c => c.outcome === 'send' || c.outcome === 'flash')
+    ? ([...climbs].filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isCustomGrade(c.gradeSystem))
         .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0]?.grade ?? null)
     : (hardestGrade ?? null);
 
