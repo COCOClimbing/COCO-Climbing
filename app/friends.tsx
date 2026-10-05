@@ -331,6 +331,19 @@ function FriendDetailView({
       } else if (friendStatus === 'accepted') {
         await removeFriend(user.id, friend.id);
         setFriendStatus('none');
+      } else if (friendStatus === 'pending_sent') {
+        const confirmed = await new Promise<boolean>(resolve => Alert.alert(
+          'Cancel follow request?',
+          `${friend.name} won't see your request anymore.`,
+          [
+            { text: 'Keep', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Cancel Request', style: 'destructive', onPress: () => resolve(true) },
+          ],
+        ));
+        if (confirmed) {
+          await removeFriend(user.id, friend.id);
+          setFriendStatus('none');
+        }
       } else if (friendStatus === 'pending_received') {
         const requests = await getPendingRequests(user.id);
         const req = requests.find(r => r.sender_id === friend.id);
@@ -383,7 +396,7 @@ function FriendDetailView({
 
   const friendBtnLabel = friendStatus === 'accepted' ? 'Following'
     : friendStatus === 'pending_sent' ? 'Requested'
-    : friendStatus === 'pending_received' ? 'Follow Back'
+    : friendStatus === 'pending_received' ? 'Accept Request'
     : 'Follow';
   const friendBtnFilled = friendStatus === 'none' || friendStatus === 'pending_received';
   // Private profiles stay locked until the follow is accepted (RLS returns no climbs/sessions anyway)
@@ -473,7 +486,7 @@ function FriendDetailView({
             {user && user.id !== friend.id && (
               <TouchableOpacity
                 onPress={handleFriendAction}
-                disabled={friendActionLoading || friendStatus === 'pending_sent'}
+                disabled={friendActionLoading}
                 activeOpacity={0.7}
                 style={[
                   detailStyles.friendBtn,
@@ -1268,6 +1281,8 @@ export default function FriendsScreen() {
     try {
       const pending = await getPendingRequests(user.id);
       setRequests(pending);
+      // Badge count is otherwise only fetched at login, so requests that arrive mid-session never show
+      refreshPendingCount().catch(() => {});
     } catch {
       setRequests([]);
     }
@@ -1330,6 +1345,32 @@ export default function FriendsScreen() {
       Alert.alert('Error', 'Failed to follow user.');
     }
     setSendingRequest(null);
+  }
+
+  function handleCancelRequest(receiverId: string) {
+    if (!user) return;
+    const target = searchResults.find(r => r.id === receiverId);
+    Alert.alert(
+      'Cancel follow request?',
+      `${target?.name ?? 'They'} won't see your request anymore.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel Request',
+          style: 'destructive',
+          onPress: async () => {
+            setSendingRequest(receiverId);
+            try {
+              await removeFriend(user.id, receiverId);
+              setSearchResults(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: 'none' } : r));
+            } catch {
+              Alert.alert('Error', 'Failed to cancel request.');
+            }
+            setSendingRequest(null);
+          },
+        },
+      ],
+    );
   }
 
   async function handleAccept(requestId: string) {
@@ -1660,9 +1701,9 @@ export default function FriendsScreen() {
       </View>
     );
     if (item.friendshipStatus === 'pending_sent') return (
-      <View style={[styles.statusBadge, { backgroundColor: colors.bgElevated }]}>
+      <TouchableOpacity style={[styles.statusBadge, { backgroundColor: colors.bgElevated }]} onPress={() => handleCancelRequest(item.id)} activeOpacity={0.7}>
         <Text style={[styles.statusBadgeText, { color: colors.textMuted }]}>Requested</Text>
-      </View>
+      </TouchableOpacity>
     );
     if (item.friendshipStatus === 'pending_received') return (
       <View style={[styles.statusBadge, { backgroundColor: colors.accentSoft }]}>
@@ -2304,12 +2345,12 @@ export default function FriendsScreen() {
             ) : (
               <>
                 {/* Pending requests */}
-                {pendingRequestCount > 0 && (
+                {(requests.length > 0 || pendingRequestCount > 0) && (
                   <View style={styles.section}>
                     <View style={styles.sectionHeaderRow}>
                       <Text style={[styles.sectionLabel, { color: colors.textMuted, marginBottom: 0 }]}>REQUESTS</Text>
                       <View style={[styles.badgeDot, { backgroundColor: colors.accent }]}>
-                        <Text style={styles.badgeDotText}>{pendingRequestCount > 9 ? '9+' : pendingRequestCount}</Text>
+                        <Text style={styles.badgeDotText}>{Math.max(requests.length, pendingRequestCount) > 9 ? '9+' : Math.max(requests.length, pendingRequestCount)}</Text>
                       </View>
                     </View>
                     <View style={{ height: SPACING.md }} />
