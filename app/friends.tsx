@@ -197,6 +197,7 @@ function FriendDetailView({
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
   const [friendStatus, setFriendStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
+  const [friendStatusLoaded, setFriendStatusLoaded] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [listSheetOpen, setListSheetOpen] = useState(false);
   const [listSheetTab, setListSheetTab] = useState<'following' | 'followers'>('following');
@@ -241,6 +242,7 @@ function FriendDetailView({
   async function loadFriendStatus() {
     if (!user) return;
     try { setFriendStatus(await getFriendshipStatus(user.id, friend.id)); } catch {}
+    setFriendStatusLoaded(true);
   }
 
   async function loadSessions(days: number = sessionsDaysLoaded, showLoading: boolean = true): Promise<number> {
@@ -384,6 +386,8 @@ function FriendDetailView({
     : friendStatus === 'pending_received' ? 'Follow Back'
     : 'Follow';
   const friendBtnFilled = friendStatus === 'none' || friendStatus === 'pending_received';
+  // Private profiles stay locked until the follow is accepted (RLS returns no climbs/sessions anyway)
+  const isLocked = !isSelf && !!friend.is_private && friendStatus !== 'accepted';
 
   const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
@@ -487,8 +491,18 @@ function FriendDetailView({
           </View>
         </View>
 
-        {loadingClimbs ? (
+        {loadingClimbs || (friend.is_private && !friendStatusLoaded) ? (
           <View style={detailStyles.loadingBox}><ActivityIndicator color={colors.accent} /></View>
+        ) : isLocked ? (
+          <View style={detailStyles.privateBox}>
+            <Ionicons name="lock-closed-outline" size={36} color={colors.textMuted} />
+            <Text style={[detailStyles.privateTitle, { color: colors.textPrimary }]}>This account is private</Text>
+            <Text style={[detailStyles.privateText, { color: colors.textMuted }]}>
+              {friendStatus === 'pending_sent'
+                ? `Your follow request is pending. You'll see ${friend.name}'s climbs once they accept.`
+                : `Follow ${friend.name} to see their climbs and sessions.`}
+            </Text>
+          </View>
         ) : (
           <View style={detailStyles.statsWrapper}>
 
@@ -703,6 +717,9 @@ const detailStyles = StyleSheet.create({
   friendBtnText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.semibold },
 
   loadingBox: { paddingTop: 60, alignItems: 'center' },
+  privateBox: { paddingTop: 60, paddingHorizontal: SPACING.xl, alignItems: 'center', gap: SPACING.sm },
+  privateTitle: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
+  privateText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, textAlign: 'center' },
 
   // Stats wrapper — matches account page padding
   statsWrapper: { marginHorizontal: SPACING.xl, marginBottom: SPACING.xl },
@@ -2244,7 +2261,7 @@ export default function FriendsScreen() {
             <View style={[styles.searchBar, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <TextInput
                 style={[styles.searchInput, { color: colors.textPrimary }]}
-                placeholder="Search @username"
+                placeholder="Search name or @username"
                 placeholderTextColor={colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}

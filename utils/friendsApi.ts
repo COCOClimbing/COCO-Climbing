@@ -158,18 +158,13 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
   }));
 }
 
-// Search users by username (partial match, exclude self and existing friends)
+// Search users by name or username (partial match). Uses the search_profiles RPC so
+// private profiles are findable too; the RPC excludes self and blocked users server-side.
 export async function searchByUsername(query: string, currentUserId: string, excludeIds: string[] = []): Promise<FriendProfile[]> {
   if (!query.trim()) return [];
-  let q = supabase
-    .from('profiles')
-    .select('id, name, username, avatar_url, hometown, is_private')
-    .ilike('username', `%${query.trim()}%`)
-    .neq('id', currentUserId);
-  if (excludeIds.length > 0) q = q.not('id', 'in', `(${excludeIds.join(',')})`);
-  const { data, error } = await q.limit(10);
+  const { data, error } = await supabase.rpc('search_profiles', { q: query.trim(), max_results: 10 });
   if (error || !data) return [];
-  return data as FriendProfile[];
+  return (data as FriendProfile[]).filter(p => p.id !== currentUserId && !excludeIds.includes(p.id));
 }
 
 export async function getProfileById(id: string): Promise<FriendProfile | null> {
