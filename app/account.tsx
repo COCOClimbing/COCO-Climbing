@@ -11,6 +11,7 @@ import {
   Alert,
   Modal,
   Switch,
+  Share,
 } from 'react-native';
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Line } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
@@ -398,6 +399,12 @@ export default function AccountScreen() {
     );
   }
 
+  function handleInviteFriends() {
+    Share.share({
+      message: 'Join me on COCO and track your climbs https://apps.apple.com/app/id6762497120',
+    }).catch(() => {});
+  }
+
   useEffect(() => {
     if (editProfileVisible) {
       setNameValue(profileName ?? '');
@@ -476,13 +483,22 @@ export default function AccountScreen() {
               <Text style={[styles.countNumber, { color: colors.textPrimary }]}>{friendCounts?.followers ?? '—'}</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={() => setEditProfileVisible(true)}
-            activeOpacity={0.7}
-            style={[styles.editProfileBtn, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Edit Profile</Text>
-          </TouchableOpacity>
+          <View style={styles.profileActions}>
+            <TouchableOpacity
+              onPress={handleInviteFriends}
+              activeOpacity={0.7}
+              style={[styles.editProfileBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Invite Friends</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setEditProfileVisible(true)}
+              activeOpacity={0.7}
+              style={[styles.editProfileBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1523,6 +1539,10 @@ const styles = StyleSheet.create({
   editProfileText: {
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.family.semibold,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
   },
   // Settings modal
   modalContainer: { flex: 1 },

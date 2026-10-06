@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav, ScreenId } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
@@ -48,6 +48,9 @@ export default function AppHeader() {
   const [notifsCaughtUp, setNotifsCaughtUp] = useState(false);
   const canTriggerLoadMoreNotifsRef = useRef(true);
   const loadingMoreNotifsRef = useRef(false);
+  // iOS can't present a sheet while another is still dismissing, so a tap that
+  // opens the Friends sheet waits for the notifications sheet to finish closing.
+  const pendingSheetTapRef = useRef<AppNotification | null>(null);
 
   const loadUnreadCount = useCallback(async () => {
     if (!user) return;
@@ -122,11 +125,25 @@ export default function AppHeader() {
     loadingMoreNotifsRef.current = false;
   }
 
-  function handleNotificationTap(n: AppNotification) {
-    setNotifVisible(false);
+  function routeTap(n: AppNotification) {
     routeNotificationTap(nav, n.type, { senderId: n.sender_id, sessionId: n.session_id }).catch(err => {
       console.error('[notifications] Failed to resolve tap routing:', err);
     });
+  }
+
+  function handleNotificationTap(n: AppNotification) {
+    setNotifVisible(false);
+    if (n.type === 'follow_request' && Platform.OS === 'ios') {
+      pendingSheetTapRef.current = n;
+      return;
+    }
+    routeTap(n);
+  }
+
+  function handleNotifModalDismiss() {
+    const n = pendingSheetTapRef.current;
+    pendingSheetTapRef.current = null;
+    if (n) routeTap(n);
   }
 
   function iconForType(type: string) {
@@ -189,7 +206,7 @@ export default function AppHeader() {
       </View>
 
       {/* Notifications modal */}
-      <Modal visible={notifVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifVisible(false)}>
+      <Modal visible={notifVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifVisible(false)} onDismiss={handleNotifModalDismiss}>
         <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Notifications</Text>

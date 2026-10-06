@@ -146,7 +146,7 @@ export async function sendCommentLikeNotification(commentAuthorId: string, liker
   await sendNotification('comment_like', commentAuthorId, likerId, { sessionId, commentId });
 }
 
-const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request', 'follow_request_accepted']);
+const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request_accepted']);
 const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like', 'comment']);
 
 // Shared by push-notification tap routing and the in-app notification list,
@@ -156,6 +156,13 @@ export async function routeNotificationTap(
   type: string,
   opts: { senderId?: string | null; sessionId?: string | null }
 ): Promise<void> {
+  // Follow requests can only be accepted/declined from the Requests list, so
+  // open that instead of the sender's profile.
+  if (type === 'follow_request') {
+    nav.openFriends();
+    return;
+  }
+
   if (PROFILE_NOTIFICATION_TYPES.has(type)) {
     if (!opts.senderId) return;
     const profile = await getProfileById(opts.senderId);

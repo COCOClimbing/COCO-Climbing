@@ -932,6 +932,16 @@ export default function FriendsScreen() {
     if (friendsOpen && user) loadRequests();
   }, [friendsOpen]);
 
+  // The Friends modal is only rendered from the main feed view, so close any
+  // open profile/session when it opens (e.g. tapping a follow-request
+  // notification while viewing someone's profile).
+  useEffect(() => {
+    if (!friendsOpen) return;
+    setViewingFriend(null);
+    setViewingSession(null);
+    setReturnTo(null);
+  }, [friendsOpen]);
+
   // Scroll photo viewer to the tapped photo once the modal has laid out
   useEffect(() => {
     if (!viewerVisible) return;
@@ -2359,13 +2369,17 @@ export default function FriendsScreen() {
                     ) : (
                       requests.map(req => (
                         <View key={req.id} style={[styles.requestCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                          <View style={styles.requestLeft}>
+                          <TouchableOpacity
+                            style={styles.requestLeft}
+                            onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(req.profile, 'friends'); }}
+                            activeOpacity={0.75}
+                          >
                             <AvatarCircle name={req.profile.name} colors={colors} />
                             <View style={styles.personInfo}>
                               <Text style={[styles.personName, { color: colors.textPrimary }]}>{req.profile.name}</Text>
                               {req.profile.username ? <Text style={[styles.personUsername, { color: colors.textMuted }]}>@{req.profile.username}</Text> : null}
                             </View>
-                          </View>
+                          </TouchableOpacity>
                           <View style={styles.requestActions}>
                             {actingOnRequest === req.id ? (
                               <ActivityIndicator color={colors.accent} size="small" />
