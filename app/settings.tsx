@@ -10,6 +10,7 @@ import { upsertProfile } from '../utils/cloudSync';
 import { getBlockedUsers, unblockUser, BlockedUser } from '../utils/moderationApi';
 import { getNotificationPrefs, saveNotificationPrefs, NotificationPrefs } from '../utils/notificationPrefs';
 import { registerForPushNotifications } from '../utils/notifications';
+import EditProfileModal from '../components/EditProfileModal';
 
 export default function SettingsScreen() {
   const { mode, colors, setMode } = useTheme();
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
   const { closeSettings } = useNav();
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [unblocking, setUnblocking] = useState<string | null>(null);
   const [blockedOpen, setBlockedOpen] = useState(false);
@@ -136,6 +138,23 @@ export default function SettingsScreen() {
           <Text style={[styles.privacyLink, { color: colors.accent }]}>Got feedback?</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Profile — only shown when signed in */}
+      {user && (
+        <>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>PROFILE</Text>
+          <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.signOutBtn, { borderColor: colors.accent }]}
+              onPress={() => setEditProfileVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.signOutText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
+          <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
+        </>
+      )}
 
       {/* Appearance */}
       <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>APPEARANCE</Text>

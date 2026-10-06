@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -22,7 +21,7 @@ import { useAuth } from '../utils/AuthContext';
 import { upsertProfile } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { supabase } from '../utils/supabase';
-import { isUsernameAvailable, getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
+import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
@@ -40,32 +39,6 @@ export default function AccountScreen() {
   const [followersList, setFollowersList] = useState<FriendProfile[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
   const [climbStats, setClimbStats] = useState<ClimbStatsData | null>(null); // defined below component
-  const [editProfileVisible, setEditProfileVisible] = useState(false);
-
-  // Editable field states (inside settings modal)
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(profileName ?? '');
-  const [savingName, setSavingName] = useState(false);
-
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [usernameValue, setUsernameValue] = useState(username ?? '');
-  const [savingUsername, setSavingUsername] = useState(false);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-
-  const [editingHometown, setEditingHometown] = useState(false);
-  const [hometownValue, setHometownValue] = useState(hometown ?? '');
-  const [savingHometown, setSavingHometown] = useState(false);
-
-  const [editingBio, setEditingBio] = useState(false);
-  const [bioValue, setBioValue] = useState(bio ?? '');
-  const [savingBio, setSavingBio] = useState(false);
-
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [emailValue, setEmailValue] = useState(user?.email ?? '');
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
-
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -73,16 +46,6 @@ export default function AccountScreen() {
   const [deleting, setDeleting] = useState(false);
   const [preferredBoulder, setPreferredBoulder] = useState<'v-scale' | 'font'>('v-scale');
   const [preferredRope, setPreferredRope] = useState<'yds' | 'french' | 'british'>('yds');
-
-  // Populate form fields whenever profile data changes
-  useEffect(() => {
-    if (user) {
-      setNameValue(profileName ?? '');
-      setUsernameValue(username ?? '');
-      setHometownValue(hometown ?? '');
-      setEmailValue(user.email ?? '');
-    }
-  }, [user, profileName, username, hometown]);
 
   // Realtime subscription: update follow counts the instant the DB row changes
   useEffect(() => {
@@ -223,71 +186,6 @@ export default function AccountScreen() {
     setFollowListLoading(false);
   }
 
-  async function handleSaveName() {
-    if (!nameValue.trim()) return;
-    setSavingName(true);
-    try {
-      await upsertProfile(user.id, nameValue.trim(), avatarUrl ?? undefined);
-      await refreshProfile();
-      setEditingName(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save name.');
-    }
-    setSavingName(false);
-  }
-
-  async function handleSaveUsername() {
-    const trimmed = usernameValue.trim().toLowerCase().replace(/^@/, '');
-    if (!trimmed) { setUsernameError('Username cannot be empty.'); return; }
-    if (!/^[a-z0-9_]{3,20}$/.test(trimmed)) {
-      setUsernameError('3–20 characters: letters, numbers, underscores only.');
-      return;
-    }
-    if (trimmed === username) { setEditingUsername(false); return; }
-    setSavingUsername(true);
-    setUsernameError(null);
-    try {
-      const available = await isUsernameAvailable(trimmed);
-      if (!available) {
-        setUsernameError('That username is already taken.');
-        setSavingUsername(false);
-        return;
-      }
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, trimmed);
-      await refreshProfile();
-      setEditingUsername(false);
-    } catch {
-      setUsernameError('Failed to save username.');
-    }
-    setSavingUsername(false);
-  }
-
-  async function handleSaveHometown() {
-    const trimmed = hometownValue.trim();
-    setSavingHometown(true);
-    try {
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, trimmed || undefined);
-      await refreshProfile();
-      setEditingHometown(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save hometown.');
-    }
-    setSavingHometown(false);
-  }
-
-  async function handleSaveBio() {
-    const trimmed = bioValue.trim();
-    setSavingBio(true);
-    try {
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, hometown ?? undefined, trimmed || undefined);
-      await refreshProfile();
-      setEditingBio(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save bio.');
-    }
-    setSavingBio(false);
-  }
-
   async function handlePickPhoto() {
     try {
       const image = await ImageCropPicker.openPicker({
@@ -321,22 +219,6 @@ export default function AccountScreen() {
     } finally {
       setUploadingAvatar(false);
     }
-  }
-
-  async function handleSaveEmail() {
-    const trimmed = emailValue.trim().toLowerCase();
-    if (!trimmed) { setEmailError('Email cannot be empty.'); return; }
-    if (trimmed === user?.email) { setEditingEmail(false); return; }
-    setSavingEmail(true);
-    setEmailError(null);
-    try {
-      const { error } = await supabase.auth.updateUser({ email: trimmed });
-      if (error) { setEmailError(error.message); }
-      else { setEmailSent(true); setEditingEmail(false); }
-    } catch {
-      setEmailError('Failed to update email.');
-    }
-    setSavingEmail(false);
   }
 
   async function handleSyncNow() {
@@ -405,33 +287,6 @@ export default function AccountScreen() {
     }).catch(() => {});
   }
 
-  useEffect(() => {
-    if (editProfileVisible) {
-      setNameValue(profileName ?? '');
-      setUsernameValue(username ?? '');
-      setHometownValue(hometown ?? '');
-      setBioValue(bio ?? '');
-      setEmailValue(user?.email ?? '');
-      setEditingName(false);
-      setEditingUsername(false);
-      setEditingHometown(false);
-      setEditingBio(false);
-      setEditingEmail(false);
-      setUsernameError(null);
-      setEmailError(null);
-      setEmailSent(false);
-    }
-  }, [editProfileVisible]);
-
-  const inputStyle = [
-    styles.input,
-    {
-      backgroundColor: colors.bgElevated,
-      borderColor: colors.border,
-      color: colors.textPrimary,
-    },
-  ];
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
@@ -471,7 +326,7 @@ export default function AccountScreen() {
           <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{bio}</Text>
         ) : null}
 
-        {/* Bottom row: counts left, edit profile pill right */}
+        {/* Bottom row: counts left, invite friends pill right */}
         <View style={styles.profileBottom}>
           <View style={styles.countsRow}>
             <TouchableOpacity style={styles.countItem} onPress={() => openFollowList('following')} activeOpacity={0.7}>
@@ -483,22 +338,13 @@ export default function AccountScreen() {
               <Text style={[styles.countNumber, { color: colors.textPrimary }]}>{friendCounts?.followers ?? '—'}</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.profileActions}>
-            <TouchableOpacity
-              onPress={handleInviteFriends}
-              activeOpacity={0.7}
-              style={[styles.editProfileBtn, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Invite Friends</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setEditProfileVisible(true)}
-              activeOpacity={0.7}
-              style={[styles.editProfileBtn, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Edit Profile</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={handleInviteFriends}
+            activeOpacity={0.7}
+            style={[styles.editProfileBtn, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Invite Friends</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -611,241 +457,6 @@ export default function AccountScreen() {
               </ScrollView>
             );
           })()}
-        </View>
-      </Modal>
-
-      {/* Edit Profile Modal */}
-      <Modal
-        visible={editProfileVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setEditProfileVisible(false)}
-      >
-        <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Edit Profile</Text>
-            <TouchableOpacity onPress={() => setEditProfileVisible(false)} activeOpacity={0.7}>
-              <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            contentContainerStyle={styles.modalScroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PROFILE</Text>
-
-              {/* Name */}
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Name</Text>
-                {editingName ? (
-                  <View style={styles.editRow}>
-                    <TextInput
-                      style={[inputStyle, styles.fieldInput]}
-                      value={nameValue}
-                      onChangeText={setNameValue}
-                      autoFocus
-                      returnKeyType="done"
-                      onSubmitEditing={handleSaveName}
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                      onPress={handleSaveName}
-                      disabled={savingName}
-                      activeOpacity={0.8}
-                    >
-                      {savingName ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.fieldValueRow}
-                    onPress={() => { setNameValue(profileName ?? ''); setEditingName(true); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.fieldValue, { color: profileName ? colors.textPrimary : colors.textMuted }]}>
-                      {profileName || 'Tap to add name'}
-                    </Text>
-                    <Text style={[styles.editHint, { color: colors.accent }]}>Edit</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-              {/* Username */}
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Username</Text>
-                {editingUsername ? (
-                  <View>
-                    <View style={styles.editRow}>
-                      <TextInput
-                        style={[inputStyle, styles.fieldInput]}
-                        value={usernameValue}
-                        onChangeText={v => { setUsernameValue(v); setUsernameError(null); }}
-                        autoFocus
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        returnKeyType="done"
-                        onSubmitEditing={handleSaveUsername}
-                        placeholder="letters, numbers, _"
-                        placeholderTextColor={colors.textMuted}
-                      />
-                      <TouchableOpacity
-                        style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                        onPress={handleSaveUsername}
-                        disabled={savingUsername}
-                        activeOpacity={0.8}
-                      >
-                        {savingUsername ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                      </TouchableOpacity>
-                    </View>
-                    {usernameError && <Text style={[styles.errorText, { color: colors.danger }]}>{usernameError}</Text>}
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.fieldValueRow}
-                    onPress={() => { setUsernameValue(username ?? ''); setUsernameError(null); setEditingUsername(true); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.fieldValue, { color: username ? colors.textPrimary : colors.textMuted }]}>
-                      {username ? `@${username}` : 'Tap to set username'}
-                    </Text>
-                    <Text style={[styles.editHint, { color: colors.accent }]}>{username ? 'Edit' : 'Add'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-              {/* Hometown */}
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Hometown</Text>
-                {editingHometown ? (
-                  <View style={styles.editRow}>
-                    <TextInput
-                      style={[inputStyle, styles.fieldInput]}
-                      value={hometownValue}
-                      onChangeText={setHometownValue}
-                      autoFocus
-                      returnKeyType="done"
-                      onSubmitEditing={handleSaveHometown}
-                      placeholder="e.g. Boulder, CO"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                      onPress={handleSaveHometown}
-                      disabled={savingHometown}
-                      activeOpacity={0.8}
-                    >
-                      {savingHometown ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.fieldValueRow}
-                    onPress={() => { setHometownValue(hometown ?? ''); setEditingHometown(true); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.fieldValue, { color: hometown ? colors.textPrimary : colors.textMuted }]}>
-                      {hometown || 'Tap to add hometown'}
-                    </Text>
-                    <Text style={[styles.editHint, { color: colors.accent }]}>{hometown ? 'Edit' : 'Add'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-              {/* Bio */}
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Bio</Text>
-                {editingBio ? (
-                  <View>
-                    <TextInput
-                      style={[inputStyle, styles.bioInput]}
-                      value={bioValue}
-                      onChangeText={setBioValue}
-                      autoFocus
-                      multiline
-                      numberOfLines={4}
-                      placeholder="A little about yourself"
-                      placeholderTextColor={colors.textMuted}
-                      maxLength={300}
-                      textAlignVertical="top"
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.accent, marginTop: SPACING.sm }]}
-                      onPress={handleSaveBio}
-                      disabled={savingBio}
-                      activeOpacity={0.8}
-                    >
-                      {savingBio ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.fieldValueRow}
-                    onPress={() => { setBioValue(bio ?? ''); setEditingBio(true); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.fieldValue, { color: bio ? colors.textPrimary : colors.textMuted }]}>
-                      {bio || 'Tap to add a bio'}
-                    </Text>
-                    <Text style={[styles.editHint, { color: colors.accent }]}>{bio ? 'Edit' : 'Add'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-              {/* Email */}
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
-                {editingEmail ? (
-                  <View>
-                    <View style={styles.editRow}>
-                      <TextInput
-                        style={[inputStyle, styles.fieldInput]}
-                        value={emailValue}
-                        onChangeText={v => { setEmailValue(v); setEmailError(null); }}
-                        autoFocus
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                        returnKeyType="done"
-                        onSubmitEditing={handleSaveEmail}
-                        placeholderTextColor={colors.textMuted}
-                      />
-                      <TouchableOpacity
-                        style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                        onPress={handleSaveEmail}
-                        disabled={savingEmail}
-                        activeOpacity={0.8}
-                      >
-                        {savingEmail ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                      </TouchableOpacity>
-                    </View>
-                    {emailError && <Text style={[styles.errorText, { color: colors.danger }]}>{emailError}</Text>}
-                    <Text style={[styles.hint, { color: colors.textMuted }]}>A confirmation link will be sent to the new address.</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.fieldValueRow}
-                    onPress={() => { setEmailValue(user?.email ?? ''); setEmailError(null); setEmailSent(false); setEditingEmail(true); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>{user?.email}</Text>
-                    <Text style={[styles.editHint, { color: colors.accent }]}>Edit</Text>
-                  </TouchableOpacity>
-                )}
-                {emailSent && !editingEmail && (
-                  <Text style={[styles.hint, { color: colors.accentGreen }]}>Confirmation sent — check your inbox.</Text>
-                )}
-              </View>
-            </View>
-          </ScrollView>
         </View>
       </Modal>
 
@@ -1539,10 +1150,6 @@ const styles = StyleSheet.create({
   editProfileText: {
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.family.semibold,
-  },
-  profileActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
   },
   // Settings modal
   modalContainer: { flex: 1 },
