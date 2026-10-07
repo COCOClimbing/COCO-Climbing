@@ -253,17 +253,28 @@ export default function LocationPicker({ value, onChange }: Props) {
             ) : (
               <Ionicons name="search" size={16} color={colors.textMuted} />
             )}
-            <TextInput
-              ref={inputRef}
-              style={[styles.searchInput, { color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
-              placeholder="Search gym, crag, or address..."
-              placeholderTextColor={colors.textMuted}
-              value={searchText}
-              onChangeText={setSearchText}
-              returnKeyType="done"
-              onSubmitEditing={() => handleConfirm(searchText)}
-              autoCorrect={false}
-            />
+            <View style={styles.searchInputWrap}>
+              {/* Our own placeholder: iOS drew the native one a few points below the
+                  centred text and cursor with this font */}
+              {searchText.length === 0 && (
+                <Text
+                  style={[styles.searchPlaceholder, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}
+                  numberOfLines={1}
+                  pointerEvents="none"
+                >
+                  Search gym, crag, or address...
+                </Text>
+              )}
+              <TextInput
+                ref={inputRef}
+                style={[styles.searchInput, { color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
+                value={searchText}
+                onChangeText={setSearchText}
+                returnKeyType="done"
+                onSubmitEditing={() => handleConfirm(searchText)}
+                autoCorrect={false}
+              />
+            </View>
             {searchText.length > 0 && (
               <GHTouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="close-circle" size={16} color={colors.textMuted} />
@@ -415,10 +426,15 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    // Fixed-feel height with the input filling it (below), same as the friend search, so iOS
+    // centres the text; padding around the input left the text sitting a few points low.
+    // minHeight lets it grow with larger text sizes.
+    minHeight: 50,
     gap: SPACING.sm,
   },
-  searchInput: { flex: 1, fontSize: FONTS.sizes.md, paddingVertical: SPACING.sm },
+  searchInputWrap: { flex: 1, alignSelf: 'stretch', justifyContent: 'center' },
+  searchInput: { flex: 1, fontSize: FONTS.sizes.md, paddingVertical: 0 },
+  searchPlaceholder: { position: 'absolute', left: 0, right: 0, fontSize: FONTS.sizes.md },
   gpsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
