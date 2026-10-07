@@ -226,7 +226,8 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
+    // minHeight (not height) so the row can grow when the phone's text size is set larger
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
@@ -264,7 +265,8 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
+    // minHeight (not height) so the row can grow when the phone's text size is set larger
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 8,
     marginHorizontal: SPACING.lg,
@@ -276,7 +278,9 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.regular,
     paddingVertical: 0,
-    height: 20,
+    // Fill the row instead of a fixed 20pt height, which clipped the text and pushed it
+    // off-centre with larger text sizes; iOS centres single-line text vertically
+    alignSelf: 'stretch',
   },
   clearBtn: {
     fontSize: FONTS.sizes.lg,
