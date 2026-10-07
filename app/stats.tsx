@@ -321,11 +321,12 @@ export default function StatsScreen() {
       if (!climbsBySession[key]) climbsBySession[key] = { date, climbs: [] };
       climbsBySession[key].climbs.push(c);
     });
-    const chartPoints = Object.values(climbsBySession)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(({ date, climbs: sc }) => {
+    // One point per session; several sessions can share a date, so key by session
+    const chartPoints = Object.entries(climbsBySession)
+      .sort(([, a], [, b]) => a.date.localeCompare(b.date))
+      .map(([key, { date, climbs: sc }]) => {
         const avg = sc.reduce((sum, c) => sum + gradeNum(c), 0) / sc.length;
-        return { date, val: avg };
+        return { key, date, val: avg };
       });
     const chartVals = chartPoints.map(p => p.val);
     const minVal = Math.min(...chartVals);
@@ -559,7 +560,7 @@ export default function StatsScreen() {
                 strokeLinejoin="round" strokeLinecap="round"
               />
               {chartPoints.map((p, i) => (
-                <React.Fragment key={p.date}>
+                <React.Fragment key={p.key}>
                   <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />
                   {(i === 0 || i === chartPoints.length - 1) && (
                     <SvgText x={cx(i)} y={CHART_H - 2} fontSize={8} fill={colors.textMuted} textAnchor="middle" fontFamily={FONTS.family.regular}>
