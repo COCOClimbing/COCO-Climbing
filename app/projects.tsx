@@ -107,7 +107,8 @@ export default function ProjectsScreen() {
   async function markAsUnsent(projectId: string) {
     const all = await getAllClimbs();
     const sentClimbs = all.filter(c => c.projectId === projectId && (c.outcome === 'send' || c.outcome === 'flash'));
-    await Promise.all(sentClimbs.map(c => saveClimb({ ...c, outcome: 'attempt' })));
+    // One at a time: saveClimb rewrites the whole list, so parallel saves clobber each other
+    for (const c of sentClimbs) await saveClimb({ ...c, outcome: 'attempt' });
     await load();
   }
 

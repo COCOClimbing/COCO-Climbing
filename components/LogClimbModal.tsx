@@ -286,10 +286,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         }
         const all = await getAllClimbs();
         const gs = (grade.startsWith('V') || grade === 'VB' ? 'v-scale' : 'yds') as any;
-        await Promise.all(
-          all.filter(c => c.projectId === existingClimb.projectId)
-            .map(c => saveClimb({ ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles }))
-        );
+        // One at a time: saveClimb rewrites the whole list, so parallel saves clobber each other
+        for (const c of all.filter(c => c.projectId === existingClimb.projectId)) {
+          await saveClimb({ ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles });
+        }
         onSaved();
         onClose();
         resetForm();

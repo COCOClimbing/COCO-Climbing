@@ -73,10 +73,10 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
         // Update all linked climbs to match new grade/type
         const gs = inferGradeSystem(grade) as any;
         const all = await getAllClimbs();
-        await Promise.all(
-          all.filter(c => c.projectId === existingProject.id)
-            .map(c => saveClimb({ ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles, projectName: name.trim() }))
-        );
+        // One at a time: saveClimb rewrites the whole list, so parallel saves clobber each other
+        for (const c of all.filter(c => c.projectId === existingProject.id)) {
+          await saveClimb({ ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles, projectName: name.trim() });
+        }
       } else {
         const projectId = generateId();
         await saveNamedProject({
