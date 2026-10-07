@@ -1942,7 +1942,7 @@ export default function FriendsScreen() {
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
-            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact onPress={() => setDetailClimb(c)} />)
+            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact showRoutineLink onPress={() => setDetailClimb(c)} />)
           }
         </ScrollView>
         {photoViewerModal}

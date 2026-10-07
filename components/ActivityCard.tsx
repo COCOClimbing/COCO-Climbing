@@ -386,7 +386,7 @@ export default function ActivityCard({
           ) : !expandedClimbs || expandedClimbs.length === 0 ? (
             <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
           ) : (
-            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact onPress={() => setDetailClimb(c)} />)
+            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact showRoutineLink onPress={() => setDetailClimb(c)} />)
           )}
         </View>
       )}

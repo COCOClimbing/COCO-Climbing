@@ -10,13 +10,17 @@ interface Props {
   onPress?: () => void;
   compact?: boolean;
   onIncrementAttempts?: () => void;
+  // Show "View routine ›" under a lift/hangboard routine preview. Only pass this
+  // where onPress opens the climb detail sheet (not the edit form).
+  showRoutineLink?: boolean;
 }
 
-export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts }: Props) {
+export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts, showRoutineLink }: Props) {
   const { colors } = useTheme();
   const typeInfo = CLIMB_TYPES.find(t => t.id === climb.type);
   const dateStr = format(parseISO(climb.date), compact ? 'MMM d' : 'EEE, MMM d · h:mm a');
   const isTraining = climb.type === 'hangboard' || climb.type === 'lift';
+  const routine = isTraining ? climb.routine?.trim() : undefined;
 
   return (
     <TouchableOpacity
@@ -60,6 +64,14 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
           ))}
         </View>
       )}
+      {routine ? (
+        <View style={styles.routineBlock}>
+          <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={2}>{routine}</Text>
+          {showRoutineLink && onPress ? (
+            <Text style={[styles.routineLink, { color: colors.accent }]}>View routine ›</Text>
+          ) : null}
+        </View>
+      ) : null}
       {climb.notes ? (
         <Text style={[styles.notes, { color: colors.textSecondary }]} numberOfLines={compact ? 2 : undefined}>
           {climb.notes}
@@ -107,6 +119,9 @@ const styles = StyleSheet.create({
   date: { fontSize: FONTS.sizes.xs },
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   notes: { fontSize: FONTS.sizes.sm, marginBottom: SPACING.xs, lineHeight: 18 },
+  routineBlock: { marginBottom: SPACING.xs },
+  routinePreview: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 18 },
+  routineLink: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold, marginTop: 4 },
   attempts: { fontSize: FONTS.sizes.xs },
   incrementBtn: {
     width: 22,

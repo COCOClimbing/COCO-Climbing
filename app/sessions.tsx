@@ -1157,6 +1157,7 @@ export default function SessionsScreen() {
                 <ClimbCard
                   climb={c}
                   compact
+                  showRoutineLink
                   onPress={() => setDetailClimb(c)}
                 />
               </SwipeToDelete>
