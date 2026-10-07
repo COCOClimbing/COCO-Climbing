@@ -5,6 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
+import ClimbDetailModal from './ClimbDetailModal';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import Avatar from './Avatar';
@@ -75,6 +76,7 @@ function mapToClimb(c: any): Climb {
     type: c.type, outcome: c.outcome, styles: c.styles ?? [],
     environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
     routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes,
+    routine: c.routine ?? undefined,
     attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
     mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
     mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),
@@ -99,6 +101,8 @@ export default function ActivityCard({
   const isOutdoor = entry.environment === 'outdoor';
 
   const [climbsExpanded, setClimbsExpanded] = useState(false);
+  // Climb/lift/hang opened from the expanded list (read-only)
+  const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
   const [expandedClimbs, setExpandedClimbs] = useState<Climb[] | null>(null);
   const [loadingClimbs, setLoadingClimbs] = useState(false);
 
@@ -382,7 +386,7 @@ export default function ActivityCard({
           ) : !expandedClimbs || expandedClimbs.length === 0 ? (
             <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
           ) : (
-            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact />)
+            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact onPress={() => setDetailClimb(c)} />)
           )}
         </View>
       )}
@@ -476,6 +480,7 @@ export default function ActivityCard({
           onClose={() => setViewerUris(null)}
         />
       )}
+      <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />
     </View>
   );
 }

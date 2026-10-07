@@ -31,6 +31,7 @@ import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGr
 import { isDeadMediaUrl } from '../utils/cloudSync';
 import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
+import ClimbDetailModal from '../components/ClimbDetailModal';
 import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
 import SessionCard from '../components/SessionCard';
@@ -893,6 +894,8 @@ export default function FriendsScreen() {
   const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
+  // Climb/lift/hang opened from a session's detail view (read-only)
+  const [detailClimb, setDetailClimb] = useState<any | null>(null);
   const viewerScrollRef = useRef<ScrollView>(null);
 
   // Share state
@@ -1939,10 +1942,11 @@ export default function FriendsScreen() {
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
-            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact />)
+            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact onPress={() => setDetailClimb(c)} />)
           }
         </ScrollView>
         {photoViewerModal}
+        <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />
       </View>
     );
   }

@@ -12,7 +12,8 @@ interface Props {
   visible: boolean;
   climb: Climb | null;
   onClose: () => void;
-  onEdit: () => void;
+  // Omit for climbs the viewer can't edit (e.g. a friend's, opened from the feed)
+  onEdit?: () => void;
 }
 
 export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Props) {
@@ -43,7 +44,7 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
           </TouchableOpacity>
           <View style={ss.headerCenter}>
             <Text style={[ss.headerGrade, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>
-              {climb.grade}
+              {isTraining ? (typeInfo?.label ?? climb.type) : climb.grade}
             </Text>
             {(climb.routeName || climb.projectName) ? (
               <Text style={[ss.headerName, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]} numberOfLines={1}>
@@ -51,13 +52,18 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
               </Text>
             ) : null}
           </View>
-          <TouchableOpacity
-            onPress={onEdit}
-            style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit</Text>
-          </TouchableOpacity>
+          {onEdit ? (
+            <TouchableOpacity
+              onPress={onEdit}
+              style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit</Text>
+            </TouchableOpacity>
+          ) : (
+            // Keeps the title centred when there's no Edit button
+            <View style={{ width: 52 }} />
+          )}
         </View>
 
         <ScrollView contentContainerStyle={ss.content} showsVerticalScrollIndicator={false}>
