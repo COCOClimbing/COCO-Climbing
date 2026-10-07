@@ -29,7 +29,7 @@ import { isCustomGrade } from '../utils/gradeUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
-import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
+import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL, defaultSessionTitle } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
 import ClimbDetailModal from '../components/ClimbDetailModal';
 import SwipeableComment from '../components/SwipeableComment';
@@ -1051,7 +1051,7 @@ export default function FriendsScreen() {
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt || s.lastClimbAt || sessionClimbs[0]?.date, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
@@ -1133,7 +1133,7 @@ export default function FriendsScreen() {
         summaries.push({
           friend: profile,
           sessionDate: normDate(s.date),
-          sessionTime: s.started_at ?? undefined,
+          sessionTime: s.started_at ?? climbs[0]?.date ?? undefined,
           climbCount: climbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0),
           sends,
           flashes,
@@ -1702,14 +1702,6 @@ export default function FriendsScreen() {
     return colors.textMuted;
   }
 
-  function sessionTimeOfDay(isoTime?: string): string {
-    if (!isoTime) return 'Climbing Session';
-    const hour = new Date(isoTime).getHours();
-    if (hour < 12) return 'Morning Climb';
-    if (hour < 17) return 'Afternoon Climb';
-    return 'Evening Climb';
-  }
-
   function renderAddFriendButton(item: SearchResult) {
     if (sendingRequest === item.id) return <ActivityIndicator color={colors.accent} size="small" />;
     if (item.friendshipStatus === 'accepted') return (
@@ -1885,7 +1877,7 @@ export default function FriendsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
               <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
-                {format(date, 'EEE, MMM d, yyyy')} · {sessionTimeOfDay(entry.sessionTime)}
+                {format(date, 'EEE, MMM d, yyyy')} · {defaultSessionTitle(entry.sessionTime, entry.training)}
               </Text>
               {entry.location?.trim() ? (
                 <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 2 }]}>
@@ -2039,7 +2031,7 @@ export default function FriendsScreen() {
                 {/* ── Activity title row ── */}
                 <View style={styles.cardTitleRow}>
                   <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                    {entry.title?.trim() || sessionTimeOfDay(entry.sessionTime)}
+                    {entry.title?.trim() || defaultSessionTitle(entry.sessionTime, entry.training)}
                   </Text>
                 </View>
 

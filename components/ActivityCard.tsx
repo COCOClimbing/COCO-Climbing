@@ -5,6 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
+import { defaultSessionTitle } from '../utils/sessionHelpers';
 import ClimbDetailModal from './ClimbDetailModal';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
@@ -60,14 +61,6 @@ function ProfileAvatar({ name, avatarUrl, size, colors }: { name: string; avatar
       style={{ borderWidth: 2, borderColor: colors.accent }}
     />
   );
-}
-
-function sessionTimeOfDay(isoTime?: string): string {
-  if (!isoTime) return 'Climbing Session';
-  const hour = new Date(isoTime).getHours();
-  if (hour < 12) return 'Morning Climb';
-  if (hour < 17) return 'Afternoon Climb';
-  return 'Evening Climb';
 }
 
 function mapToClimb(c: any): Climb {
@@ -285,7 +278,7 @@ export default function ActivityCard({
       {/* Title */}
       <View style={styles.cardTitleRow}>
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-          {entry.title?.trim() || sessionTimeOfDay(entry.sessionTime)}
+          {entry.title?.trim() || defaultSessionTitle(entry.sessionTime, entry.training)}
         </Text>
       </View>
 

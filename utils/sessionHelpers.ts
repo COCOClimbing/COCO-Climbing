@@ -75,15 +75,20 @@ export function mergeClimbs(climbs: Climb[]): Climb[] {
   });
 }
 
-export function sessionTimeOfDay(day: DaySession): string {
-  const isoTime = day.startedAt || day.lastClimbAt || day.climbs[0]?.date;
-  if (!isoTime) return 'Climbing Session';
-  const d = new Date(isoTime);
-  if (isNaN(d.getTime())) return 'Climbing Session';
+// Default title for an untitled session, e.g. "Afternoon Climb", or "Morning Lift" /
+// "Evening Hang" when the session is only lifting/hangboarding.
+export function defaultSessionTitle(isoTime: string | undefined, training?: TrainingKind | null): string {
+  const activity = training === 'lift' ? 'Lift' : training === 'hangboard' ? 'Hang' : training === 'both' ? 'Training' : 'Climb';
+  const d = isoTime ? new Date(isoTime) : null;
+  if (!d || isNaN(d.getTime())) return activity === 'Climb' ? 'Climbing Session' : `${activity} Session`;
   const hour = d.getHours();
-  if (hour < 12) return 'Morning Climb';
-  if (hour < 17) return 'Afternoon Climb';
-  return 'Evening Climb';
+  if (hour < 12) return `Morning ${activity}`;
+  if (hour < 17) return `Afternoon ${activity}`;
+  return `Evening ${activity}`;
+}
+
+export function sessionTimeOfDay(day: DaySession): string {
+  return defaultSessionTitle(day.startedAt || day.lastClimbAt || day.climbs[0]?.date, trainingKind(day.climbs));
 }
 
 export function formatSessionLabel(s: DaySession): { top: string; bottom: string } {
