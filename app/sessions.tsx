@@ -123,10 +123,13 @@ export default function SessionsScreen() {
     setEditingTitle(false);
   }, [selectedDay?.sessionId]);
 
-  // Location can be set from the log-climb sheet, so keep it in sync with the stored session
+  // Location and friends can be set from the log-climb sheet, so keep them in sync with the stored session
   useEffect(() => {
     setSessionLocation(selectedDay?.location ?? '');
   }, [selectedDay?.sessionId, selectedDay?.location]);
+  useEffect(() => {
+    setSessionFriends(selectedDay?.friends ?? []);
+  }, [selectedDay?.sessionId, selectedDay?.friends]);
 
   // Scroll photo viewer to the tapped photo once the modal has laid out
   useEffect(() => {
@@ -244,6 +247,9 @@ export default function SessionsScreen() {
   useEffect(() => {
     setActiveLocation(activeSession?.location ?? '');
   }, [activeSession?.sessionId, activeSession?.location]);
+  useEffect(() => {
+    setActiveFriends(activeSession?.friends ?? []);
+  }, [activeSession?.sessionId, activeSession?.friends]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 

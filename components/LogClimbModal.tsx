@@ -65,9 +65,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Friends state
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
 
-  // Location lives on the session: only ask for it while the session doesn't have one.
-  // Once it's set, it's edited from the session itself.
+  // Location and friends live on the session: only ask for them while the session doesn't
+  // have any. Once they're set, they're edited from the session itself.
   const [askLocation, setAskLocation]       = useState(true);
+  const [askFriends, setAskFriends]         = useState(true);
 
   // Project state
   const [selectedProjectId, setSelectedProjectId]   = useState<string | undefined>();
@@ -91,10 +92,12 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
           );
           setFriends(normalized);
           setAskLocation(!existingClimb && !session?.location);
+          setAskFriends(!existingClimb && normalized.length === 0);
         });
       } else {
         setFriends([]);
         setAskLocation(!existingClimb);
+        setAskFriends(!existingClimb);
       }
     }
   }, [visible, defaultSessionId, existingClimb]);
@@ -385,15 +388,16 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
       await saveClimb(climb);
 
-      // Persist friends + a newly picked location to the session
+      // Persist newly picked friends / location to the session
+      const setFriendsOnSession = askFriends && friends.length > 0;
       const setLocationOnSession = askLocation && !!location;
-      if (friends.length > 0 || setLocationOnSession) {
+      if (setFriendsOnSession || setLocationOnSession) {
         const sessions = await getAllSessions();
         const session = sessions.find(s => s.id === sessionId);
         if (session) {
           await saveSession({
             ...session,
-            ...(friends.length > 0 ? { friends } : {}),
+            ...(setFriendsOnSession ? { friends } : {}),
             ...(setLocationOnSession ? { location } : {}),
           });
         }
@@ -657,8 +661,12 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             </View>
 
             {/* Tag friends */}
-            <Text style={[styles.label, { color: colors.textMuted, marginTop: SPACING.sm }]}>WITH (optional)</Text>
-            <FriendPicker selected={friends} onChange={setFriends} />
+            {askFriends && (
+              <>
+                <Text style={[styles.label, { color: colors.textMuted, marginTop: SPACING.sm }]}>WITH (optional)</Text>
+                <FriendPicker selected={friends} onChange={setFriends} />
+              </>
+            )}
 
             {/* Media */}
             <Divider />
