@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh, getDeletedClimbIds, getDeletedSessionIds, getPendingDeletes, removePendingDelete } from './storage';
-import { uploadMedia, listMediaKeys } from './mediaUpload';
+import { uploadMedia, listMediaKeys, deleteMedia } from './mediaUpload';
 
 const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
 const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
@@ -735,6 +735,17 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
   const avatarUrl: string | undefined = profileRes.data?.avatar_url;
   if (avatarUrl?.startsWith(prefix)) validKeys.add(avatarUrl.slice(prefix.length));
   validKeys.add(`${userId}/avatar.jpg`);
+
+  // Also keep anything referenced on this device. A climb/session whose cloud
+  // upsert failed this sync (e.g. a schema mismatch) still points at its
+  // uploaded photos locally; without this they'd look orphaned and be
+  // permanently deleted before the next sync could save the reference.
+  const [localClimbs, localSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+  [...localClimbs, ...localSessions].forEach(item => {
+    [...(item.mediaUris ?? []), ...(item.mediaUri ? [item.mediaUri] : [])].forEach(url => {
+      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
+    });
+  });
 
   const orphaned = allKeys.filter(k => !validKeys.has(k));
   if (orphaned.length > 0) {
