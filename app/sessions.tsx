@@ -841,28 +841,6 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Session note: an overall caption for the session, shown under the title in the feed */}
-            {activeEditingNotes ? (
-              <TextInput
-                key={activeSession.sessionId}
-                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={activeNotes}
-                onChangeText={t => { activeNotesInputValue.current = t; }}
-                onEndEditing={e => { const t = e.nativeEvent.text.trim(); setActiveNotes(t); setActiveEditingNotes(false); handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems); }}
-                placeholder="How'd the session go?"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                submitBehavior="blurAndSubmit"
-                returnKeyType="done"
-                autoFocus
-              />
-            ) : (
-              <TouchableOpacity onPress={() => { activeNotesInputValue.current = activeNotes; setActiveEditingNotes(true); }} activeOpacity={0.7}>
-                <Text style={[styles.sessionNote, { color: activeNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
-                  {activeNotes.trim() || "How'd the session go?"}
-                </Text>
-              </TouchableOpacity>
-            )}
 
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
               {training ? (
@@ -924,6 +902,33 @@ export default function SessionsScreen() {
               </SwipeToDelete>
             ))
           )}
+
+          {/* Notes */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+            {/* Overall note for the session; also shown under the title in the feed */}
+            {activeEditingNotes ? (
+              <TextInput
+                key={activeSession.sessionId}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={activeNotes}
+                onChangeText={t => { activeNotesInputValue.current = t; }}
+                onEndEditing={e => { const t = e.nativeEvent.text.trim(); setActiveNotes(t); setActiveEditingNotes(false); handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems); }}
+                placeholder="How'd the session go?"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                submitBehavior="blurAndSubmit"
+                returnKeyType="done"
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity onPress={() => { activeNotesInputValue.current = activeNotes; setActiveEditingNotes(true); }} activeOpacity={0.7}>
+                <Text style={[styles.sessionNote, { color: activeNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
+                  {activeNotes.trim() || "How'd the session go?"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Location */}
           <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -1091,28 +1096,6 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Session note: an overall caption for the session, shown under the title in the feed */}
-            {editingNotes ? (
-              <TextInput
-                key={day.sessionId}
-                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={sessionNotes}
-                onChangeText={t => { notesInputValue.current = t; }}
-                onEndEditing={e => handleSaveNotes(e.nativeEvent.text.trim())}
-                placeholder="How'd the session go?"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                submitBehavior="blurAndSubmit"
-                returnKeyType="done"
-                autoFocus
-              />
-            ) : (
-              <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
-                <Text style={[styles.sessionNote, { color: sessionNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
-                  {sessionNotes.trim() || "How'd the session go?"}
-                </Text>
-              </TouchableOpacity>
-            )}
 
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
               {training ? (
@@ -1169,6 +1152,33 @@ export default function SessionsScreen() {
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
           </TouchableOpacity>
+
+          {/* Notes */}
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+            {/* Overall note for the session; also shown under the title in the feed */}
+            {editingNotes ? (
+              <TextInput
+                key={day.sessionId}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={sessionNotes}
+                onChangeText={t => { notesInputValue.current = t; }}
+                onEndEditing={e => handleSaveNotes(e.nativeEvent.text.trim())}
+                placeholder="How'd the session go?"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                submitBehavior="blurAndSubmit"
+                returnKeyType="done"
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
+                <Text style={[styles.sessionNote, { color: sessionNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
+                  {sessionNotes.trim() || "How'd the session go?"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Location */}
           <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
