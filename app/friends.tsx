@@ -2043,17 +2043,17 @@ export default function FriendsScreen() {
                   </Text>
                 </View>
 
+                {/* ── Session notes ── */}
+                {entry.notes?.trim() ? (
+                  <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
+                ) : null}
+
                 {/* ── Location ── */}
                 {entry.location?.trim() ? (
                   <View style={styles.cardLocationRow}>
                     <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
                     <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
                   </View>
-                ) : null}
-
-                {/* ── Session notes ── */}
-                {entry.notes?.trim() ? (
-                  <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
                 ) : null}
 
                 {/* ── Partners row ── */}
@@ -2649,9 +2649,9 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.regular,
   },
   cardNotes: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.regular,
-    lineHeight: 20,
+    lineHeight: 22,
     paddingBottom: SPACING.sm,
   },
   cardStatsRow: {

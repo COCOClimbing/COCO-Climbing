@@ -841,6 +841,29 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Session note: an overall caption for the session, shown under the title in the feed */}
+            {activeEditingNotes ? (
+              <TextInput
+                key={activeSession.sessionId}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={activeNotes}
+                onChangeText={t => { activeNotesInputValue.current = t; }}
+                onEndEditing={e => { const t = e.nativeEvent.text.trim(); setActiveNotes(t); setActiveEditingNotes(false); handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems); }}
+                placeholder="How'd the session go?"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                submitBehavior="blurAndSubmit"
+                returnKeyType="done"
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity onPress={() => { activeNotesInputValue.current = activeNotes; setActiveEditingNotes(true); }} activeOpacity={0.7}>
+                <Text style={[styles.sessionNote, { color: activeNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
+                  {activeNotes.trim() || "How'd the session go?"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
               {training ? (
                 <View style={styles.todayStat}>
@@ -901,53 +924,6 @@ export default function SessionsScreen() {
               </SwipeToDelete>
             ))
           )}
-
-          {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-            <View style={styles.metaLabelRow}>
-              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
-              {activeEditingNotes ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    const t = activeNotesInputValue.current;
-                    setActiveNotes(t);
-                    setActiveEditingNotes(false);
-                    handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={() => { activeNotesInputValue.current = activeNotes; setActiveEditingNotes(true); }} activeOpacity={0.7}>
-                  <Text style={[styles.metaAction, { color: colors.accent }]}>
-                    {activeNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {activeEditingNotes ? (
-              <TextInput
-                key={activeSession.sessionId}
-                style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={activeNotes}
-                onChangeText={(t) => { activeNotesInputValue.current = t; }}
-                onEndEditing={(e) => {
-                  const t = e.nativeEvent.text;
-                  setActiveNotes(t);
-                  setActiveEditingNotes(false);
-                  handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems);
-                }}
-                placeholder="Add session notes…"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                textAlignVertical="top"
-                autoFocus
-              />
-            ) : activeNotes.trim() ? (
-              <Text style={[styles.notesText, { color: colors.textSecondary }]}>{activeNotes}</Text>
-            ) : null}
-          </View>
 
           {/* Location */}
           <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -1115,6 +1091,29 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Session note: an overall caption for the session, shown under the title in the feed */}
+            {editingNotes ? (
+              <TextInput
+                key={day.sessionId}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                defaultValue={sessionNotes}
+                onChangeText={t => { notesInputValue.current = t; }}
+                onEndEditing={e => handleSaveNotes(e.nativeEvent.text.trim())}
+                placeholder="How'd the session go?"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                submitBehavior="blurAndSubmit"
+                returnKeyType="done"
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
+                <Text style={[styles.sessionNote, { color: sessionNotes.trim() ? colors.textSecondary : colors.textMuted }]}>
+                  {sessionNotes.trim() || "How'd the session go?"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
               {training ? (
                 <View style={styles.todayStat}>
@@ -1170,40 +1169,6 @@ export default function SessionsScreen() {
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
           </TouchableOpacity>
-
-          {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-            <View style={styles.metaLabelRow}>
-              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
-              {editingNotes ? (
-                <TouchableOpacity onPress={() => handleSaveNotes(notesInputValue.current)} activeOpacity={0.7}>
-                  <Text style={[styles.metaAction, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={() => { notesInputValue.current = sessionNotes; setEditingNotes(true); }} activeOpacity={0.7}>
-                  <Text style={[styles.metaAction, { color: colors.accent }]}>
-                    {sessionNotes.trim() ? 'Edit Activity Note' : 'Add Activity Note'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {editingNotes ? (
-              <TextInput
-                key={day.sessionId}
-                style={[styles.notesInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                defaultValue={sessionNotes}
-                onChangeText={(t) => { notesInputValue.current = t; }}
-                onEndEditing={(e) => handleSaveNotes(e.nativeEvent.text)}
-                placeholder="Add session notes…"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                textAlignVertical="top"
-                autoFocus
-              />
-            ) : sessionNotes.trim() ? (
-              <Text style={[styles.notesText, { color: colors.textSecondary }]}>{sessionNotes}</Text>
-            ) : null}
-          </View>
 
           {/* Location */}
           <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
@@ -1496,6 +1461,8 @@ const styles = StyleSheet.create({
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xs },
   detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28 },
   detailTitleInput: { borderBottomWidth: 1, paddingVertical: 2, flex: 1 },
+  sessionNote: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22 },
+  sessionNoteInput: { borderBottomWidth: 1, paddingVertical: 2 },
   detailStatsRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1 },
   todayStat: { alignItems: 'center' },
   todayStatVal: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, textAlign: 'center' },
@@ -1535,33 +1502,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     gap: SPACING.sm,
   },
-  metaLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
   metaLabel: {
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.family.semibold,
     letterSpacing: 1.2,
-  },
-  metaAction: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.medium,
-  },
-  notesText: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.regular,
-    lineHeight: 20,
-  },
-  notesInput: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.regular,
-    minHeight: 64,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
   },
 });

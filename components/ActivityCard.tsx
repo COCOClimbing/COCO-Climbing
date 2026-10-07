@@ -289,17 +289,17 @@ export default function ActivityCard({
         </Text>
       </View>
 
+      {/* Notes */}
+      {entry.notes?.trim() ? (
+        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
+      ) : null}
+
       {/* Location */}
       {entry.location?.trim() ? (
         <View style={styles.cardLocationRow}>
           <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
           <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
         </View>
-      ) : null}
-
-      {/* Notes */}
-      {entry.notes?.trim() ? (
-        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
       ) : null}
 
       {/* Partners */}
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.2 },
   cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
   cardLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
-  cardNotes: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 20, paddingBottom: SPACING.sm },
+  cardNotes: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22, paddingBottom: SPACING.sm },
   partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
   partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },

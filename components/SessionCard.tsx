@@ -222,17 +222,17 @@ export default function SessionCard({
         </Text>
       </View>
 
+      {/* Notes */}
+      {!condensed && hasNotes && (
+        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{day.notes}</Text>
+      )}
+
       {/* Location */}
       {!condensed && hasLocation && (
         <View style={styles.cardLocationRow}>
           <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
           <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{day.location}</Text>
         </View>
-      )}
-
-      {/* Notes */}
-      {!condensed && hasNotes && (
-        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{day.notes}</Text>
       )}
 
       {/* Climbing with */}
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.2 },
   cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
   cardLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
-  cardNotes: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 20, paddingBottom: SPACING.sm },
+  cardNotes: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22, paddingBottom: SPACING.sm },
   partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
   partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
