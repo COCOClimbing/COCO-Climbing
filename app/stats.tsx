@@ -563,7 +563,8 @@ export default function StatsScreen() {
                 <React.Fragment key={p.key}>
                   <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />
                   {(i === 0 || i === chartPoints.length - 1) && (
-                    <SvgText x={cx(i)} y={CHART_H - 2} fontSize={8} fill={colors.textMuted} textAnchor="middle" fontFamily={FONTS.family.regular}>
+                    // Right-align the last date so it doesn't run off the chart's narrow right edge
+                    <SvgText x={cx(i)} y={CHART_H - 2} fontSize={8} fill={colors.textMuted} textAnchor={i === chartPoints.length - 1 ? 'end' : 'middle'} fontFamily={FONTS.family.regular}>
                       {p.date.slice(5)}
                     </SvgText>
                   )}
