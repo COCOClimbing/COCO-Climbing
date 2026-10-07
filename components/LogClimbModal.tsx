@@ -739,5 +739,6 @@ const styles = StyleSheet.create({
   pill: { borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.md },
-  inputMulti: { height: 80, textAlignVertical: 'top' },
+  // Starts at 80 and grows as you type more, rather than scrolling inside a fixed box
+  inputMulti: { minHeight: 80, textAlignVertical: 'top' },
 });

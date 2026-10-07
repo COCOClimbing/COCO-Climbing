@@ -806,28 +806,30 @@ export default function SessionsScreen() {
             </View>
 
             {activeEditingTitle ? (
-              <TextInput
-                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
-                defaultValue={activeTitle}
-                onChangeText={t => { activeTitleInputValue.current = t; }}
-                onEndEditing={e => {
-                  const t = e.nativeEvent.text.trim();
-                  setActiveTitle(t);
-                  setActiveEditingTitle(false);
-                  handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, activeLocation, activeMediaItems, t);
-                }}
-                onSubmitEditing={e => {
-                  const t = e.nativeEvent.text.trim();
-                  setActiveTitle(t);
-                  setActiveEditingTitle(false);
-                  handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, activeLocation, activeMediaItems, t);
-                }}
-                placeholder={sessionTimeOfDay(activeSession)}
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-                selectTextOnFocus
-                returnKeyType="done"
-              />
+              <View style={styles.detailTitleRow}>
+                <TextInput
+                  style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
+                  defaultValue={activeTitle}
+                  onChangeText={t => { activeTitleInputValue.current = t; }}
+                  onEndEditing={e => {
+                    const t = e.nativeEvent.text.trim();
+                    setActiveTitle(t);
+                    setActiveEditingTitle(false);
+                    handleSaveActiveSessionMeta(activeSession.sessionId, activeNotes, activeFriends, activeLocation, activeMediaItems, t);
+                  }}
+                  placeholder={sessionTimeOfDay(activeSession)}
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  // Multiline so a long title wraps exactly like the text it replaces;
+                  // Return still saves instead of adding a line break
+                  multiline
+                  submitBehavior="blurAndSubmit"
+                  scrollEnabled={false}
+                />
+                <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
+              </View>
             ) : (
               <TouchableOpacity
                 style={styles.detailTitleRow}
@@ -1071,18 +1073,25 @@ export default function SessionsScreen() {
             </View>
 
             {editingTitle ? (
-              <TextInput
-                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
-                defaultValue={sessionTitle}
-                onChangeText={t => { titleInputValue.current = t; }}
-                onEndEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
-                onSubmitEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
-                placeholder={sessionTimeOfDay(day)}
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-                selectTextOnFocus
-                returnKeyType="done"
-              />
+              <View style={styles.detailTitleRow}>
+                <TextInput
+                  style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
+                  defaultValue={sessionTitle}
+                  onChangeText={t => { titleInputValue.current = t; }}
+                  onEndEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
+                  placeholder={sessionTimeOfDay(day)}
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  // Multiline so a long title wraps exactly like the text it replaces;
+                  // Return still saves instead of adding a line break
+                  multiline
+                  submitBehavior="blurAndSubmit"
+                  scrollEnabled={false}
+                />
+                <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
+              </View>
             ) : (
               <TouchableOpacity
                 style={styles.detailTitleRow}
@@ -1470,9 +1479,13 @@ const styles = StyleSheet.create({
   detailDay: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.bold, letterSpacing: 1 },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xs },
   detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28 },
-  detailTitleInput: { paddingVertical: 2, flex: 1 },
-  sessionNote: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22 },
-  sessionNoteInput: { paddingVertical: 2 },
+  // Same box as the read-only title so tapping to edit doesn't shift the layout
+  detailTitleInput: { flex: 1, padding: 0, margin: 0 },
+  // No custom lineHeight: iOS text inputs place extra line height differently from Text,
+  // which made the note's text drop slightly when tapped into
+  sessionNote: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular },
+  // Same box as the read-only note (iOS gives multiline inputs default padding)
+  sessionNoteInput: { padding: 0, margin: 0 },
   detailStatsRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1 },
   todayStat: { alignItems: 'center' },
   todayStatVal: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, textAlign: 'center' },
