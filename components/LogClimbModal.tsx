@@ -65,6 +65,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Friends state
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
 
+  // Location lives on the session: only ask for it while the session doesn't have one.
+  // Once it's set, it's edited from the session itself.
+  const [askLocation, setAskLocation]       = useState(true);
+
   // Project state
   const [selectedProjectId, setSelectedProjectId]   = useState<string | undefined>();
   const [newProjectName, setNewProjectName]         = useState('');
@@ -76,7 +80,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       getAllNamedProjects().then(projects => {
         setExistingProjects(projects.map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type })));
       });
-      // Load friends from the session
+      // Load friends + location from the session
       if (defaultSessionId) {
         getAllSessions().then(sessions => {
           const session = sessions.find(s => s.id === defaultSessionId);
@@ -86,12 +90,14 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             typeof f === 'string' ? { id: f, name: f } : f
           );
           setFriends(normalized);
+          setAskLocation(!existingClimb && !session?.location);
         });
       } else {
         setFriends([]);
+        setAskLocation(!existingClimb);
       }
     }
-  }, [visible, defaultSessionId]);
+  }, [visible, defaultSessionId, existingClimb]);
 
   async function restoreLastGrade(type: ClimbTypeId) {
     if (type === 'boulder') {
@@ -360,7 +366,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         grade: isTraining ? '' : grade.trim(),
         gradeSystem: isTraining ? 'v-scale' : gradeSystem,
         routeName: routeName || undefined,
-        location: location || undefined,
+        // Location is stored on the session, not the climb. Editing an older climb
+        // that still carries its own location leaves it untouched.
+        location: existingClimb?.location,
         notes: notes || undefined,
         routine: isTraining && routine.trim() ? routine.trim() : undefined,
         attempts: parseInt(attempts) || 1,
@@ -377,11 +385,18 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
       await saveClimb(climb);
 
-      // Persist friends to the session
-      if (friends.length > 0) {
+      // Persist friends + a newly picked location to the session
+      const setLocationOnSession = askLocation && !!location;
+      if (friends.length > 0 || setLocationOnSession) {
         const sessions = await getAllSessions();
         const session = sessions.find(s => s.id === sessionId);
-        if (session) await saveSession({ ...session, friends });
+        if (session) {
+          await saveSession({
+            ...session,
+            ...(friends.length > 0 ? { friends } : {}),
+            ...(setLocationOnSession ? { location } : {}),
+          });
+        }
       }
 
       onSaved();
@@ -623,7 +638,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
             {/* Details */}
             <Text style={[styles.label, { color: colors.textMuted }]}>DETAILS (optional)</Text>
-            <LocationPicker value={location} onChange={setLocation} />
+            {askLocation && <LocationPicker value={location} onChange={setLocation} />}
             <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
               <TextInput
                 style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}

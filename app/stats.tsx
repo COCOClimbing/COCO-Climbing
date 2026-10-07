@@ -122,6 +122,7 @@ export default function StatsScreen() {
   const { screen, navigateToSession } = useNav();
   const [climbs, setClimbs] = useState<Climb[]>([]);
   const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>({});
+  const [sessionLocationMap, setSessionLocationMap] = useState<Record<string, string>>({});
   const [sessionCount, setSessionCount] = useState(0);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
@@ -132,6 +133,7 @@ export default function StatsScreen() {
     let cloudClimbs: Climb[] | null = null;
     let cloudSessionCount: number | null = null;
     let cloudSessionMap: Record<string, string> | null = null;
+    let cloudSessionLocationMap: Record<string, string> | null = null;
 
     try {
       // Pull fresh data from Supabase so stats always reflect the latest cloud state
@@ -178,7 +180,11 @@ export default function StatsScreen() {
           await bulkSaveSessions(mapped);
           cloudSessionCount = mapped.length;
           cloudSessionMap = {};
-          mapped.forEach((s: any) => { cloudSessionMap![s.id] = s.date; });
+          cloudSessionLocationMap = {};
+          mapped.forEach((s: any) => {
+            cloudSessionMap![s.id] = s.date;
+            if (s.location) cloudSessionLocationMap![s.id] = s.location;
+          });
         }
       }
     } catch {
@@ -189,13 +195,19 @@ export default function StatsScreen() {
       setClimbs(cloudClimbs.filter(c => !isTrainingClimb(c)));
       if (cloudSessionCount !== null) setSessionCount(cloudSessionCount);
       if (cloudSessionMap !== null) setSessionDateMap(cloudSessionMap);
+      if (cloudSessionLocationMap !== null) setSessionLocationMap(cloudSessionLocationMap);
     } else {
       const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
       setClimbs(allClimbs.filter(c => !isTrainingClimb(c)));
       setSessionCount(allSessions.length);
       const map: Record<string, string> = {};
-      allSessions.forEach(s => { map[s.id] = s.date; });
+      const locMap: Record<string, string> = {};
+      allSessions.forEach(s => {
+        map[s.id] = s.date;
+        if (s.location) locMap[s.id] = s.location;
+      });
       setSessionDateMap(map);
+      setSessionLocationMap(locMap);
     }
     setLoading(false);
   }, []);
@@ -276,7 +288,11 @@ export default function StatsScreen() {
     }
 
     const locationCounts: Record<string, number> = {};
-    climbs.forEach(c => { if (c.location) locationCounts[c.location] = (locationCounts[c.location] || 0) + 1; });
+    climbs.forEach(c => {
+      // Location lives on the session; older climbs may still carry their own
+      const loc = (c.sessionId && sessionLocationMap[c.sessionId]) || c.location;
+      if (loc) locationCounts[loc] = (locationCounts[loc] || 0) + 1;
+    });
     const favLocation = Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
 
     const avgPerSession = sessionCount > 0 ? Math.round(climbs.length / sessionCount) : 0;
@@ -325,7 +341,7 @@ export default function StatsScreen() {
       avgPerSession, biggestSession, mostActiveMonth,
       outdoorSends, dominantSys, chartPoints, minVal, valRange,
     };
-  }, [climbs, sessionDateMap, sessionCount]);
+  }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
   if (loading) {
     return (

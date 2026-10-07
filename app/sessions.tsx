@@ -123,6 +123,11 @@ export default function SessionsScreen() {
     setEditingTitle(false);
   }, [selectedDay?.sessionId]);
 
+  // Location can be set from the log-climb sheet, so keep it in sync with the stored session
+  useEffect(() => {
+    setSessionLocation(selectedDay?.location ?? '');
+  }, [selectedDay?.sessionId, selectedDay?.location]);
+
   // Scroll photo viewer to the tapped photo once the modal has laid out
   useEffect(() => {
     if (!viewerVisible) return;
@@ -235,6 +240,10 @@ export default function SessionsScreen() {
     setActiveEditingNotes(false);
     setActiveEditingTitle(false);
   }, [activeSession?.sessionId]);
+
+  useEffect(() => {
+    setActiveLocation(activeSession?.location ?? '');
+  }, [activeSession?.sessionId, activeSession?.location]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
