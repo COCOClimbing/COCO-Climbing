@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
+import { isTrainingClimb } from '../utils/sessionHelpers';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
@@ -185,12 +186,12 @@ export default function StatsScreen() {
     }
 
     if (cloudClimbs !== null) {
-      setClimbs(cloudClimbs);
+      setClimbs(cloudClimbs.filter(c => !isTrainingClimb(c)));
       if (cloudSessionCount !== null) setSessionCount(cloudSessionCount);
       if (cloudSessionMap !== null) setSessionDateMap(cloudSessionMap);
     } else {
       const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
-      setClimbs(allClimbs);
+      setClimbs(allClimbs.filter(c => !isTrainingClimb(c)));
       setSessionCount(allSessions.length);
       const map: Record<string, string> = {};
       allSessions.forEach(s => { map[s.id] = s.date; });

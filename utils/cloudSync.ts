@@ -465,6 +465,9 @@ function climbToRow(c: Climb, userId: string) {
     ...(c.holdColor ? { hold_color: c.holdColor } : {}),
     location: c.location ?? null,
     notes: c.notes ?? null,
+    // Always sent so clearing a routine also clears it in the cloud. Requires
+    // the routine column (supabase_climb_routine.sql) before this ships.
+    routine: c.routine ?? null,
     attempts: c.attempts ?? 1,
     project_id: c.projectId ?? null,
     project_name: c.projectName ?? null,
@@ -520,6 +523,7 @@ function rowToClimb(row: any): Climb {
     holdColor: row.hold_color ?? undefined,
     location: row.location ?? undefined,
     notes: row.notes ?? undefined,
+    routine: row.routine ?? undefined,
     attempts: row.attempts ?? 1,
     projectId: row.project_id ?? undefined,
     projectName: row.project_name ?? undefined,

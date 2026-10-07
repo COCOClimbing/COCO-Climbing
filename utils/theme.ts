@@ -456,6 +456,7 @@ export interface Climb {
   grade: string;
   gradeSystem: 'v-scale' | 'yds' | 'french' | 'british' | 'font' | 'custom';
   notes?: string;
+  routine?: string;     // hangboard/lift only — kept separate from notes
   routeName?: string;
   location?: string;
   attempts?: number;

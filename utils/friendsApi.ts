@@ -3,6 +3,7 @@ import { Image } from 'react-native';
 import { isDeadMediaUrl } from './cloudSync';
 import { getGradeDifficulty } from './theme';
 import { isCustomGrade } from './gradeUtils';
+import { trainingKind, TrainingKind } from './sessionHelpers';
 
 export interface FriendProfile {
   id: string;
@@ -44,6 +45,7 @@ export type SessionSummary = {
   hardestGradeSystem: string | null;
   environment?: string;
   climbType?: string;
+  training?: TrainingKind | null; // set when the session is only hangboard/lift
   partners?: { id: string; name: string; avatar_url?: string | null }[];
   sessionPhotos?: string[];
   photoWidths?: Record<string, number>;
@@ -108,7 +110,7 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
   }
 
   for (const sessionClimbs of sessionGroups.values()) {
-    const sends = sessionClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+    const sends = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length;
     const flashes = sessionClimbs.filter((c: any) => c.outcome === 'flash').length;
     let hardestGrade: string | null = null;
     let hardestGradeSystem: string | null = null;
@@ -124,7 +126,8 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
     const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
     const environment = sessionClimbs[0]?.environment ?? 'indoor';
     const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
-    const climbType = hardestClimb?.type ?? undefined;
+    // Lift/hangboard-only sessions have no graded climbs, so show their training type instead.
+    const climbType = hardestClimb?.type ?? (sessionClimbs.length > 0 && sessionClimbs.every((c: any) => c.type === 'hangboard' || c.type === 'lift') ? sessionClimbs[0].type : undefined);
     const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
     const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
     const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
@@ -139,7 +142,7 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
     const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
     const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
     const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
-    summaries.push({ friend, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
+    summaries.push({ friend, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
   }
 
   summaries.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());

@@ -17,8 +17,25 @@ export interface DaySession {
   mediaTypes?: ('photo' | 'video')[];
 }
 
+// Hangboard and lift entries are training, not climbs — they never count towards climb totals.
+export function isTrainingClimb(c: Pick<Climb, 'type'>): boolean {
+  return c.type === 'hangboard' || c.type === 'lift';
+}
+
+export type TrainingKind = 'lift' | 'hangboard' | 'both';
+
+// For a session made up only of hangboard/lift entries, which kind(s) it holds; null if it has any climbs.
+export function trainingKind(climbs: Pick<Climb, 'type'>[]): TrainingKind | null {
+  if (climbs.length === 0 || !climbs.every(isTrainingClimb)) return null;
+  const hasLift = climbs.some(c => c.type === 'lift');
+  const hasHang = climbs.some(c => c.type === 'hangboard');
+  return hasLift && hasHang ? 'both' : hasLift ? 'lift' : 'hangboard';
+}
+
+export const TRAINING_KIND_LABEL: Record<TrainingKind, string> = { lift: 'Lift', hangboard: 'Hangboard', both: 'Lift + Hang' };
+
 export function climbCount(c: Climb): number {
-  if (c.type === 'hangboard' || c.type === 'lift') return 0;
+  if (isTrainingClimb(c)) return 0;
   if (c.outcome === 'flash' || c.outcome === 'hang') return 1;
   return c.attempts ?? 1;
 }
@@ -31,7 +48,8 @@ export function sessionStats(day: DaySession) {
     .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0];
   const projecting = sends === 0 && gradedClimbs.length > 0 && gradedClimbs.every(c => c.projectId);
   const gradedCount = day.climbs.reduce((sum, c) => sum + climbCount(c), 0);
-  return { sends, hardest, projecting, gradedCount };
+  const training = trainingKind(day.climbs);
+  return { sends, hardest, projecting, gradedCount, training };
 }
 
 export function mergeClimbs(climbs: Climb[]): Climb[] {

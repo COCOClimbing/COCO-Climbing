@@ -29,7 +29,7 @@ import { isCustomGrade } from '../utils/gradeUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
-import { DaySession } from '../utils/sessionHelpers';
+import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
 import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
@@ -364,7 +364,7 @@ function FriendDetailView({
   const now = new Date();
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const monthStart = thirtyDaysAgo.toISOString().slice(0, 10);
-  const monthClimbs = climbs.filter(c => normDate(c.date) >= monthStart);
+  const monthClimbs = climbs.filter(c => normDate(c.date) >= monthStart && !isTrainingClimb(c));
   const monthSends = monthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
 
   const BOULDER_SYSTEMS = new Set(['v-scale', 'font']);
@@ -381,7 +381,7 @@ function FriendDetailView({
     { id: 'sport', label: 'Sport' },
     { id: 'trad', label: 'Trad' },
   ];
-  const allSends = climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
+  const allSends = climbs.filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isTrainingClimb(c));
   const hardestByType = GRADED_TYPES.map(({ id, label }) => {
     const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (typeSends.length === 0) return { label, grade: null };
@@ -1009,7 +1009,7 @@ export default function FriendsScreen() {
       recentSessions.forEach(s => {
         const sessionClimbs = allClimbs.filter(c => c.sessionId === s.id);
         if (sessionClimbs.length === 0) return;
-        const sends = sessionClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
+        const sends = sessionClimbs.filter(c => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length;
         const flashes = sessionClimbs.filter(c => c.outcome === 'flash').length;
         let hardestGrade: string | null = null;
         let hardestGradeSystem: string | null = null;
@@ -1021,7 +1021,8 @@ export default function FriendsScreen() {
           hardestGradeSystem = gradedClimbs[0].gradeSystem;
           hardestClimb = gradedClimbs[0];
         }
-        const climbType = hardestClimb?.type ?? undefined;
+        // Lift/hangboard-only sessions have no graded climbs, so show their training type instead.
+        const climbType = hardestClimb?.type ?? (sessionClimbs.length > 0 && sessionClimbs.every((c: any) => c.type === 'hangboard' || c.type === 'lift') ? sessionClimbs[0].type : undefined);
         const partners = s.friends?.length
           ? s.friends.map((f: any) => {
               const raw = typeof f === 'string' ? { id: f, name: f } : f;
@@ -1047,7 +1048,7 @@ export default function FriendsScreen() {
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
@@ -1102,7 +1103,7 @@ export default function FriendsScreen() {
       for (const { session: s, profile } of validTagged) {
         const climbs = taggedClimbsMap.get(s.id) ?? [];
         if (climbs.length === 0) continue;
-        const sends = climbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+        const sends = climbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length;
         const flashes = climbs.filter((c: any) => c.outcome === 'flash').length;
         const gradedClimbs = climbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.grade && c.grade_system);
         let hardestGrade: string | null = null;
@@ -1137,6 +1138,7 @@ export default function FriendsScreen() {
           hardestGradeSystem,
           environment: s.environment ?? 'indoor',
           climbType: climbs[0]?.type ?? undefined,
+          training: trainingKind(climbs),
           sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined,
           sessionId: s.id,
           partners,
@@ -1194,7 +1196,7 @@ export default function FriendsScreen() {
           }
 
           for (const sessionClimbs of sessionGroups.values()) {
-            const sends = sessionClimbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length;
+            const sends = sessionClimbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length;
             const flashes = sessionClimbs.filter((c: any) => c.outcome === 'flash').length;
             let hardestGrade: string | null = null;
             let hardestGradeSystem: string | null = null;
@@ -1213,7 +1215,8 @@ export default function FriendsScreen() {
             const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
             const environment = sessionClimbs[0]?.environment ?? 'indoor';
             const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
-            const climbType = hardestClimb?.type ?? undefined;
+            // Lift/hangboard-only sessions have no graded climbs, so show their training type instead.
+            const climbType = hardestClimb?.type ?? (sessionClimbs.length > 0 && sessionClimbs.every((c: any) => c.type === 'hangboard' || c.type === 'lift') ? sessionClimbs[0].type : undefined);
             const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));
             const sessionLevelPhotos = (friendSessionId ? (sessionMediaMap.get(friendSessionId) ?? []) : []).filter((u: string) => !isDeadMediaUrl(u));
             const sessionPhotos = [...sessionLevelPhotos, ...climbPhotos];
@@ -1226,7 +1229,7 @@ export default function FriendsScreen() {
             const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
             const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
             const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
-            summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
+            summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return sum; if (c.outcome === 'flash' || c.outcome === 'hang') return sum + 1; return sum + (c.attempts ?? 1); }, 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
           }
         } catch { continue; }
       }
@@ -1476,6 +1479,7 @@ export default function FriendsScreen() {
             holdColor: c.hold_color,
             location: c.location,
             notes: c.notes,
+            routine: c.routine ?? undefined,
             attempts: c.attempts,
             mediaUri: c.media_uri,
             mediaType: c.media_type,
@@ -1514,7 +1518,7 @@ export default function FriendsScreen() {
               id: c.id, date: c.date, sessionId: c.session_id,
               type: c.type, outcome: c.outcome, styles: c.styles ?? [],
               environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
-              routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes,
+              routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes, routine: c.routine ?? undefined,
               attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
               mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
               mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),
@@ -1890,15 +1894,25 @@ export default function FriendsScreen() {
           </View>
           {/* Stats */}
           <View style={[styles.detailStatsRow, { borderColor: colors.border }]}>
-            <View style={styles.detailStat}>
-              <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{climbs.length ? climbs.reduce((s: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return s; if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1; return s + (c.attempts ?? 1); }, 0) : entry.climbCount}</Text>
-              <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Climbs</Text>
-            </View>
-            <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.detailStat}>
-              <Text style={[styles.detailStatNum, { color: colors.accentGreen }]}>{climbs.filter((c: any) => c.outcome === 'send' || c.outcome === 'flash').length || entry.sends}</Text>
-              <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Sends</Text>
-            </View>
+            {entry.training ? (
+              // Lift/hangboard-only sessions have no climbs or sends to count
+              <View style={styles.detailStat}>
+                <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[entry.training]}</Text>
+                <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Type</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.detailStat}>
+                  <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{climbs.length ? climbs.reduce((s: number, c: any) => { if (c.type === 'hangboard' || c.type === 'lift') return s; if (c.outcome === 'flash' || c.outcome === 'hang') return s + 1; return s + (c.attempts ?? 1); }, 0) : entry.climbCount}</Text>
+                  <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+                </View>
+                <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.detailStat}>
+                  <Text style={[styles.detailStatNum, { color: colors.accentGreen }]}>{climbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length || entry.sends}</Text>
+                  <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Sends</Text>
+                </View>
+              </>
+            )}
             {entry.hardestGrade && (
               <>
                 <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
@@ -2065,15 +2079,27 @@ export default function FriendsScreen() {
                 <TouchableOpacity style={styles.cardStatsRow} onPress={() => handleToggleSession(entry)} activeOpacity={0.75}>
                   <View style={styles.cardStat}>
                     <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
-                      {CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—'}
+                      {entry.training ? TRAINING_KIND_LABEL[entry.training] : (CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
                     </Text>
                     <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
                   </View>
-                  <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-                  <View style={styles.cardStat}>
-                    <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
-                    <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
-                  </View>
+                  {/* Lift/hangboard-only sessions have no climbs to count; empty columns keep
+                      Type in the same left-hand spot as on climbing cards */}
+                  {entry.training && (
+                    <>
+                      <View style={styles.cardStat} />
+                      <View style={styles.cardStat} />
+                    </>
+                  )}
+                  {!entry.training && (
+                    <>
+                      <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+                      <View style={styles.cardStat}>
+                        <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
+                        <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+                      </View>
+                    </>
+                  )}
                   {entry.hardestGrade ? (
                     <>
                       <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
@@ -2105,7 +2131,9 @@ export default function FriendsScreen() {
                   activeOpacity={0.7}
                   style={[styles.cardExpandBtn, { borderColor: colors.border }]}
                 >
-                  <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>View climbs</Text>
+                  <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
+                    {entry.training === 'lift' ? 'View lift' : entry.training === 'hangboard' ? 'View hang' : entry.training === 'both' ? 'View lift + hang' : 'View climbs'}
+                  </Text>
                   <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
 

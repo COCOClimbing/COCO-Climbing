@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
-import { DaySession, sessionStats, formatSessionLabel, sessionTimeOfDay } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, formatSessionLabel, sessionTimeOfDay, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import {
@@ -99,11 +99,13 @@ interface SessionCardProps {
 export default function SessionCard({
   day, colors, currentUserId, myAvatar, onEdit, onShare, onViewProfile, condensed = false,
 }: SessionCardProps) {
-  const { sends, hardest, projecting, gradedCount } = sessionStats(day);
+  const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
   const label = formatSessionLabel(day);
   // A session of only custom-graded climbs has no "hardest", so fall back to its first non-training climb.
-  const typeSource = hardest ?? day.climbs.find(c => c.type !== 'hangboard' && c.type !== 'lift');
-  const climbTypeLabel = CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—';
+  // A lift/hangboard-only session shows its training type and no climb count.
+  const trainingOnly = training !== null;
+  const typeSource = hardest ?? day.climbs.find(c => !isTrainingClimb(c));
+  const climbTypeLabel = training ? TRAINING_KIND_LABEL[training] : (CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—');
 
   const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
   const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
@@ -266,11 +268,22 @@ export default function SessionCard({
               <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{climbTypeLabel}</Text>
               <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
             </View>
-            <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.cardStat}>
-              <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{gradedCount}</Text>
-              <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
-            </View>
+            {/* Empty columns keep Type in the same left-hand spot as on climbing cards */}
+            {trainingOnly && (
+              <>
+                <View style={styles.cardStat} />
+                <View style={styles.cardStat} />
+              </>
+            )}
+            {!trainingOnly && (
+              <>
+                <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.cardStat}>
+                  <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{gradedCount}</Text>
+                  <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+                </View>
+              </>
+            )}
             {hardest && (
               <>
                 <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />

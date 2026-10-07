@@ -23,6 +23,7 @@ import { uploadMedia } from '../utils/mediaUpload';
 import { supabase } from '../utils/supabase';
 import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
+import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 
@@ -92,11 +93,14 @@ export default function AccountScreen() {
     const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const monthAgo = thirtyDaysAgo.toISOString().slice(0, 10);
 
-    const thisMonthClimbs = climbs.filter(c => c.date.slice(0, 10) >= monthAgo);
+    // Sessions count any entry, but climb/send totals leave out hangboard and lift.
+    const thisMonthEntries = climbs.filter(c => c.date.slice(0, 10) >= monthAgo);
+    const thisMonthClimbs = thisMonthEntries.filter(c => !isTrainingClimb(c));
     const thisMonthSends = thisMonthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
-    const thisMonthSessionIds = new Set(thisMonthClimbs.map(c => c.sessionId));
+    const thisMonthSessionIds = new Set(thisMonthEntries.map(c => c.sessionId));
 
-    const sends = climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
+    const climbsOnly = climbs.filter(c => !isTrainingClimb(c));
+    const sends = climbsOnly.filter(c => c.outcome === 'send' || c.outcome === 'flash');
 
     const GRADED_TYPES = [
       { id: 'boulder',  label: 'Boulder' },
@@ -136,7 +140,7 @@ export default function AccountScreen() {
       thisMonthSessions: thisMonthSessionIds.size,
       thisMonthSends: thisMonthSends.length,
       totalSessions: sessions.length,
-      totalClimbs: climbs.length,
+      totalClimbs: climbsOnly.length,
       totalSends: sends.length,
       hardestByType,
       sessionPoints,

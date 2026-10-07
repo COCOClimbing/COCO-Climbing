@@ -27,7 +27,7 @@ import MiniCalendar from '../components/MiniCalendar';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
-import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
@@ -682,7 +682,7 @@ export default function SessionsScreen() {
   function ActiveSessionCard() {
     if (!activeSession) return null;
 
-    const { sends, hardest, projecting, gradedCount } = sessionStats(activeSession);
+    const { sends, hardest, projecting, gradedCount, training } = sessionStats(activeSession);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
 
     const climbMedia: { uri: string; type: 'photo' | 'video'; fromClimb: true; climbId: string }[] = [];
@@ -713,7 +713,12 @@ export default function SessionsScreen() {
             {activeTitle.trim() || 'Add a Title'}
           </Text>
           <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
-            {projecting ? (
+            {training ? (
+              <View style={styles.todayStat}>
+                <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[training]}</Text>
+                <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>type</Text>
+              </View>
+            ) : projecting ? (
               <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
             ) : (
               <>
@@ -822,7 +827,12 @@ export default function SessionsScreen() {
             )}
 
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
-              {projecting ? (
+              {training ? (
+                <View style={styles.todayStat}>
+                  <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[training]}</Text>
+                  <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>type</Text>
+                </View>
+              ) : projecting ? (
                 <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
               ) : (
                 <>
@@ -1027,7 +1037,7 @@ export default function SessionsScreen() {
   // ── Session Edit Modal ────────────────────────────────────────────────────────
 
   function SessionEditModalContent({ day }: { day: DaySession }) {
-    const { sends, hardest, projecting, gradedCount } = sessionStats(day);
+    const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
     const label = formatSessionLabel(day);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = mergeClimbs(day.climbs);
@@ -1091,7 +1101,12 @@ export default function SessionsScreen() {
             )}
 
             <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
-              {projecting ? (
+              {training ? (
+                <View style={styles.todayStat}>
+                  <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[training]}</Text>
+                  <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>type</Text>
+                </View>
+              ) : projecting ? (
                 <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
               ) : (
                 <>
@@ -1112,6 +1127,33 @@ export default function SessionsScreen() {
               )}
             </View>
           </View>
+
+          {/* Climbs — first, so opening a past session shows its data before the edit panels */}
+          {displayClimbs.length === 0 ? (
+            <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
+          ) : (
+            displayClimbs.map(c => (
+              <SwipeToDelete
+                key={c.id}
+                onSwipeStart={() => detailScrollRef.current?.setNativeProps({ scrollEnabled: false })}
+                onSwipeEnd={() => detailScrollRef.current?.setNativeProps({ scrollEnabled: true })}
+                onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
+              >
+                <ClimbCard
+                  climb={c}
+                  compact
+                  onPress={() => setDetailClimb(c)}
+                />
+              </SwipeToDelete>
+            ))
+          )}
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: SPACING.sm, marginBottom: SPACING.lg }]}
+            onPress={() => openLogModal(day.sessionId)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
+          </TouchableOpacity>
 
           {/* Notes */}
           <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
@@ -1209,33 +1251,6 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Climbs */}
-          {displayClimbs.length === 0 ? (
-            <Text style={[styles.noClimbs, { color: colors.textMuted }]}>No climbs logged yet</Text>
-          ) : (
-            displayClimbs.map(c => (
-              <SwipeToDelete
-                key={c.id}
-                onSwipeStart={() => detailScrollRef.current?.setNativeProps({ scrollEnabled: false })}
-                onSwipeEnd={() => detailScrollRef.current?.setNativeProps({ scrollEnabled: true })}
-                onDelete={async () => { await deleteClimb(c.id); triggerStatsRefresh(); load(); }}
-              >
-                <ClimbCard
-                  climb={c}
-                  compact
-                  onPress={() => setDetailClimb(c)}
-                />
-              </SwipeToDelete>
-            ))
-          )}
-          <TouchableOpacity
-            style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: SPACING.sm }]}
-            onPress={() => openLogModal(day.sessionId)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>+ Add Climb</Text>
-          </TouchableOpacity>
 
           {/* Actions */}
           <View style={styles.detailActions}>

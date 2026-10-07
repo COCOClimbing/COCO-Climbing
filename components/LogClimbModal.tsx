@@ -154,6 +154,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setRouteName(existingClimb.routeName || '');
       setLocation(existingClimb.location || '');
       setNotes(existingClimb.notes || '');
+      setRoutine(existingClimb.routine || '');
       setAttempts(String(existingClimb.attempts || 1));
       setSelectedProjectId(existingClimb.projectId);
       setNewProjectName(existingClimb.projectName && !existingClimb.projectId ? existingClimb.projectName : '');
@@ -360,7 +361,8 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         gradeSystem: isTraining ? 'v-scale' : gradeSystem,
         routeName: routeName || undefined,
         location: location || undefined,
-        notes: isTraining && routine ? routine : notes || undefined,
+        notes: notes || undefined,
+        routine: isTraining && routine.trim() ? routine.trim() : undefined,
         attempts: parseInt(attempts) || 1,
         mediaUris: finalMediaUris.length > 0 ? finalMediaUris : undefined,
         mediaTypes: finalMediaTypes.length > 0 ? finalMediaTypes : undefined,

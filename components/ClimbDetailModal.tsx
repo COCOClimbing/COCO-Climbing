@@ -21,6 +21,7 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
   if (!climb) return null;
 
   const typeInfo = CLIMB_TYPES.find(t => t.id === climb.type);
+  const isTraining = climb.type === 'hangboard' || climb.type === 'lift';
   const outcomeInfo = CLIMB_OUTCOMES.find(o => o.id === climb.outcome);
   const count = climb.attempts ?? 0;
   const unit = climb.outcome === 'hang'
@@ -63,7 +64,7 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
           {/* Grade + outcome row */}
           <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={ss.mainRow}>
-              <GradeBadge grade={climb.grade} outcome={climb.outcome} />
+              {!isTraining && <GradeBadge grade={climb.grade} outcome={climb.outcome} />}
               <View style={ss.mainInfo}>
                 <Text style={[ss.typeText, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
                   {typeInfo?.label ?? climb.type}
@@ -77,14 +78,15 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
                 ) : null}
               </View>
             </View>
-            <View style={ss.badgeRow}>
+            {/* Hangboard/lift entries have no grade or outcome */}
+            {!isTraining && <View style={ss.badgeRow}>
               <OutcomeBadge outcome={climb.outcome} />
               {count > 0 && climb.outcome !== 'flash' && (
                 <Text style={[ss.countText, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>
                   {count} {unit}
                 </Text>
               )}
-            </View>
+            </View>}
           </View>
 
           {/* Styles */}
@@ -113,6 +115,16 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
                   {HOLD_COLORS.find(c => c.id === climb.holdColor)?.label ?? climb.holdColor}
                 </Text>
               </View>
+            </View>
+          ) : null}
+
+          {/* Routine (hangboard/lift) */}
+          {climb.routine ? (
+            <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[ss.sectionLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>ROUTINE</Text>
+              <Text style={[ss.notesText, { color: colors.textPrimary, fontFamily: FONTS.family.regular }]}>
+                {climb.routine}
+              </Text>
             </View>
           ) : null}
 
