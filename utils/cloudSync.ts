@@ -311,8 +311,11 @@ export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
   );
 }
 
-export async function deleteClimbFromCloud(id: string, r2Uris?: string[]): Promise<void> {
-  if (r2Uris?.length) await deleteR2MediaUrls(r2Uris);
+export async function deleteClimbFromCloud(id: string): Promise<void> {
+  // Photos are NOT deleted here: they stay in R2 as long as the soft-deleted
+  // row does, so a restore within the 30-day window gets them back. Once
+  // purge_soft_deleted_records() removes the row, cleanupOrphanedR2Media
+  // sees them as unreferenced and deletes them.
   // Soft delete via RPC (see supabase_soft_delete_via_rpc.sql): every SELECT
   // policy on climbs requires deleted_at IS NULL, and Postgres re-checks that
   // same combined policy against the row an UPDATE produces — so a plain
@@ -388,22 +391,11 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
   }
 }
 
-export async function deleteSessionFromCloud(
-  id: string,
-  r2Uris?: string[],
-): Promise<void> {
-  // Delete R2 files before removing DB rows
-  if (r2Uris?.length) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const prefix = `${R2_PUBLIC_BASE_URL}/`;
-      await Promise.all(
-        r2Uris
-          .filter(u => u.startsWith(prefix))
-          .map(u => deleteMedia(u.slice(prefix.length), session.access_token).catch(() => {}))
-      );
-    }
-  }
+export async function deleteSessionFromCloud(id: string): Promise<void> {
+  // Photos are NOT deleted here: they stay in R2 as long as the soft-deleted
+  // session does, so a restore within the 30-day window gets them back. Once
+  // purge_soft_deleted_records() removes the row, cleanupOrphanedR2Media
+  // sees them as unreferenced and deletes them.
   // Soft delete via RPC — see deleteClimbFromCloud for why a plain
   // client-side UPDATE of deleted_at can never pass RLS.
   const { error } = await supabase.rpc('soft_delete_session', { p_session_id: id });
@@ -823,9 +815,9 @@ export async function processPendingDeletes(): Promise<void> {
   for (const item of pending) {
     try {
       if (item.type === 'climb') {
-        await deleteClimbFromCloud(item.id, item.r2Uris);
+        await deleteClimbFromCloud(item.id);
       } else {
-        await deleteSessionFromCloud(item.id, item.r2Uris);
+        await deleteSessionFromCloud(item.id);
       }
       await removePendingDelete(item.id);
     } catch {

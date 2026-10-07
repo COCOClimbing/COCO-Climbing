@@ -268,16 +268,14 @@ export async function saveClimb(climb: Climb): Promise<void> {
 
 export async function deleteClimb(id: string): Promise<void> {
   const climbs = await getAllClimbs();
-  const climb = climbs.find(c => c.id === id);
   await AsyncStorage.setItem(KEYS.CLIMBS, JSON.stringify(climbs.filter(c => c.id !== id)));
   await addToTombstone(KEYS.DELETED_CLIMB_IDS, id);
 
-  const r2Uris = (climb?.mediaUris ?? (climb?.mediaUri ? [climb.mediaUri] : [])).filter(u => u.startsWith('http'));
-  await addPendingDelete({ type: 'climb', id, r2Uris });
+  await addPendingDelete({ type: 'climb', id });
 
   if (_cloudUserId) {
     import('./cloudSync').then(({ deleteClimbFromCloud }) =>
-      deleteClimbFromCloud(id, r2Uris)
+      deleteClimbFromCloud(id)
         .then(() => removePendingDelete(id))
         .catch(() => {})
     );
@@ -391,15 +389,11 @@ export async function deleteSession(id: string): Promise<void> {
     });
   }
 
-  const r2Uris = [
-    ...(session?.mediaUris ?? (session?.mediaUri ? [session.mediaUri] : [])),
-    ...sessionClimbs.flatMap(c => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])),
-  ].filter(u => u.startsWith('http'));
-  await addPendingDelete({ type: 'session', id, r2Uris });
+  await addPendingDelete({ type: 'session', id });
 
   if (_cloudUserId) {
     import('./cloudSync').then(({ deleteSessionFromCloud }) =>
-      deleteSessionFromCloud(id, r2Uris)
+      deleteSessionFromCloud(id)
         .then(() => removePendingDelete(id))
         .catch(() => {})
     );
