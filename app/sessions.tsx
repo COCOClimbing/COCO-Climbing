@@ -807,7 +807,7 @@ export default function SessionsScreen() {
 
             {activeEditingTitle ? (
               <TextInput
-                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                 defaultValue={activeTitle}
                 onChangeText={t => { activeTitleInputValue.current = t; }}
                 onEndEditing={e => {
@@ -910,7 +910,7 @@ export default function SessionsScreen() {
             {activeEditingNotes ? (
               <TextInput
                 key={activeSession.sessionId}
-                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary }]}
                 defaultValue={activeNotes}
                 onChangeText={t => { activeNotesInputValue.current = t; }}
                 onEndEditing={e => { const t = e.nativeEvent.text.trim(); setActiveNotes(t); setActiveEditingNotes(false); handleSaveActiveSessionMeta(activeSession.sessionId, t, activeFriends, activeLocation, activeMediaItems); }}
@@ -1072,7 +1072,7 @@ export default function SessionsScreen() {
 
             {editingTitle ? (
               <TextInput
-                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                 defaultValue={sessionTitle}
                 onChangeText={t => { titleInputValue.current = t; }}
                 onEndEditing={e => handleSaveTitle(e.nativeEvent.text.trim())}
@@ -1160,7 +1160,7 @@ export default function SessionsScreen() {
             {editingNotes ? (
               <TextInput
                 key={day.sessionId}
-                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary }]}
                 defaultValue={sessionNotes}
                 onChangeText={t => { notesInputValue.current = t; }}
                 onEndEditing={e => handleSaveNotes(e.nativeEvent.text.trim())}
@@ -1470,9 +1470,9 @@ const styles = StyleSheet.create({
   detailDay: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.bold, letterSpacing: 1 },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xs },
   detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28 },
-  detailTitleInput: { borderBottomWidth: 1, paddingVertical: 2, flex: 1 },
+  detailTitleInput: { paddingVertical: 2, flex: 1 },
   sessionNote: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22 },
-  sessionNoteInput: { borderBottomWidth: 1, paddingVertical: 2 },
+  sessionNoteInput: { paddingVertical: 2 },
   detailStatsRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1 },
   todayStat: { alignItems: 'center' },
   todayStatVal: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, textAlign: 'center' },
