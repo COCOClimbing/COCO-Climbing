@@ -35,23 +35,34 @@ import SessionCard from '../components/SessionCard';
 let _cachedDays: DaySession[] = [];
 let _cachedCondensed = false;
 
-// Multiline input that sizes itself to its text. iOS doesn't reliably grow a multiline
-// TextInput on its own (notably at larger system text sizes): it keeps its first height
-// and scrolls, so earlier lines slide out of view. Defined at module level so the
-// height state doesn't remount the input mid-edit.
-function AutoGrowTextInput({ style, onContentSizeChange, ...props }: TextInputProps) {
+// Multiline input that sizes itself to its text. iOS's own multiline growth (and the
+// height onContentSizeChange reports) is unreliable on device: inputs either stayed one
+// line tall and scrolled, or ballooned. Instead, an invisible Text with the same style
+// and width wraps the current text and its measured height drives the input's height.
+// Defined at module level so the height state doesn't remount the input mid-edit.
+function AutoGrowTextInput({ style, containerStyle, onChangeText, defaultValue, placeholder, ...props }: TextInputProps & { containerStyle?: any }) {
+  const [text, setText] = useState(defaultValue ?? '');
   const [height, setHeight] = useState<number | undefined>(undefined);
   return (
-    <TextInput
-      {...props}
-      multiline
-      scrollEnabled={false}
-      style={[style, height !== undefined && { height }]}
-      onContentSizeChange={e => {
-        setHeight(Math.ceil(e.nativeEvent.contentSize.height));
-        onContentSizeChange?.(e);
-      }}
-    />
+    <View style={containerStyle}>
+      <Text
+        style={[style, { position: 'absolute', left: 0, right: 0, opacity: 0 }]}
+        onLayout={e => setHeight(Math.ceil(e.nativeEvent.layout.height))}
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+      >
+        {text || placeholder || ' '}
+      </Text>
+      <TextInput
+        {...props}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        multiline
+        scrollEnabled={false}
+        style={[style, height !== undefined && { height }]}
+        onChangeText={t => { setText(t); onChangeText?.(t); }}
+      />
+    </View>
   );
 }
 
@@ -834,6 +845,7 @@ export default function SessionsScreen() {
             {activeEditingTitle ? (
               <View style={styles.detailTitleRow}>
                 <AutoGrowTextInput
+                  containerStyle={{ flex: 1 }}
                   style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                   defaultValue={activeTitle}
                   onChangeText={t => { activeTitleInputValue.current = t; }}
@@ -1106,6 +1118,7 @@ export default function SessionsScreen() {
             {editingTitle ? (
               <View style={styles.detailTitleRow}>
                 <AutoGrowTextInput
+                  containerStyle={{ flex: 1 }}
                   style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                   defaultValue={sessionTitle}
                   onChangeText={t => { titleInputValue.current = t; }}
@@ -1514,7 +1527,7 @@ const styles = StyleSheet.create({
   // long title wouldn't grow onto a second line while editing
   detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold },
   // Same box as the read-only title so tapping to edit doesn't shift the layout
-  detailTitleInput: { flex: 1, padding: 0, margin: 0 },
+  detailTitleInput: { padding: 0, margin: 0 },
   // No custom lineHeight: iOS text inputs place extra line height differently from Text,
   // which made the note's text drop slightly when tapped into
   sessionNote: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular },
