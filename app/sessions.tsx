@@ -1492,7 +1492,9 @@ const styles = StyleSheet.create({
   detailLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   detailLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, flexShrink: 1 },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xs },
-  detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28 },
+  // No custom lineHeight: iOS multiline inputs mis-measure their height with one, so a
+  // long title wouldn't grow onto a second line while editing
+  detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold },
   // Same box as the read-only title so tapping to edit doesn't shift the layout
   detailTitleInput: { flex: 1, padding: 0, margin: 0 },
   // No custom lineHeight: iOS text inputs place extra line height differently from Text,
