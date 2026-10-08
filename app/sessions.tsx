@@ -804,6 +804,12 @@ export default function SessionsScreen() {
               <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
               <Text style={[styles.detailDay, { color: colors.accent }]}>ACTIVE SESSION</Text>
             </View>
+            {activeLocation.trim() ? (
+              <View style={styles.detailLocationRow}>
+                <Ionicons name="location-sharp" size={12} color={colors.textMuted} />
+                <Text style={[styles.detailLocation, { color: colors.textMuted }]} numberOfLines={1}>{activeLocation.trim()}</Text>
+              </View>
+            ) : null}
 
             {activeEditingTitle ? (
               <View style={styles.detailTitleRow}>
@@ -1071,6 +1077,12 @@ export default function SessionsScreen() {
             <View style={styles.detailHeaderTop}>
               <Text style={[styles.detailDay, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
             </View>
+            {sessionLocation.trim() ? (
+              <View style={styles.detailLocationRow}>
+                <Ionicons name="location-sharp" size={12} color={colors.textMuted} />
+                <Text style={[styles.detailLocation, { color: colors.textMuted }]} numberOfLines={1}>{sessionLocation.trim()}</Text>
+              </View>
+            ) : null}
 
             {editingTitle ? (
               <View style={styles.detailTitleRow}>
@@ -1477,6 +1489,8 @@ const styles = StyleSheet.create({
   detailHeader: { borderRadius: 12, padding: SPACING.lg, flexDirection: 'column', gap: SPACING.xs },
   detailHeaderTop: { flexDirection: 'row', alignItems: 'center' },
   detailDay: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.bold, letterSpacing: 1 },
+  detailLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  detailLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, flexShrink: 1 },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xs },
   detailTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, lineHeight: 28 },
   // Same box as the read-only title so tapping to edit doesn't shift the layout

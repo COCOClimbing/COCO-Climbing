@@ -2013,8 +2013,14 @@ export default function FriendsScreen() {
                     <View style={styles.cardHeaderInfo}>
                       <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
                       <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
-                        {formatRelativeDate(entry.sessionDate)} · {isOutdoor ? 'Outdoor' : 'Indoor'}
+                        {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
                       </Text>
+                      {entry.location?.trim() ? (
+                        <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
+                          <Ionicons name="location-sharp" size={12} color={colors.textMuted} />
+                          <Text style={[styles.cardLocation, { color: colors.textMuted }]} numberOfLines={1}>{entry.location.trim()}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </TouchableOpacity>
                   {entry.friend.id !== user?.id && (
@@ -2038,14 +2044,6 @@ export default function FriendsScreen() {
                 {/* ── Session notes ── */}
                 {entry.notes?.trim() ? (
                   <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
-                ) : null}
-
-                {/* ── Location ── */}
-                {entry.location?.trim() ? (
-                  <View style={styles.cardLocationRow}>
-                    <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
-                    <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
-                  </View>
                 ) : null}
 
                 {/* ── Partners row ── */}
@@ -2595,7 +2593,7 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.bold,
-    marginBottom: 4,
+    marginBottom: 1,
   },
   cardMeta: {
     fontSize: FONTS.sizes.xs,
