@@ -72,7 +72,8 @@ export function Card({ children, style }: { children: React.ReactNode; style?: a
 export function GradeBadge({ grade, outcome }: { grade: string; outcome: string }) {
   const { colors } = useTheme();
   const color =
-    outcome === 'send' || outcome === 'flash' ? colors.accentGreen :
+    outcome === 'flash' ? colors.accentGold :
+    outcome === 'send' ? colors.accentGreen :
     outcome === 'hang' ? '#9B5DE5' :
     outcome === 'project' ? colors.accent :
     colors.accentBlue;
