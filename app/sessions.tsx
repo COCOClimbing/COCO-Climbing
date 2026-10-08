@@ -832,7 +832,6 @@ export default function SessionsScreen() {
                   // Return still saves instead of adding a line break
                   multiline
                   submitBehavior="blurAndSubmit"
-                  scrollEnabled={false}
                 />
                 <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
               </View>
@@ -1100,7 +1099,6 @@ export default function SessionsScreen() {
                   // Return still saves instead of adding a line break
                   multiline
                   submitBehavior="blurAndSubmit"
-                  scrollEnabled={false}
                 />
                 <Ionicons name="pencil-outline" size={16} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
               </View>
