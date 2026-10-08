@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as CompressorImage } from 'react-native-compressor';
@@ -34,6 +34,26 @@ import SessionCard from '../components/SessionCard';
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
 let _cachedDays: DaySession[] = [];
 let _cachedCondensed = false;
+
+// Multiline input that sizes itself to its text. iOS doesn't reliably grow a multiline
+// TextInput on its own (notably at larger system text sizes): it keeps its first height
+// and scrolls, so earlier lines slide out of view. Defined at module level so the
+// height state doesn't remount the input mid-edit.
+function AutoGrowTextInput({ style, onContentSizeChange, ...props }: TextInputProps) {
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  return (
+    <TextInput
+      {...props}
+      multiline
+      scrollEnabled={false}
+      style={[style, height !== undefined && { height }]}
+      onContentSizeChange={e => {
+        setHeight(Math.ceil(e.nativeEvent.contentSize.height));
+        onContentSizeChange?.(e);
+      }}
+    />
+  );
+}
 
 export default function SessionsScreen() {
   const { colors } = useTheme();
@@ -813,7 +833,7 @@ export default function SessionsScreen() {
 
             {activeEditingTitle ? (
               <View style={styles.detailTitleRow}>
-                <TextInput
+                <AutoGrowTextInput
                   style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                   defaultValue={activeTitle}
                   onChangeText={t => { activeTitleInputValue.current = t; }}
@@ -915,7 +935,7 @@ export default function SessionsScreen() {
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {activeEditingNotes ? (
-              <TextInput
+              <AutoGrowTextInput
                 key={activeSession.sessionId}
                 style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary }]}
                 defaultValue={activeNotes}
@@ -1085,7 +1105,7 @@ export default function SessionsScreen() {
 
             {editingTitle ? (
               <View style={styles.detailTitleRow}>
-                <TextInput
+                <AutoGrowTextInput
                   style={[styles.detailTitle, styles.detailTitleInput, { color: colors.textPrimary }]}
                   defaultValue={sessionTitle}
                   onChangeText={t => { titleInputValue.current = t; }}
@@ -1177,7 +1197,7 @@ export default function SessionsScreen() {
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {editingNotes ? (
-              <TextInput
+              <AutoGrowTextInput
                 key={day.sessionId}
                 style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary }]}
                 defaultValue={sessionNotes}
