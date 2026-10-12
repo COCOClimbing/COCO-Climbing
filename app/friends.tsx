@@ -1807,6 +1807,12 @@ export default function FriendsScreen() {
   // Show session detail full-screen
   if (viewingSession) {
     const { entry, climbs } = viewingSession;
+    // Training-only sessions show each entry's photos in its own MEDIA box (see
+    // TrainingEntry), so the strip keeps just the photos added to the session itself
+    const entryMedia = trainingKind(climbs)
+      ? new Set(climbs.flatMap((c: any) => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])))
+      : null;
+    const stripPhotos = (entry.sessionPhotos ?? []).filter(u => !entryMedia?.has(u));
     const closeDetail = () => {
       setViewingSession(null);
       const y = feedScrollY.current;
@@ -1879,15 +1885,15 @@ export default function FriendsScreen() {
             )}
           </View>
           {/* Photos */}
-          {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (
+          {stripPhotos.length > 0 && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.photoStrip}
               contentContainerStyle={styles.photoStripContent}
             >
-              {entry.sessionPhotos.map((uri, i) => (
-                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+              {stripPhotos.map((uri, i) => (
+                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(stripPhotos); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
             </ScrollView>
           )}

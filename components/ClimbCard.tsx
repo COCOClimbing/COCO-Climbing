@@ -4,6 +4,7 @@ import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
+import TrainingEntry from './TrainingEntry';
 
 interface Props {
   climb: Climb;
@@ -13,7 +14,8 @@ interface Props {
   // Show "View routine ›" under a lift/hangboard routine preview. Only pass this
   // where onPress opens the climb detail sheet (not the edit form).
   showRoutineLink?: boolean;
-  // Show the whole routine instead of a 2-line preview + link. Used when a
+  // Lift/hangboard entries render as TrainingEntry (full routine, notes and media,
+  // like the detail sheet) instead of a card with 2-line previews. Used when a
   // session has only lift/hangboard entries, so there's nothing to scroll past.
   expandRoutine?: boolean;
 }
@@ -24,6 +26,8 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
   const dateStr = format(parseISO(climb.date), compact ? 'MMM d' : 'EEE, MMM d · h:mm a');
   const isTraining = climb.type === 'hangboard' || climb.type === 'lift';
   const routine = isTraining ? climb.routine?.trim() : undefined;
+
+  if (isTraining && expandRoutine) return <TrainingEntry climb={climb} onPress={onPress} />;
 
   return (
     <TouchableOpacity
@@ -71,16 +75,20 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
         <View style={[styles.routineBlock, climb.notes ? styles.routineBlockBeforeNotes : null]}>
           {/* Labelled so the exercise list doesn't read as part of the notes below it */}
           <Text style={[styles.routineLabel, { color: colors.textMuted }]}>ROUTINE</Text>
-          <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={expandRoutine ? undefined : 2}>{routine}</Text>
-          {showRoutineLink && !expandRoutine && onPress ? (
+          <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={2}>{routine}</Text>
+          {showRoutineLink && onPress ? (
             <Text style={[styles.routineLink, { color: colors.accent }]}>View routine ›</Text>
           ) : null}
         </View>
       ) : null}
       {climb.notes ? (
-        <Text style={[styles.notes, { color: colors.textSecondary }]} numberOfLines={compact ? 2 : undefined}>
-          {climb.notes}
-        </Text>
+        <View>
+          {/* Training cards label both blocks (ROUTINE above) so they read apart */}
+          {isTraining && <Text style={[styles.routineLabel, { color: colors.textMuted }]}>NOTES</Text>}
+          <Text style={[styles.notes, { color: colors.textSecondary }]} numberOfLines={compact ? 2 : undefined}>
+            {climb.notes}
+          </Text>
+        </View>
       ) : null}
       <View style={styles.bottomRow}>
         <Text style={[styles.date, { color: colors.textMuted }]}>{dateStr}</Text>
