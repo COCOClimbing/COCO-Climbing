@@ -68,7 +68,9 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
         </View>
       )}
       {routine ? (
-        <View style={styles.routineBlock}>
+        <View style={[styles.routineBlock, climb.notes ? styles.routineBlockBeforeNotes : null]}>
+          {/* Labelled so the exercise list doesn't read as part of the notes below it */}
+          <Text style={[styles.routineLabel, { color: colors.textMuted }]}>ROUTINE</Text>
           <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={expandRoutine ? undefined : 2}>{routine}</Text>
           {showRoutineLink && !expandRoutine && onPress ? (
             <Text style={[styles.routineLink, { color: colors.accent }]}>View routine ›</Text>
@@ -123,6 +125,8 @@ const styles = StyleSheet.create({
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   notes: { fontSize: FONTS.sizes.sm, marginBottom: SPACING.xs, lineHeight: 18 },
   routineBlock: { marginBottom: SPACING.xs },
+  routineBlockBeforeNotes: { marginBottom: SPACING.sm },
+  routineLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, letterSpacing: 0.8, marginBottom: 3 },
   routinePreview: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 18 },
   routineLink: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold, marginTop: 4 },
   attempts: { fontSize: FONTS.sizes.xs },

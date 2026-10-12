@@ -124,8 +124,9 @@ export default function ActivityCard({
   async function handleToggleClimbs() {
     if (climbsExpanded) { setClimbsExpanded(false); return; }
     setClimbsExpanded(true);
-    if (expandedClimbs !== null) return;
-    setLoadingClimbs(true);
+    // Refetch on every open so edits made since (e.g. a routine) show up; keep the
+    // previous list on screen meanwhile rather than flashing "Loading…"
+    if (expandedClimbs === null) setLoadingClimbs(true);
     try {
       const fetched = await getFriendRecentClimbs(entry.friend.id, daysBack);
       const normDate = (d: string) => (d ?? '').slice(0, 10);

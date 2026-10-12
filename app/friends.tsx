@@ -963,6 +963,8 @@ export default function FriendsScreen() {
 
   async function loadFeed(days: number = daysLoaded, showLoading: boolean = true): Promise<number> {
     if (!user) return 0;
+    // Friends' climbs are cached per session; drop them so a reload shows edits
+    setSessionClimbsMap({});
     if (showLoading) setLoadingFeed(true);
     try {
       const normDate = (d: string) => (d ?? '').slice(0, 10);
@@ -1448,7 +1450,9 @@ export default function FriendsScreen() {
       return;
     }
     setExpandedSessionKey(sessionKey);
-    if (!sessionClimbsMap[sessionKey]) {
+    // Own sessions always re-read local storage (cheap, and the cached copy goes
+    // stale as soon as a climb is edited — e.g. a routine added after first viewing)
+    if (!sessionClimbsMap[sessionKey] || entry.friend.id === user?.id) {
       setLoadingClimbsFor(sessionKey);
       try {
         let mapped: any[];
@@ -1500,7 +1504,7 @@ export default function FriendsScreen() {
 
   async function handleOpenSession(entry: SessionSummary) {
     const sessionKey = entry.sessionId ? `sid-${entry.sessionId}` : `fid-${entry.friend.id}|${entry.sessionDate}`;
-    let climbs = sessionClimbsMap[sessionKey];
+    let climbs = entry.friend.id === user?.id ? undefined : sessionClimbsMap[sessionKey];
     if (!climbs) {
       setLoadingClimbsFor(sessionKey);
       try {
