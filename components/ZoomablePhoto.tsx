@@ -14,6 +14,9 @@ interface Props {
   progress?: Animated.Value;
   // Where the photo's thumbnail is on screen; it settles back there on dismiss.
   getOrigin?: () => Promise<Rect | null>;
+  // Viewer-owned 0→1 value it uses to clip the photo to the thumbnail's scroll
+  // area; animated to 1 alongside the landing so it slides under headers/tab bars.
+  clip?: Animated.Value;
 }
 
 const MAX_ZOOM = 4;
@@ -26,7 +29,7 @@ const IMAGE_HEIGHT_RATIO = 0.8; // photo is fit into this much of the screen hei
 // zoomed, double-tap to zoom in on that spot / back out, drag down to shrink and
 // dismiss when not zoomed. Sits inside the viewer's horizontal paging ScrollView;
 // iOS hands the swipe to the pager at the image edge.
-export default function ZoomablePhoto({ uri, width, height, onDismiss, progress, getOrigin }: Props) {
+export default function ZoomablePhoto({ uri, width, height, onDismiss, progress, getOrigin, clip }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [zoomed, setZoomed] = useState(false);
   const imageSize = useRef<{ width: number; height: number } | null>(null);
@@ -61,12 +64,13 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
     return r > boxW / boxH ? { width: boxW, height: boxW / r } : { width: boxH * r, height: boxH };
   };
 
-  const settle = (toX: number, toY: number, toScale: number, toProgress: number, done?: () => void) => {
+  const settle = (toX: number, toY: number, toScale: number, toProgress: number, done?: () => void, clipTo?: number) => {
     const anim = (v: Animated.Value, toValue: number) =>
       Animated.timing(v, { toValue, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true });
     Animated.parallel([
       anim(tx, toX), anim(ty, toY), anim(scale, toScale),
       ...(progress ? [anim(progress, toProgress)] : []),
+      ...(clip && clipTo !== undefined ? [anim(clip, clipTo)] : []),
     ]).start(done);
   };
 
@@ -76,7 +80,7 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
       // Land the photo on its thumbnail: centre on it, scaled to cover it
       const shown = displayedSize();
       const s = Math.max(origin.width / shown.width, origin.height / shown.height);
-      settle(origin.x + origin.width / 2 - width / 2, origin.y + origin.height / 2 - height / 2, s, 1, onDismiss);
+      settle(origin.x + origin.width / 2 - width / 2, origin.y + origin.height / 2 - height / 2, s, 1, onDismiss, 1);
     } else {
       // Thumbnail not on screen — just drop it out the bottom
       settle(0, height * 0.6, 0.55, 1, onDismiss);

@@ -75,7 +75,7 @@ import {
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
-import PhotoViewer, { usePhotoOrigins } from '../components/PhotoViewer';
+import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -195,6 +195,7 @@ function FriendDetailView({
   const { navigateToSession, viewFriendProfile } = useNav();
   const handleViewProfile = onViewProfile ?? viewFriendProfile;
   const isSelf = user?.id === friend.id;
+  const scrollRef = useRef<ScrollView>(null);
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
@@ -415,7 +416,9 @@ function FriendDetailView({
         </TouchableOpacity>
       </View>
 
+      <PhotoClipContext.Provider value={scrollRef}>
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={detailStyles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -621,6 +624,7 @@ function FriendDetailView({
           </View>
         )}
       </ScrollView>
+      </PhotoClipContext.Provider>
 
       {/* Followers / Following list sheet */}
       <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
@@ -902,6 +906,7 @@ export default function FriendsScreen() {
   // Share state
   const [shareEntry, setShareEntry] = useState<SessionSummary | null>(null);
   const feedScrollRef = useRef<ScrollView>(null);
+  const sessionDetailScrollRef = useRef<ScrollView>(null);
   const feedScrollY = useRef(0);
   const everLoadedFeedRef = useRef(false);
   const canTriggerLoadMoreRef = useRef(true);
@@ -1792,7 +1797,7 @@ export default function FriendsScreen() {
   }
 
   const photoViewerModal = viewerVisible ? (
-    <PhotoViewer uris={viewerPhotos} initialIndex={viewerIndex} origins={photoOrigins} onClose={() => setViewerVisible(false)} />
+    <PhotoViewer uris={viewerPhotos} initialIndex={viewerIndex} origins={photoOrigins} clipTo={viewingSession ? sessionDetailScrollRef : feedScrollRef} onClose={() => setViewerVisible(false)} />
   ) : null;
 
   // Show session detail full-screen
@@ -1816,7 +1821,7 @@ export default function FriendsScreen() {
             <Text style={[styles.detailBackTxt, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={styles.detailContent}>
+        <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={styles.detailContent}>
           {/* Header */}
           <View style={styles.detailHeader}>
             <ProfileAvatar

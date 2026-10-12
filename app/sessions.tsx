@@ -29,7 +29,7 @@ import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
-import PhotoViewer, { usePhotoOrigins } from '../components/PhotoViewer';
+import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
@@ -1313,7 +1313,7 @@ export default function SessionsScreen() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const photoViewerModal = viewerVisible ? (
-    <PhotoViewer uris={viewerUris} initialIndex={viewerIndex} origins={photoOrigins} onClose={() => setViewerVisible(false)} />
+    <PhotoViewer uris={viewerUris} initialIndex={viewerIndex} origins={photoOrigins} clipTo={detailScrollRef} onClose={() => setViewerVisible(false)} />
   ) : null;
 
   return (
@@ -1345,6 +1345,7 @@ export default function SessionsScreen() {
               </TouchableOpacity>
             </View>
 
+            <PhotoClipContext.Provider value={sessionsScrollRef}>
             <ScrollView
               ref={sessionsScrollRef}
               contentContainerStyle={styles.list}
@@ -1370,6 +1371,7 @@ export default function SessionsScreen() {
                 </View>
               ))}
             </ScrollView>
+            </PhotoClipContext.Provider>
           </>
         )}
 

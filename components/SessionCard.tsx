@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
 } from 'react-native';
@@ -14,7 +14,7 @@ import {
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
-import PhotoViewer, { usePhotoOrigins } from './PhotoViewer';
+import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 
 const PHOTO_HEIGHT = 220;
 
@@ -202,6 +202,7 @@ export default function SessionCard({
 
   const [viewerUris, setViewerUris] = useState<string[] | null>(null);
   const { origins: photoOrigins, register: registerPhoto } = usePhotoOrigins();
+  const photoClip = useContext(PhotoClipContext);
   const [viewerIndex, setViewerIndex] = useState(0);
 
   const visibleComments = commentsExpanded ? sessionComments : sessionComments.slice(0, 3);
@@ -407,6 +408,7 @@ export default function SessionCard({
           uris={viewerUris}
           initialIndex={viewerIndex}
           origins={photoOrigins}
+          clipTo={photoClip}
           onClose={() => setViewerUris(null)}
         />
       )}

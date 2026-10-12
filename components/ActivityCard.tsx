@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
 } from 'react-native';
@@ -19,7 +19,7 @@ import {
 } from '../utils/friendsApi';
 import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
 import { reportContent } from '../utils/moderationApi';
-import PhotoViewer, { usePhotoOrigins } from './PhotoViewer';
+import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 
 const PHOTO_HEIGHT = 220;
 
@@ -250,6 +250,7 @@ export default function ActivityCard({
 
   const [viewerUris, setViewerUris] = useState<string[] | null>(null);
   const { origins: photoOrigins, register: registerPhoto } = usePhotoOrigins();
+  const photoClip = useContext(PhotoClipContext);
   const [viewerIndex, setViewerIndex] = useState(0);
 
   const visibleComments = commentsExpanded ? sessionComments : sessionComments.slice(0, 3);
@@ -474,6 +475,7 @@ export default function ActivityCard({
           uris={viewerUris}
           initialIndex={viewerIndex}
           origins={photoOrigins}
+          clipTo={photoClip}
           onClose={() => setViewerUris(null)}
         />
       )}
