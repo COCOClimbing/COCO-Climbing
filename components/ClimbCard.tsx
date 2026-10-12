@@ -13,9 +13,12 @@ interface Props {
   // Show "View routine ›" under a lift/hangboard routine preview. Only pass this
   // where onPress opens the climb detail sheet (not the edit form).
   showRoutineLink?: boolean;
+  // Show the whole routine instead of a 2-line preview + link. Used when a
+  // session has only lift/hangboard entries, so there's nothing to scroll past.
+  expandRoutine?: boolean;
 }
 
-export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts, showRoutineLink }: Props) {
+export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts, showRoutineLink, expandRoutine }: Props) {
   const { colors } = useTheme();
   const typeInfo = CLIMB_TYPES.find(t => t.id === climb.type);
   const dateStr = format(parseISO(climb.date), compact ? 'MMM d' : 'EEE, MMM d · h:mm a');
@@ -66,8 +69,8 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
       )}
       {routine ? (
         <View style={styles.routineBlock}>
-          <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={2}>{routine}</Text>
-          {showRoutineLink && onPress ? (
+          <Text style={[styles.routinePreview, { color: colors.textPrimary }]} numberOfLines={expandRoutine ? undefined : 2}>{routine}</Text>
+          {showRoutineLink && !expandRoutine && onPress ? (
             <Text style={[styles.routineLink, { color: colors.accent }]}>View routine ›</Text>
           ) : null}
         </View>

@@ -14,6 +14,7 @@ import {
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
+import ZoomablePhoto from './ZoomablePhoto';
 
 const PHOTO_HEIGHT = 220;
 
@@ -444,9 +445,7 @@ function SessionCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string[
             style={{ flex: 1 }}
           >
             {uris.map((uri, i) => (
-              <View key={i} style={{ width: screenWidth, height: screenHeight, justifyContent: 'center', alignItems: 'center' }}>
-                <Image source={{ uri }} style={{ width: screenWidth, height: screenHeight * 0.8 }} resizeMode="contain" />
-              </View>
+              <ZoomablePhoto key={i} uri={uri} width={screenWidth} height={screenHeight} />
             ))}
           </ScrollView>
         </View>

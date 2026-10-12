@@ -75,6 +75,7 @@ import {
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
+import ZoomablePhoto from '../components/ZoomablePhoto';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1828,9 +1829,7 @@ export default function FriendsScreen() {
           style={{ flex: 1 }}
         >
           {viewerPhotos.map((uri, i) => (
-            <View key={i} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
-              <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }} resizeMode="contain" />
-            </View>
+            <ZoomablePhoto key={i} uri={uri} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
           ))}
         </ScrollView>
         {viewerPhotos.length > 1 && (
@@ -1934,7 +1933,7 @@ export default function FriendsScreen() {
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
-            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact showRoutineLink onPress={() => setDetailClimb(c)} />)
+            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact showRoutineLink expandRoutine={!!trainingKind(climbs)} onPress={() => setDetailClimb(c)} />)
           }
         </ScrollView>
         {photoViewerModal}

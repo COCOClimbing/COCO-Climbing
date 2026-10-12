@@ -27,8 +27,9 @@ import MiniCalendar from '../components/MiniCalendar';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
-import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
+import ZoomablePhoto from '../components/ZoomablePhoto';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
@@ -1192,6 +1193,7 @@ export default function SessionsScreen() {
                   climb={c}
                   compact
                   showRoutineLink
+                  expandRoutine={!!trainingKind(displayClimbs)}
                   onPress={() => setDetailClimb(c)}
                 />
               </SwipeToDelete>
@@ -1355,9 +1357,7 @@ export default function SessionsScreen() {
           style={{ flex: 1 }}
         >
           {viewerUris.map((uri, i) => (
-            <View key={i} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
-              <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }} resizeMode="contain" />
-            </View>
+            <ZoomablePhoto key={i} uri={uri} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
           ))}
         </ScrollView>
         {viewerUris.length > 1 && (

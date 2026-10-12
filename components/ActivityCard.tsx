@@ -5,7 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
-import { defaultSessionTitle } from '../utils/sessionHelpers';
+import { defaultSessionTitle, trainingKind } from '../utils/sessionHelpers';
 import ClimbDetailModal from './ClimbDetailModal';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
@@ -19,6 +19,7 @@ import {
 } from '../utils/friendsApi';
 import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
 import { reportContent } from '../utils/moderationApi';
+import ZoomablePhoto from './ZoomablePhoto';
 
 const PHOTO_HEIGHT = 220;
 
@@ -379,7 +380,7 @@ export default function ActivityCard({
           ) : !expandedClimbs || expandedClimbs.length === 0 ? (
             <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
           ) : (
-            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact showRoutineLink onPress={() => setDetailClimb(c)} />)
+            expandedClimbs.map(c => <ClimbCard key={c.id} climb={c} compact showRoutineLink expandRoutine={!!trainingKind(expandedClimbs)} onPress={() => setDetailClimb(c)} />)
           )}
         </View>
       )}
@@ -512,9 +513,7 @@ function ActivityCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string
             style={{ flex: 1 }}
           >
             {uris.map((uri, i) => (
-              <View key={i} style={{ width: screenWidth, height: screenHeight, justifyContent: 'center', alignItems: 'center' }}>
-                <Image source={{ uri }} style={{ width: screenWidth, height: screenHeight * 0.8 }} resizeMode="contain" />
-              </View>
+              <ZoomablePhoto key={i} uri={uri} width={screenWidth} height={screenHeight} />
             ))}
           </ScrollView>
         </View>
