@@ -19,11 +19,11 @@ import {
 } from '../utils/friendsApi';
 import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
 import { reportContent } from '../utils/moderationApi';
-import ZoomablePhoto from './ZoomablePhoto';
+import PhotoViewer, { usePhotoOrigins } from './PhotoViewer';
 
 const PHOTO_HEIGHT = 220;
 
-function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidth?: number; onPress: () => void }) {
+function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
   const [failed, setFailed] = useState(false);
 
@@ -39,7 +39,7 @@ function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidt
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+      <View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
         <Image
           source={{ uri }}
           style={{ width: imgWidth, height: PHOTO_HEIGHT }}
@@ -249,6 +249,7 @@ export default function ActivityCard({
   }
 
   const [viewerUris, setViewerUris] = useState<string[] | null>(null);
+  const { origins: photoOrigins, register: registerPhoto } = usePhotoOrigins();
   const [viewerIndex, setViewerIndex] = useState(0);
 
   const visibleComments = commentsExpanded ? sessionComments : sessionComments.slice(0, 3);
@@ -356,6 +357,7 @@ export default function ActivityCard({
               key={i}
               uri={uri}
               initialWidth={entry.photoWidths?.[uri]}
+              viewRef={registerPhoto(uri)}
               onPress={() => { setViewerUris(entry.sessionPhotos!); setViewerIndex(i); }}
             />
           ))}
@@ -468,56 +470,14 @@ export default function ActivityCard({
 
       {/* Photo viewer for this card's media */}
       {viewerUris && (
-        <ActivityCardPhotoViewer
+        <PhotoViewer
           uris={viewerUris}
           initialIndex={viewerIndex}
+          origins={photoOrigins}
           onClose={() => setViewerUris(null)}
         />
       )}
       <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />
-    </View>
-  );
-}
-
-function ActivityCardPhotoViewer({ uris, initialIndex, onClose }: { uris: string[]; initialIndex: number; onClose: () => void }) {
-  const [index, setIndex] = useState(initialIndex);
-  const scrollRef = useRef<ScrollView>(null);
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      scrollRef.current?.scrollTo({ x: initialIndex * screenWidth, animated: false });
-    }, 30);
-    return () => clearTimeout(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <View style={StyleSheet.absoluteFillObject}>
-      <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
-          <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
-          </TouchableOpacity>
-          {uris.length > 1 && (
-            <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>{index + 1} / {uris.length}</Text>
-            </View>
-          )}
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={e => setIndex(Math.round(e.nativeEvent.contentOffset.x / screenWidth))}
-            style={{ flex: 1 }}
-          >
-            {uris.map((uri, i) => (
-              <ZoomablePhoto key={i} uri={uri} width={screenWidth} height={screenHeight} />
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 }

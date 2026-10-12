@@ -75,7 +75,7 @@ import {
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
-import ZoomablePhoto from '../components/ZoomablePhoto';
+import PhotoViewer, { usePhotoOrigins } from '../components/PhotoViewer';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ const avatarStyles = StyleSheet.create({
 
 const PHOTO_HEIGHT = 220;
 
-function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidth?: number; onPress: () => void }) {
+function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
   const [failed, setFailed] = useState(false);
 
@@ -147,7 +147,7 @@ function NaturalPhoto({ uri, initialWidth, onPress }: { uri: string; initialWidt
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+      <View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
         <Image
           source={{ uri }}
           style={{ width: imgWidth, height: PHOTO_HEIGHT }}
@@ -895,9 +895,9 @@ export default function FriendsScreen() {
   const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const { origins: photoOrigins, register: registerPhoto } = usePhotoOrigins();
   // Climb/lift/hang opened from a session's detail view (read-only)
   const [detailClimb, setDetailClimb] = useState<any | null>(null);
-  const viewerScrollRef = useRef<ScrollView>(null);
 
   // Share state
   const [shareEntry, setShareEntry] = useState<SessionSummary | null>(null);
@@ -946,14 +946,6 @@ export default function FriendsScreen() {
     setReturnTo(null);
   }, [friendsOpen]);
 
-  // Scroll photo viewer to the tapped photo once the modal has laid out
-  useEffect(() => {
-    if (!viewerVisible) return;
-    const t = setTimeout(() => {
-      viewerScrollRef.current?.scrollTo({ x: viewerIndex * SCREEN_WIDTH, animated: false });
-    }, 30);
-    return () => clearTimeout(t);
-  }, [viewerVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardWillShow', e => setKeyboardHeight(e.endCoordinates.height));
@@ -1799,49 +1791,9 @@ export default function FriendsScreen() {
     );
   }
 
-  const photoViewerModal = (
-    <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)} statusBarTranslucent>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
-        <TouchableOpacity
-          onPress={() => setViewerVisible(false)}
-          style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
-        </TouchableOpacity>
-        {viewerPhotos.length > 1 && (
-          <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
-              {viewerIndex + 1} / {viewerPhotos.length}
-            </Text>
-          </View>
-        )}
-        <ScrollView
-          ref={viewerScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={e => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-            setViewerIndex(idx);
-          }}
-          style={{ flex: 1 }}
-        >
-          {viewerPhotos.map((uri, i) => (
-            <ZoomablePhoto key={i} uri={uri} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
-          ))}
-        </ScrollView>
-        {viewerPhotos.length > 1 && (
-          <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
-            {viewerPhotos.map((_, i) => (
-              <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
-            ))}
-          </View>
-        )}
-      </View>
-    </Modal>
-  );
+  const photoViewerModal = viewerVisible ? (
+    <PhotoViewer uris={viewerPhotos} initialIndex={viewerIndex} origins={photoOrigins} onClose={() => setViewerVisible(false)} />
+  ) : null;
 
   // Show session detail full-screen
   if (viewingSession) {
@@ -1926,7 +1878,7 @@ export default function FriendsScreen() {
               contentContainerStyle={styles.photoStripContent}
             >
               {entry.sessionPhotos.map((uri, i) => (
-                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
             </ScrollView>
           )}
@@ -2113,7 +2065,7 @@ export default function FriendsScreen() {
                     contentContainerStyle={styles.photoStripContent}
                   >
                     {entry.sessionPhotos.map((uri, i) => (
-                      <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+                      <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
                   </ScrollView>
                 )}

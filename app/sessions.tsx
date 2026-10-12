@@ -29,7 +29,7 @@ import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard from '../components/SessionCard';
-import ZoomablePhoto from '../components/ZoomablePhoto';
+import PhotoViewer, { usePhotoOrigins } from '../components/PhotoViewer';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
@@ -114,7 +114,7 @@ export default function SessionsScreen() {
   const [viewerUris, setViewerUris] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
-  const viewerScrollRef = useRef<ScrollView>(null);
+  const { origins: photoOrigins, register: registerPhoto } = usePhotoOrigins();
   const notesInputValue = useRef('');
   const [listScrollEnabled, setListScrollEnabled] = useState(true);
   const pendingSessionId = useRef<string | null>(null);
@@ -163,15 +163,6 @@ export default function SessionsScreen() {
     setSessionFriends(selectedDay?.friends ?? []);
   }, [selectedDay?.sessionId, selectedDay?.friends]);
 
-  // Scroll photo viewer to the tapped photo once the modal has laid out
-  useEffect(() => {
-    if (!viewerVisible) return;
-    const t = setTimeout(() => {
-      const sw = Dimensions.get('window').width;
-      viewerScrollRef.current?.scrollTo({ x: viewerIndex * sw, animated: false });
-    }, 30);
-    return () => clearTimeout(t);
-  }, [viewerVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const todayISO = getTodayISO();
   const selectedDayRef = useRef<DaySession | null>(null);
@@ -1010,7 +1001,7 @@ export default function SessionsScreen() {
                     delayLongPress={400}
                     style={{ marginRight: SPACING.sm }}
                   >
-                    <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                    <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -1275,7 +1266,7 @@ export default function SessionsScreen() {
                     delayLongPress={400}
                     style={{ marginRight: SPACING.sm }}
                   >
-                    <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                    <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -1321,55 +1312,9 @@ export default function SessionsScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const photoViewerModal = (
-    <Modal
-      visible={viewerVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setViewerVisible(false)}
-      statusBarTranslucent
-    >
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' }}>
-        <TouchableOpacity
-          onPress={() => setViewerVisible(false)}
-          style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 6 }}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={26} color="rgba(255,255,255,0.9)" />
-        </TouchableOpacity>
-        {viewerUris.length > 1 && (
-          <View style={{ position: 'absolute', top: 58, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium }}>
-              {viewerIndex + 1} / {viewerUris.length}
-            </Text>
-          </View>
-        )}
-        <ScrollView
-          ref={viewerScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={e => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-            setViewerIndex(idx);
-          }}
-          style={{ flex: 1 }}
-        >
-          {viewerUris.map((uri, i) => (
-            <ZoomablePhoto key={i} uri={uri} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
-          ))}
-        </ScrollView>
-        {viewerUris.length > 1 && (
-          <View style={{ flexDirection: 'row', justifyContent: 'center', paddingBottom: 48, gap: 6 }}>
-            {viewerUris.map((_, i) => (
-              <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: i === viewerIndex ? 'white' : 'rgba(255,255,255,0.35)' }} />
-            ))}
-          </View>
-        )}
-      </View>
-    </Modal>
-  );
+  const photoViewerModal = viewerVisible ? (
+    <PhotoViewer uris={viewerUris} initialIndex={viewerIndex} origins={photoOrigins} onClose={() => setViewerVisible(false)} />
+  ) : null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
