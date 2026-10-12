@@ -252,6 +252,42 @@ export async function syncClimbToCloud(climb: Climb, userId: string): Promise<vo
   }
 }
 
+// Media edits found by an upload pass, per climb id: local uri → uploaded URL, and
+// local uris whose files are gone.
+type MediaPatch = { uploaded: Map<string, string>; dropped: Set<string> };
+
+// Apply media patches to the *current* stored climbs, touching only media fields.
+// Uploads take seconds; the climb may have been edited meanwhile (routine, notes…),
+// and writing back the snapshot taken before the upload silently undid those edits.
+// Climbs deleted during the upload are skipped rather than resurrected.
+async function applyClimbMediaPatches(patches: Map<string, MediaPatch>): Promise<Climb[]> {
+  const latest = await getAllClimbs();
+  const patched: Climb[] = [];
+  for (const c of latest) {
+    const p = patches.get(c.id);
+    if (!p) continue;
+    const uris = c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : []);
+    const types = c.mediaTypes ?? (c.mediaType ? [c.mediaType] : uris.map(() => 'photo' as const));
+    const newUris: string[] = [];
+    const newTypes: ('photo' | 'video')[] = [];
+    uris.forEach((uri, i) => {
+      if (p.dropped.has(uri)) return;
+      newUris.push(p.uploaded.get(uri) ?? uri);
+      newTypes.push(types[i] ?? 'photo');
+    });
+    const updated: Climb = {
+      ...c,
+      mediaUris: newUris.length ? newUris : undefined,
+      mediaTypes: newUris.length ? newTypes : undefined,
+      mediaUri: newUris[0],
+      mediaType: newTypes[0],
+    };
+    patched.push(updated);
+  }
+  if (patched.length > 0) await bulkSaveClimbs(patched);
+  return patched;
+}
+
 async function uploadClimbMedia(climb: Climb, userId: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
@@ -261,41 +297,28 @@ async function uploadClimbMedia(climb: Climb, userId: string): Promise<void> {
 
   const uris = climb.mediaUris ?? (climb.mediaUri ? [climb.mediaUri] : []);
   const types = climb.mediaTypes ?? (climb.mediaType ? [climb.mediaType] : uris.map(() => 'photo' as const));
-  const newUris: string[] = [];
-  const newTypes: ('photo' | 'video')[] = [];
-  let changed = false;
+  const uploaded = new Map<string, string>();
 
   for (let i = 0; i < uris.length; i++) {
     const uri = uris[i];
     const type: 'photo' | 'video' = types[i] ?? 'photo';
-    if (uri.startsWith('http')) {
-      newUris.push(uri);
-      newTypes.push(type);
-      continue;
-    }
+    if (uri.startsWith('http')) continue;
     try {
       const ext = type === 'video' ? 'mp4' : 'jpg';
       const path = `${userId}/${climb.id}_${i}.${ext}`;
-      const url = await uploadMedia(uri, path, session.access_token);
-      newUris.push(url);
-      newTypes.push(type);
-      changed = true;
+      uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
     } catch {
-      newUris.push(uri);
-      newTypes.push(type);
+      // Keep the local uri; reuploadMissingMedia retries on a later launch
     }
   }
 
-  const updatedClimb: Climb = changed
-    ? { ...climb, mediaUris: newUris, mediaTypes: newTypes, mediaUri: newUris[0], mediaType: newTypes[0] }
-    : climb;
+  // Sync whatever is stored now (with the new URLs), not the pre-upload snapshot
+  const latest = uploaded.size > 0
+    ? (await applyClimbMediaPatches(new Map([[climb.id, { uploaded, dropped: new Set<string>() }]])))[0]
+    : (await getAllClimbs()).find(c => c.id === climb.id);
+  if (!latest) return; // deleted while uploading
 
-  if (changed) {
-    const { saveClimb } = await import('./storage');
-    await saveClimb(updatedClimb);
-  }
-
-  await supabase.from('climbs').upsert(climbToRow(updatedClimb, userId), { onConflict: 'id' });
+  await supabase.from('climbs').upsert(climbToRow(latest, userId), { onConflict: 'id' });
 }
 
 export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
@@ -327,7 +350,8 @@ export async function deleteClimbFromCloud(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function syncSessionToCloud(session: Session, userId: string): Promise<void> {
+export async function syncSessionToCloud(sessionArg: Session, userId: string): Promise<void> {
+  let session = sessionArg;
   const uris = session.mediaUris ?? (session.mediaUri ? [session.mediaUri] : []);
   const hasLocalMedia = uris.some(u => !u.startsWith('http'));
 
@@ -337,25 +361,29 @@ export async function syncSessionToCloud(session: Session, userId: string): Prom
   if (hasLocalMedia) {
     const { data: { session: authSession } } = await supabase.auth.getSession();
     if (authSession) {
-      const newUris: string[] = [];
-      const newTypes: ('photo' | 'video')[] = [];
-      let changed = false;
+      const uploaded = new Map<string, string>();
       for (let i = 0; i < uris.length; i++) {
         const uri = uris[i];
         const type: 'photo' | 'video' = mediaTypes[i] ?? 'photo';
-        if (uri.startsWith('http')) { newUris.push(uri); newTypes.push(type); continue; }
+        if (uri.startsWith('http')) continue;
         try {
           const ext = type === 'video' ? 'mp4' : 'jpg';
           const path = `${userId}/session_${session.id}_${i}.${ext}`;
-          const url = await uploadMedia(uri, path, authSession.access_token);
-          newUris.push(url); newTypes.push(type); changed = true;
-        } catch { newUris.push(uri); newTypes.push(type); }
+          uploaded.set(uri, await uploadMedia(uri, path, authSession.access_token));
+        } catch { /* keep the local uri for the next attempt */ }
       }
-      if (changed) {
-        mediaUris = newUris;
-        mediaTypes = newTypes;
-        const { saveSession } = await import('./storage');
-        await saveSession({ ...session, mediaUris: newUris, mediaTypes: newTypes, mediaUri: newUris[0], mediaType: newTypes[0] });
+      if (uploaded.size > 0) {
+        // Patch the session as stored *now* (media only) — writing back the copy
+        // taken before the upload would undo title/notes/location edits made
+        // while it ran. Then sync that fresh copy.
+        const { getAllSessions } = await import('./storage');
+        const fresh = (await getAllSessions()).find(s => s.id === session.id);
+        if (!fresh) return; // deleted while uploading
+        const freshUris = fresh.mediaUris ?? (fresh.mediaUri ? [fresh.mediaUri] : []);
+        mediaUris = freshUris.map(u => uploaded.get(u) ?? u);
+        mediaTypes = freshUris.map((_, i) => fresh.mediaTypes?.[i] ?? fresh.mediaType ?? 'photo');
+        session = { ...fresh, mediaUris, mediaTypes, mediaUri: mediaUris[0], mediaType: mediaTypes[0] };
+        await bulkSaveSessions([session]);
         triggerFeedRefresh();
       }
     }
@@ -532,133 +560,115 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
   if (!session) return;
 
   const climbs = await getAllClimbs();
-  // Climbs with new R2 URLs → sync to DB and local.
-  const climbsToSyncDB: Climb[] = [];
-  // Climbs where stale file:// paths were dropped but no new R2 URLs produced
-  // — only update local so the DB R2 URL is preserved for mergeData backfill.
-  const climbsToSyncLocalOnly: Climb[] = [];
+  const patches = new Map<string, MediaPatch>();
+  // Climbs that got new R2 URLs go to the DB too. Ones that only dropped stale
+  // file:// paths stay local, so the DB's R2 URL survives for mergeData backfill.
+  const uploadedIds = new Set<string>();
 
   for (const climb of climbs) {
     const uris = climb.mediaUris ?? (climb.mediaUri ? [climb.mediaUri] : []);
     if (uris.length === 0) continue;
     if (uris.every(u => u.startsWith('http'))) continue; // already uploaded
 
-    const newUris: string[] = [];
-    const newTypes: ('photo' | 'video')[] = [];
-    let uploaded = false;
-    let droppedStale = false;
-
+    const patch: MediaPatch = { uploaded: new Map(), dropped: new Set() };
     for (let i = 0; i < uris.length; i++) {
       const uri = uris[i];
+      if (uri.startsWith('http')) continue;
       const type: 'photo' | 'video' = climb.mediaTypes?.[i] ?? climb.mediaType ?? 'photo';
-
-      if (uri.startsWith('http')) {
-        newUris.push(uri);
-        newTypes.push(type);
-        continue;
-      }
 
       // Drop file:// paths whose local file no longer exists so mergeData can
       // backfill the R2 URL from DB rather than keeping a stale reference.
       const info = await FileSystem.getInfoAsync(uri).catch(() => ({ exists: false }));
-      if (!info.exists) { droppedStale = true; continue; }
+      if (!info.exists) { patch.dropped.add(uri); continue; }
 
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/${climb.id}_${i}.${ext}`;
-        const url = await uploadMedia(uri, path, session.access_token);
-        newUris.push(url);
-        newTypes.push(type);
-        uploaded = true;
+        patch.uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
       } catch {
-        newUris.push(uri);
-        newTypes.push(type);
+        // keep the local uri for the next attempt
       }
     }
+    if (patch.uploaded.size > 0) uploadedIds.add(climb.id);
+    if (patch.uploaded.size > 0 || patch.dropped.size > 0) patches.set(climb.id, patch);
+  }
 
-    const updated = {
-      ...climb,
-      mediaUris: newUris.length ? newUris : undefined,
-      mediaTypes: newUris.length ? newTypes : undefined,
-      mediaUri: newUris[0],
-      mediaType: newTypes[0],
-    };
-    if (uploaded) {
-      climbsToSyncDB.push(updated);
-    } else if (droppedStale) {
-      climbsToSyncLocalOnly.push(updated);
+  // Patch the climbs as stored *now*: this pass can run for a while at launch and
+  // the user may edit climbs meanwhile — saving the list read above undid those edits.
+  if (patches.size > 0) {
+    const patched = await applyClimbMediaPatches(patches);
+    const toSyncDB = patched.filter(c => uploadedIds.has(c.id));
+    if (toSyncDB.length > 0) {
+      await supabase.from('climbs').upsert(
+        toSyncDB.map(c => climbToRow(c, userId)),
+        { onConflict: 'id' }
+      );
     }
-  }
-
-  const allClimbsToSave = [...climbsToSyncDB, ...climbsToSyncLocalOnly];
-  if (allClimbsToSave.length > 0) {
-    const updatedMap = new Map(allClimbsToSave.map(c => [c.id, c]));
-    await bulkSaveClimbs(climbs.map(c => updatedMap.get(c.id) ?? c));
-  }
-  if (climbsToSyncDB.length > 0) {
-    await supabase.from('climbs').upsert(
-      climbsToSyncDB.map(c => climbToRow(c, userId)),
-      { onConflict: 'id' }
-    );
   }
 
   // ── Upload session-level media ──────────────────────────────────────────────
   const { getAllSessions, bulkSaveSessions } = await import('./storage');
   const sessions = await getAllSessions();
-  // Sessions that now have R2 URLs → sync to DB and local.
-  const sessionsToSyncDB: Session[] = [];
-  // Sessions where stale file:// paths were dropped but no new R2 URLs were
-  // produced — only update local so mergeData can backfill from DB without
-  // wiping the R2 URL that may still exist in the DB row.
-  const sessionsToSyncLocalOnly: Session[] = [];
+  // Sessions that now have R2 URLs (or already did) → sync media to DB too.
+  // Sessions that only dropped stale file:// paths stay local, so mergeData can
+  // backfill from the R2 URL that may still exist in the DB row.
+  const syncDBIds = new Set<string>();
+  const sessionPatches = new Map<string, MediaPatch>();
 
   for (const s of sessions) {
     const uris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
     if (uris.length === 0) continue;
     if (uris.every(u => u.startsWith('http'))) {
       // Already uploaded locally — make sure Supabase row has the http:// URIs.
-      sessionsToSyncDB.push(s);
+      syncDBIds.add(s.id);
       continue;
     }
 
-    const newUris: string[] = [];
-    const newTypes: ('photo' | 'video')[] = [];
-    let uploaded = false;
-    let droppedStale = false;
+    const patch: MediaPatch = { uploaded: new Map(), dropped: new Set() };
 
     for (let i = 0; i < uris.length; i++) {
       const uri = uris[i];
       const type: 'photo' | 'video' = s.mediaTypes?.[i] ?? s.mediaType ?? 'photo';
-      if (uri.startsWith('http')) { newUris.push(uri); newTypes.push(type); continue; }
+      if (uri.startsWith('http')) continue;
 
       // Drop file:// paths whose local file no longer exists so mergeData can
       // backfill the R2 URL from DB rather than keeping a stale reference.
       const info = await FileSystem.getInfoAsync(uri).catch(() => ({ exists: false }));
-      if (!info.exists) { droppedStale = true; continue; }
+      if (!info.exists) { patch.dropped.add(uri); continue; }
 
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/session_${s.id}_${i}.${ext}`;
-        const url = await uploadMedia(uri, path, session.access_token);
-        newUris.push(url); newTypes.push(type); uploaded = true;
-      } catch { newUris.push(uri); newTypes.push(type); }
+        patch.uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
+      } catch { /* keep the local uri for the next attempt */ }
     }
 
-    const updated = { ...s, mediaUris: newUris.length ? newUris : undefined, mediaTypes: newUris.length ? newTypes : undefined, mediaUri: newUris[0], mediaType: newTypes[0] };
-    if (uploaded) {
-      sessionsToSyncDB.push(updated);
-    } else if (droppedStale) {
-      // Only clean up local — do NOT touch DB so the existing R2 URL there
-      // is preserved for mergeData's backfill step.
-      sessionsToSyncLocalOnly.push(updated);
-    }
+    if (patch.uploaded.size > 0) syncDBIds.add(s.id);
+    if (patch.uploaded.size > 0 || patch.dropped.size > 0) sessionPatches.set(s.id, patch);
   }
 
-  const allSessionsToSave = [...sessionsToSyncDB, ...sessionsToSyncLocalOnly];
-  if (allSessionsToSave.length > 0) {
-    const updatedMap = new Map(allSessionsToSave.map(s => [s.id, s]));
-    await bulkSaveSessions(sessions.map(s => updatedMap.get(s.id) ?? s));
+  // Patch sessions as stored *now*, media fields only — same reason as the climbs
+  // above: a session edited during the uploads must keep its edits.
+  const freshSessions = await getAllSessions();
+  const patchedSessions: Session[] = [];
+  for (const s of freshSessions) {
+    const p = sessionPatches.get(s.id);
+    if (!p) continue;
+    const uris = s.mediaUris ?? (s.mediaUri ? [s.mediaUri] : []);
+    const newUris: string[] = [];
+    const newTypes: ('photo' | 'video')[] = [];
+    uris.forEach((uri, i) => {
+      if (p.dropped.has(uri)) return;
+      newUris.push(p.uploaded.get(uri) ?? uri);
+      newTypes.push(s.mediaTypes?.[i] ?? s.mediaType ?? 'photo');
+    });
+    patchedSessions.push({ ...s, mediaUris: newUris.length ? newUris : undefined, mediaTypes: newUris.length ? newTypes : undefined, mediaUri: newUris[0], mediaType: newTypes[0] });
   }
+  if (patchedSessions.length > 0) await bulkSaveSessions(patchedSessions);
+  const patchedById = new Map(patchedSessions.map(s => [s.id, s]));
+  const sessionsToSyncDB = freshSessions
+    .filter(s => syncDBIds.has(s.id))
+    .map(s => patchedById.get(s.id) ?? s);
   if (sessionsToSyncDB.length > 0) {
     const rows = sessionsToSyncDB.map(s => {
       // Use s.mediaUri fallback so sessions using the legacy singular field are

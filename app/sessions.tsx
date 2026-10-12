@@ -924,6 +924,7 @@ export default function SessionsScreen() {
                 <ClimbCard
                   climb={c}
                   compact
+                  expandRoutine={!!trainingKind(activeSession.climbs)}
                   onPress={() => { setEditingClimb(c); setLogModalVisible(true); }}
                   onIncrementAttempts={async () => {
                     await saveClimb({ ...c, attempts: (c.attempts ?? 1) + 1 });
