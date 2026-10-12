@@ -76,6 +76,7 @@ import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportC
 import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
+import { MediaBox } from '../components/TrainingEntry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1807,12 +1808,13 @@ export default function FriendsScreen() {
   // Show session detail full-screen
   if (viewingSession) {
     const { entry, climbs } = viewingSession;
-    // Training-only sessions show each entry's photos in its own MEDIA box (see
-    // TrainingEntry), so the strip keeps just the photos added to the session itself
-    const entryMedia = trainingKind(climbs)
-      ? new Set(climbs.flatMap((c: any) => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])))
-      : null;
-    const stripPhotos = (entry.sessionPhotos ?? []).filter(u => !entryMedia?.has(u));
+    // Training-only sessions drop the photo strip: each entry shows its own photos in
+    // a MEDIA box (TrainingEntry), and photos added to the session itself join the
+    // entry's box when there's one entry, or get a MEDIA box of their own after them.
+    const trainingOnly = !!trainingKind(climbs);
+    const entryMedia = new Set(climbs.flatMap((c: any) => c.mediaUris ?? (c.mediaUri ? [c.mediaUri] : [])));
+    const sessionOnlyPhotos = (entry.sessionPhotos ?? []).filter(u => !entryMedia.has(u));
+    const stripPhotos = trainingOnly ? [] : (entry.sessionPhotos ?? []);
     const closeDetail = () => {
       setViewingSession(null);
       const y = feedScrollY.current;
@@ -1900,8 +1902,9 @@ export default function FriendsScreen() {
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
-            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact showRoutineLink expandRoutine={!!trainingKind(climbs)} onPress={() => setDetailClimb(c)} />)
+            : climbs.map((c: any) => <ClimbCard key={c.id} climb={c} compact showRoutineLink expandRoutine={trainingOnly} extraMedia={trainingOnly && climbs.length === 1 ? sessionOnlyPhotos : undefined} onPress={() => setDetailClimb(c)} />)
           }
+          {trainingOnly && climbs.length > 1 && <MediaBox uris={sessionOnlyPhotos} />}
         </ScrollView>
         {photoViewerModal}
         <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />

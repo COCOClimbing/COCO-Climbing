@@ -18,16 +18,20 @@ interface Props {
   // like the detail sheet) instead of a card with 2-line previews. Used when a
   // session has only lift/hangboard entries, so there's nothing to scroll past.
   expandRoutine?: boolean;
+  // TrainingEntry only: shows an Edit button there (it has no tap-through)
+  onEdit?: () => void;
+  // TrainingEntry only: session photos to include in its MEDIA box
+  extraMedia?: string[];
 }
 
-export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts, showRoutineLink, expandRoutine }: Props) {
+export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts, showRoutineLink, expandRoutine, onEdit, extraMedia }: Props) {
   const { colors } = useTheme();
   const typeInfo = CLIMB_TYPES.find(t => t.id === climb.type);
   const dateStr = format(parseISO(climb.date), compact ? 'MMM d' : 'EEE, MMM d · h:mm a');
   const isTraining = climb.type === 'hangboard' || climb.type === 'lift';
   const routine = isTraining ? climb.routine?.trim() : undefined;
 
-  if (isTraining && expandRoutine) return <TrainingEntry climb={climb} onPress={onPress} />;
+  if (isTraining && expandRoutine) return <TrainingEntry climb={climb} onEdit={onEdit} extraMedia={extraMedia} />;
 
   return (
     <TouchableOpacity

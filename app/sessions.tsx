@@ -925,6 +925,7 @@ export default function SessionsScreen() {
                   climb={c}
                   compact
                   expandRoutine={!!trainingKind(activeSession.climbs)}
+                  onEdit={() => { setEditingClimb(c); setLogModalVisible(true); }}
                   onPress={() => { setEditingClimb(c); setLogModalVisible(true); }}
                   onIncrementAttempts={async () => {
                     await saveClimb({ ...c, attempts: (c.attempts ?? 1) + 1 });
@@ -1186,6 +1187,7 @@ export default function SessionsScreen() {
                   compact
                   showRoutineLink
                   expandRoutine={!!trainingKind(displayClimbs)}
+                  onEdit={() => { setEditingClimb(c); setLogModalVisible(true); }}
                   onPress={() => setDetailClimb(c)}
                 />
               </SwipeToDelete>
