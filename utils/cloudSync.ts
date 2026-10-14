@@ -498,7 +498,7 @@ function climbToRow(c: Climb, userId: string) {
   };
 }
 
-function rowToSession(row: any): Session {
+export function rowToSession(row: any): Session {
   return {
     id: row.id,
     date: row.date,
@@ -528,7 +528,7 @@ function rowToProject(row: any): NamedProject {
   };
 }
 
-function rowToClimb(row: any): Climb {
+export function rowToClimb(row: any): Climb {
   return {
     id: row.id,
     date: row.date,

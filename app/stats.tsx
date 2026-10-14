@@ -8,6 +8,7 @@ import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
+import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
 import { parseISO, differenceInDays } from 'date-fns';
 
@@ -153,30 +154,14 @@ export default function StatsScreen() {
           getDeletedSessionIds(),
         ]);
         if (climbsRes.data) {
-          const mapped: Climb[] = climbsRes.data.filter((r: any) => !deletedClimbIds.has(r.id)).map((r: any) => ({
-            id: r.id, date: r.date, sessionId: r.session_id,
-            type: r.type, outcome: r.outcome, styles: r.styles ?? [],
-            environment: r.environment, grade: r.grade, gradeSystem: r.grade_system,
-            routeName: r.route_name ?? undefined, holdColor: r.hold_color ?? undefined,
-            location: r.location ?? undefined,
-            notes: r.notes ?? undefined, attempts: r.attempts ?? 1,
-            projectId: r.project_id ?? undefined, projectName: r.project_name ?? undefined,
-            mediaUri: r.media_uri ?? undefined, mediaType: r.media_type ?? undefined,
-            mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
-          }));
+          // Shared converter, so new columns (e.g. routine) can't be silently
+          // dropped here — this write replaces the local copy of every climb.
+          const mapped: Climb[] = climbsRes.data.filter((r: any) => !deletedClimbIds.has(r.id)).map(rowToClimb);
           await bulkSaveClimbs(mapped);
           cloudClimbs = mapped;
         }
         if (sessionsRes.data) {
-          const mapped = sessionsRes.data.filter((r: any) => !deletedSessionIds.has(r.id)).map((r: any) => ({
-            id: r.id, date: r.date, environment: r.environment,
-            location: r.location ?? undefined, notes: r.notes ?? undefined,
-            title: r.title ?? undefined,
-            startedAt: r.started_at ?? undefined, endedAt: r.ended_at ?? undefined,
-            lastClimbAt: r.last_climb_at ?? undefined, friends: r.friends ?? undefined,
-            mediaUris: r.media_uris ?? undefined, mediaTypes: r.media_types ?? undefined,
-            mediaUri: r.media_uris?.[0] ?? undefined, mediaType: r.media_types?.[0] ?? undefined,
-          }));
+          const mapped = sessionsRes.data.filter((r: any) => !deletedSessionIds.has(r.id)).map(rowToSession);
           await bulkSaveSessions(mapped);
           cloudSessionCount = mapped.length;
           cloudSessionMap = {};
