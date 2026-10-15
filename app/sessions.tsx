@@ -624,6 +624,9 @@ export default function SessionsScreen() {
       };
       return [newEntry, ...prev.filter(d => d.sessionId !== sessionId)];
     });
+    // The new card goes in at the top, and maintainVisibleContentPosition would keep
+    // the feed where it was, so jump up to show it
+    requestAnimationFrame(() => sessionsScrollRef.current?.scrollTo({ y: 0, animated: true }));
   }
 
   async function handleAddPastSession(dateStr: string) {
@@ -740,16 +743,26 @@ export default function SessionsScreen() {
       return (
         <TouchableOpacity
           activeOpacity={0.7}
-          style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, gap: SPACING.md, marginBottom: SPACING.md }]}
+          // Same box as the expanded header; the negative margin cancels the list's wider
+          // padding so the card is the same width in both views
+          style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, marginBottom: SPACING.md, marginHorizontal: SPACING.lg - SPACING.xl }]}
           onPress={() => setActiveSessionExpanded(true)}
         >
           <View style={styles.activeBadgeRow}>
             <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
             <Text style={[styles.detailDay, { color: colors.accent }]}>ACTIVE SESSION</Text>
           </View>
-          <Text style={[styles.detailTitle, { color: activeTitle.trim() ? colors.textPrimary : colors.textMuted }]}>
-            {activeTitle.trim() || 'Add a Title'}
-          </Text>
+          {activeLocation.trim() ? (
+            <View style={styles.detailLocationRow}>
+              <Ionicons name="location-sharp" size={12} color={colors.textMuted} />
+              <Text style={[styles.detailLocation, { color: colors.textMuted }]} numberOfLines={1}>{activeLocation.trim()}</Text>
+            </View>
+          ) : null}
+          <View style={styles.detailTitleRow}>
+            <Text style={[styles.detailTitle, { color: activeTitle.trim() ? colors.textPrimary : colors.textMuted, flex: 1 }]}>
+              {activeTitle.trim() || 'Add a Title'}
+            </Text>
+          </View>
           <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
             {training ? (
               <View style={styles.todayStat}>
@@ -778,7 +791,7 @@ export default function SessionsScreen() {
           </View>
 
           {/* Actions — nested touchables claim their own taps, so these don't trigger the card's own onPress (expand) */}
-          <View style={styles.detailActions}>
+          <View style={[styles.detailActions, { marginTop: SPACING.md }]}>
             <TouchableOpacity
               style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
               onPress={async () => {
@@ -937,7 +950,7 @@ export default function SessionsScreen() {
           )}
 
           {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }, activeEditingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {activeEditingNotes ? (
@@ -1202,7 +1215,7 @@ export default function SessionsScreen() {
           </TouchableOpacity>
 
           {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }, editingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {editingNotes ? (
@@ -1521,6 +1534,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: SPACING.lg,
     gap: SPACING.sm,
+  },
+  // Highlighted border while the card is being typed in; padding drops by the extra
+  // border width so the contents don't shift
+  metaCardFocused: {
+    borderWidth: 1.5,
+    padding: SPACING.lg - 0.5,
   },
   metaLabel: {
     fontSize: FONTS.sizes.xs,
