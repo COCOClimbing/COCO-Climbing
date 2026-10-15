@@ -139,6 +139,24 @@ export default function SessionsScreen() {
   const [activeLocation, setActiveLocation] = useState('');
   const [activeMediaItems, setActiveMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
   const detailScrollRef = useRef<ScrollView>(null);
+  const detailScrollY = useRef(0);
+  // The Notes card in whichever detail view is open (only one is at a time)
+  const notesCardRef = useRef<View>(null);
+
+  // Tapping into Notes mounts its input and opens the keyboard, but nothing scrolls the
+  // card into view, so when it sits low on the screen the keyboard covers it. Once the
+  // keyboard is up, nudge the page up just enough to show the whole card above it.
+  const isEditingNotes = activeEditingNotes || editingNotes;
+  useEffect(() => {
+    if (!isEditingNotes) return;
+    const sub = Keyboard.addListener('keyboardDidShow', (e: KeyboardEvent) => {
+      notesCardRef.current?.measureInWindow((_x, y, _w, h) => {
+        const overlap = y + h + SPACING.lg - e.endCoordinates.screenY;
+        if (overlap > 0) detailScrollRef.current?.scrollTo({ y: detailScrollY.current + overlap, animated: true });
+      });
+    });
+    return () => sub.remove();
+  }, [isEditingNotes]);
 
   // Sync editing state when a different session is opened
   useEffect(() => {
@@ -833,7 +851,12 @@ export default function SessionsScreen() {
             <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView ref={detailScrollRef} contentContainerStyle={styles.detailContent}>
+        <ScrollView
+          ref={detailScrollRef}
+          contentContainerStyle={styles.detailContent}
+          onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
+        >
           {/* Header: badge, title, stats */}
           <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.accent, borderWidth: 2, marginBottom: SPACING.md }]}>
             <View style={styles.activeBadgeRow}>
@@ -950,7 +973,7 @@ export default function SessionsScreen() {
           )}
 
           {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }, activeEditingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
+          <View ref={notesCardRef} style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }, activeEditingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {activeEditingNotes ? (
@@ -1109,6 +1132,8 @@ export default function SessionsScreen() {
           ref={detailScrollRef}
           contentContainerStyle={styles.detailContent}
           keyboardShouldPersistTaps="never"
+          onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
         >
           {/* Session header */}
           <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
@@ -1215,7 +1240,7 @@ export default function SessionsScreen() {
           </TouchableOpacity>
 
           {/* Notes */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }, editingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
+          <View ref={notesCardRef} style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }, editingNotes && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
             {/* Overall note for the session; also shown under the title in the feed */}
             {editingNotes ? (
