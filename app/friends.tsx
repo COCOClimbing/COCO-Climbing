@@ -71,6 +71,7 @@ import {
   unlikeComment,
   SessionSummary,
   getFriendSessionSummaries,
+  getProfileById,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -221,9 +222,10 @@ function FriendDetailView({
   const [shareFriendEntry, setShareFriendEntry] = useState<SessionSummary | null>(null);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
   const [preferredRope, setPreferredRope] = useState('yds');
+  const [bio, setBio] = useState<string | null>(friend.bio ?? null);
 
   useEffect(() => {
-    Promise.all([loadClimbs(), loadCounts(), loadFriendStatus(), loadSessions()]).catch(() => {});
+    Promise.all([loadClimbs(), loadCounts(), loadFriendStatus(), loadSessions(), loadBio()]).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -241,6 +243,11 @@ function FriendDetailView({
 
   async function loadCounts() {
     try { setCounts(await getFriendCounts(friend.id)); } catch {}
+  }
+
+  // Most profile sources (search, follower lists, feed) don't include bio, so fetch it here
+  async function loadBio() {
+    try { setBio((await getProfileById(friend.id))?.bio ?? null); } catch {}
   }
 
   async function loadFriendStatus() {
@@ -476,6 +483,8 @@ function FriendDetailView({
               {friend.hometown ? <Text style={[detailStyles.profileHometown, { color: colors.textMuted }]} numberOfLines={1}>{friend.hometown}</Text> : null}
             </View>
           </View>
+
+          {bio ? <Text style={[detailStyles.profileBio, { color: colors.textSecondary }]}>{bio}</Text> : null}
 
           {/* Following / Followers + friend action button */}
           <View style={detailStyles.profileBottom}>
@@ -728,6 +737,7 @@ const detailStyles = StyleSheet.create({
   profileName: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold },
   profileUsername: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium, marginTop: 1 },
   profileHometown: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, marginTop: 2 },
+  profileBio: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, lineHeight: 20 },
   profileBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   countsRow: { flexDirection: 'row', gap: SPACING.xl },
   countItem: { alignItems: 'flex-start' },

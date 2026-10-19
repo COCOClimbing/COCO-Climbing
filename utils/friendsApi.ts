@@ -11,6 +11,7 @@ export interface FriendProfile {
   username: string;
   avatar_url: string | null;
   hometown?: string | null;
+  bio?: string | null;
   is_private?: boolean;
 }
 
@@ -173,7 +174,7 @@ export async function searchByUsername(query: string, currentUserId: string, exc
 export async function getProfileById(id: string): Promise<FriendProfile | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('id, name, username, avatar_url, hometown, is_private')
+    .select('id, name, username, avatar_url, hometown, bio, is_private')
     .eq('id', id)
     .single();
   return data ?? null;
