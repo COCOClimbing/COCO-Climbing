@@ -34,10 +34,9 @@ export function trainingKind(climbs: Pick<Climb, 'type'>[]): TrainingKind | null
 
 export const TRAINING_KIND_LABEL: Record<TrainingKind, string> = { lift: 'Lift', hangboard: 'Hangboard', both: 'Lift + Hang' };
 
-export function climbCount(c: Climb): number {
-  if (isTrainingClimb(c)) return 0;
-  if (c.outcome === 'flash' || c.outcome === 'hang') return 1;
-  return c.attempts ?? 1;
+// Session "Climbs" stat: one per problem tried, regardless of attempts
+export function climbCount(c: Pick<Climb, 'type'>): number {
+  return isTrainingClimb(c) ? 0 : 1;
 }
 
 export function sessionStats(day: DaySession) {

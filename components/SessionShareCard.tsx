@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { format, parseISO } from 'date-fns';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
+import { climbCount as problemCount } from '../utils/sessionHelpers';
 
 interface Props {
   date: string;
@@ -26,7 +27,7 @@ export default function SessionShareCard({
   climbCount, sendCount, flashCount, hardestGrade, climbType, friendName,
 }: Props) {
   // Derive stats from either full climbs or summary props
-  const totalClimbs = climbs ? climbs.length : (climbCount ?? 0);
+  const totalClimbs = climbs ? climbs.reduce((sum, c) => sum + problemCount(c), 0) : (climbCount ?? 0);
   const totalSends = climbs
     ? climbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length
     : (sendCount ?? 0);
