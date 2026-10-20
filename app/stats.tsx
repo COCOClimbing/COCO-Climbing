@@ -106,7 +106,7 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
               </View>
               <View style={ss.legendItem}>
                 <View style={[ss.legendDot, { backgroundColor: '#555555' }]} />
-                <Text style={[ss.legendText, { color: colors.textMuted }]}>Attempts</Text>
+                <Text style={[ss.legendText, { color: colors.textMuted }]}>Climbs</Text>
               </View>
             </View>
           </ScrollView>
