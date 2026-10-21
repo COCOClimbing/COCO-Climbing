@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  PanResponder,
   Animated,
   Dimensions,
   KeyboardAvoidingView,
@@ -84,6 +83,9 @@ import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
 import { getMyGalleryPhotos, getFriendGalleryPhotos } from '../utils/gallery';
 import StatusBarFade from '../components/StatusBarFade';
+import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
+import FloatingBackButton from '../components/FloatingBackButton';
+import { useEdgeSwipeBack } from '../utils/useEdgeSwipeBack';
 import PushScreen from '../components/PushScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -214,6 +216,8 @@ function FriendDetailView({
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const tabBarSpace = useTabBarSpace();
+  // Swipe in from the left edge to close the profile (below the back button).
+  const edgeSwipe = useEdgeSwipeBack(onBack, { skipTop: insets.top + 56 });
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
@@ -443,7 +447,7 @@ function FriendDetailView({
   const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
   return (
-    <View style={[detailStyles.container, { backgroundColor: colors.bg }]}>
+    <View {...edgeSwipe} style={[detailStyles.container, { backgroundColor: colors.bg }]}>
 
       <PhotoClipContext.Provider value={scrollRef}>
       <ScrollView
@@ -675,14 +679,7 @@ function FriendDetailView({
 
       {/* Round back button, like the app header's — floats over the profile
           and stays put while it scrolls. */}
-      <TouchableOpacity
-        onPress={onBack}
-        style={[detailStyles.backBtn, { backgroundColor: colors.bgCard, top: insets.top + SPACING.sm }]}
-        activeOpacity={0.7}
-        accessibilityLabel="Back"
-      >
-        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-      </TouchableOpacity>
+      <FloatingBackButton onPress={onBack} style={[detailStyles.backBtn, { top: insets.top + SPACING.sm }]} />
 
       {/* Followers / Following list sheet */}
       <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
@@ -773,11 +770,7 @@ function FriendDetailView({
 
 const detailStyles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', left: SPACING.lg, zIndex: 10,
-    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
-  },
+  backBtn: { position: 'absolute', left: SPACING.lg, zIndex: 10 },
   scrollContent: { paddingBottom: SPACING.xxl * 2 },
 
   // Profile header — matches account page
@@ -827,6 +820,7 @@ const detailStyles = StyleSheet.create({
 
 export default function FriendsScreen() {
   const tabBarSpace = useTabBarSpace();
+  const detailTopInset = useDetailTopInset();
   const { colors } = useTheme();
   const { navigate, screen, returnTo, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
@@ -1885,20 +1879,10 @@ export default function FriendsScreen() {
       const y = feedScrollY.current;
       if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
     };
-    const swipeBack = PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dx > 20 && Math.abs(g.dy) < 60,
-      onPanResponderRelease: (_, g) => { if (g.dx > 60) closeDetail(); },
-    });
     const date = parseISO(entry.sessionDate);
     return (
-      <View style={[styles.container, { backgroundColor: colors.bg }]} {...swipeBack.panHandlers}>
-        {/* Back bar */}
-        <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={closeDetail} style={styles.detailBackBtn} activeOpacity={0.7}>
-            <Text style={[styles.detailBackTxt, { color: colors.accent }]}>← Back</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}>
+      <DetailScreen onBack={closeDetail}>
+        <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={[styles.detailContent, { paddingTop: detailTopInset, paddingBottom: tabBarSpace }]}>
           {/* Header */}
           <View style={styles.detailHeader}>
             <ProfileAvatar
@@ -1973,7 +1957,7 @@ export default function FriendsScreen() {
         </ScrollView>
         {photoViewerModal}
         <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />
-      </View>
+      </DetailScreen>
     );
   }
 
@@ -2706,9 +2690,6 @@ const styles = StyleSheet.create({
   stickyCommentBar: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderTopWidth: 1 },
   commentInput: { flexDirection: 'row', alignItems: 'flex-end', borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: SPACING.sm },
   commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, paddingBottom: 4, maxHeight: 100 },
-  detailTopBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
-  detailBackBtn: { paddingVertical: SPACING.xs },
-  detailBackTxt: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },
   detailContent: { padding: SPACING.lg, gap: SPACING.md },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
   detailStatsRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: SPACING.lg, marginBottom: SPACING.sm },

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
+import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
 import { useAuth } from '../utils/AuthContext';
 import {
   getAllSessions, getAllClimbs, deleteSession, deleteClimb,
@@ -74,6 +75,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const { user, avatarUrl, localAvatarUri } = useAuth();
   const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, viewFriendProfile } = useNav();
   const tabBarSpace = useTabBarSpace();
+  const detailTopInset = useDetailTopInset();
 
   // Keep refs current so load() (stable useCallback with [] deps) can read
   // the latest navPendingSessionId without a stale closure
@@ -826,15 +828,11 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     }
 
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
-        <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => setActiveSessionExpanded(false)} style={styles.backBtn} activeOpacity={0.7}>
-            <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
-          </TouchableOpacity>
-        </View>
+      <DetailScreen onBack={() => setActiveSessionExpanded(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailContainer}>
         <ScrollView
           ref={detailScrollRef}
-          contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}
+          contentContainerStyle={[styles.detailContent, { paddingTop: detailTopInset, paddingBottom: tabBarSpace }]}
           onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
         >
@@ -1077,6 +1075,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </DetailScreen>
     );
   }
 
@@ -1102,16 +1101,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     ];
 
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.detailContainer, { backgroundColor: colors.bg }]}>
-        <View style={[styles.detailTopBar, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => setSelectedDay(null)} style={styles.backBtn} activeOpacity={0.7}>
-            <Text style={[styles.backBtnText, { color: colors.accent }]}>← Back</Text>
-          </TouchableOpacity>
-        </View>
+      <DetailScreen onBack={() => setSelectedDay(null)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailContainer}>
 
         <ScrollView
           ref={detailScrollRef}
-          contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}
+          contentContainerStyle={[styles.detailContent, { paddingTop: detailTopInset, paddingBottom: tabBarSpace }]}
           keyboardShouldPersistTaps="never"
           onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
@@ -1329,6 +1324,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </DetailScreen>
     );
   }
 
@@ -1451,9 +1447,6 @@ const styles = StyleSheet.create({
 
   // Detail view
   detailContainer: { flex: 1 },
-  detailTopBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
-  backBtn: { paddingVertical: SPACING.xs },
-  backBtnText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },
   detailContent: { padding: SPACING.lg, gap: SPACING.md },
   detailHeader: { borderRadius: 12, padding: SPACING.lg, flexDirection: 'column', gap: SPACING.xs },
   detailHeaderTop: { flexDirection: 'row', alignItems: 'center' },

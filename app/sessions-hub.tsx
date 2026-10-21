@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useNav } from '../utils/NavigationContext';
+import { useHeaderScrollContext } from '../utils/HeaderScroll';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
 import ProjectsScreen from './projects';
@@ -17,6 +18,7 @@ const VIEWS: UnderlineTab<View_>[] = [
 // list, projects (which no longer have their own bottom tab) and a calendar.
 export default function SessionsHub() {
   const { pendingSessionId } = useNav();
+  const { headerHidden } = useHeaderScrollContext();
   const [view, setView] = useState<View_>('sessions');
 
   // Jumping to a specific session (e.g. from Stats) must land on the sessions view.
@@ -26,7 +28,8 @@ export default function SessionsHub() {
 
   return (
     <View style={styles.root}>
-      <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />
+      {/* Hidden while a session's detail view fills the screen. */}
+      {!headerHidden && <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />}
       <View style={styles.root}>
         {/* Sessions and Calendar are one SessionsScreen instance, so switching
             between them keeps its loaded data. */}

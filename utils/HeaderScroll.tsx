@@ -12,6 +12,10 @@ interface HeaderScrollContextType {
   setHeaderHeight: (h: number) => void;
   floating: boolean;
   register: () => () => void;
+  // True while a full-screen detail view (DetailScreen) is open; the header
+  // and the Sessions tab's toggle hide so the detail can use the whole screen.
+  headerHidden: boolean;
+  registerHidden: () => () => void;
 }
 
 const HeaderScrollContext = createContext<HeaderScrollContextType>({
@@ -20,12 +24,20 @@ const HeaderScrollContext = createContext<HeaderScrollContextType>({
   setHeaderHeight: () => {},
   floating: false,
   register: () => () => {},
+  headerHidden: false,
+  registerHidden: () => () => {},
 });
 
 export function HeaderScrollProvider({ children }: { children: React.ReactNode }) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const [headerHeight, setHeaderHeight] = useState(0);
   const [floatingCount, setFloatingCount] = useState(0);
+  const [hiddenCount, setHiddenCount] = useState(0);
+
+  const registerHidden = useCallback(() => {
+    setHiddenCount(c => c + 1);
+    return () => setHiddenCount(c => c - 1);
+  }, []);
 
   const register = useCallback(() => {
     scrollY.setValue(0);
@@ -37,7 +49,7 @@ export function HeaderScrollProvider({ children }: { children: React.ReactNode }
   }, [scrollY]);
 
   return (
-    <HeaderScrollContext.Provider value={{ scrollY, headerHeight, setHeaderHeight, floating: floatingCount > 0, register }}>
+    <HeaderScrollContext.Provider value={{ scrollY, headerHeight, setHeaderHeight, floating: floatingCount > 0, register, headerHidden: hiddenCount > 0, registerHidden }}>
       {children}
     </HeaderScrollContext.Provider>
   );
@@ -65,4 +77,13 @@ export function useHeaderScroll(enabled = true) {
   }, [scrollY]);
 
   return { onScroll, topInset: headerHeight };
+}
+
+// Hide the app header while `active` (see headerHidden above).
+export function useHideHeader(active = true) {
+  const { registerHidden } = useContext(HeaderScrollContext);
+  useEffect(() => {
+    if (!active) return;
+    return registerHidden();
+  }, [active, registerHidden]);
 }

@@ -65,7 +65,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const { colors, mode } = useTheme();
   const { screen, navigate } = useNav();
   const { user, loading, isPasswordRecovery } = useAuth();
-  const { floating, headerHeight } = useHeaderScrollContext();
+  const { floating, headerHeight, headerHidden } = useHeaderScrollContext();
   useNotificationTapRouting();
 
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
@@ -203,11 +203,11 @@ function AppShell({ onReady }: { onReady: () => void }) {
         <View style={styles.body}>
           {/* Screens that opt into useHeaderScroll run under the floating
               header; the rest start below it. */}
-          <View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating ? 0 : headerHeight }]}>
+          <View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating || headerHidden ? 0 : headerHeight }]}>
             {screen !== 'friends' && renderScreen()}
             <FriendsScreen />
           </View>
-          <AppHeader />
+          {!headerHidden && <AppHeader />}
         </View>
         <BottomTabBar />
       </SafeAreaView>
