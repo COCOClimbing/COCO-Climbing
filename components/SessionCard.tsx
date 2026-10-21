@@ -209,7 +209,7 @@ export default function SessionCard({
   const hiddenCommentCount = sessionComments.length - 3;
 
   return (
-    <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.border }]} onPress={onEdit}>
+    <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.bgElevated }]} onPress={onEdit}>
       {/* Header */}
       <View style={styles.headerRow}>
         <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{label.top} · {label.bottom}</Text>

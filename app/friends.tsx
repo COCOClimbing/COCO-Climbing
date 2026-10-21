@@ -2016,7 +2016,7 @@ export default function FriendsScreen() {
             return (
               <View
                 key={sessionKey}
-                style={[styles.activityCard, { borderBottomColor: colors.border }]}
+                style={[styles.activityCard, { borderBottomColor: colors.bgElevated }]}
                 onLayout={e => { cardOffsets.current[sessionKey] = e.nativeEvent.layout.y; }}
               >
 

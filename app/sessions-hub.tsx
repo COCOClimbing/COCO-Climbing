@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useNav } from '../utils/NavigationContext';
 import { useHeaderScrollContext } from '../utils/HeaderScroll';
+import { useTheme } from '../utils/ThemeContext';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
 import ProjectsScreen from './projects';
@@ -19,6 +20,7 @@ const VIEWS: UnderlineTab<View_>[] = [
 export default function SessionsHub() {
   const { pendingSessionId } = useNav();
   const { headerHidden } = useHeaderScrollContext();
+  const { colors } = useTheme();
   const [view, setView] = useState<View_>('sessions');
 
   // Jumping to a specific session (e.g. from Stats) must land on the sessions view.
@@ -29,7 +31,13 @@ export default function SessionsHub() {
   return (
     <View style={styles.root}>
       {/* Hidden while a session's detail view fills the screen. */}
-      {!headerHidden && <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />}
+      {/* Soft shadow (matching the header's round buttons) so the list
+          scrolls visibly underneath the pinned toggle. */}
+      {!headerHidden && (
+        <View style={[styles.tabsBar, { backgroundColor: colors.bg }]}>
+          <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />
+        </View>
+      )}
       <View style={styles.root}>
         {/* Sessions and Calendar are one SessionsScreen instance, so switching
             between them keeps its loaded data. */}
@@ -43,4 +51,12 @@ export default function SessionsHub() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  tabsBar: {
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
 });

@@ -259,7 +259,7 @@ export default function ActivityCard({
   const hiddenCommentCount = sessionComments.length - 3;
 
   return (
-    <View style={[styles.card, { borderBottomColor: colors.border }]}>
+    <View style={[styles.card, { borderBottomColor: colors.bgElevated }]}>
       {/* Header */}
       <View style={styles.cardHeader}>
         <TouchableOpacity
