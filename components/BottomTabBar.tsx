@@ -250,9 +250,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Round the image itself too — the wrapper's overflow: 'hidden' clip isn't
+  // reliable on device, which left the photo showing square.
   avatarImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 12,
   },
   avatarInitials: {
     fontSize: 9,

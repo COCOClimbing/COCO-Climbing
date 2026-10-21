@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
+import PushScreen from './PushScreen';
+import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING, CLIMB_TYPES, Climb } from '../utils/theme';
 import { getAllClimbs, getAllSessions, NamedProject } from '../utils/storage';
 import { GradeBadge } from './UI';
@@ -40,8 +42,14 @@ interface ClimbEntry {
   sessionDate: string;
 }
 
-export default function ProjectDetailModal({ visible, project, refreshKey, onClose, onEdit }: Props) {
+export default function ProjectDetailModal({ visible, project: projectProp, refreshKey, onClose, onEdit }: Props) {
   const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
+  // The caller clears the project as it closes, so keep showing the last one
+  // while the page slides away.
+  const lastProject = useRef(projectProp);
+  if (projectProp) lastProject.current = projectProp;
+  const project = projectProp ?? lastProject.current;
   const [entries, setEntries] = useState<ClimbEntry[]>([]);
 
   useEffect(() => {
@@ -101,25 +109,20 @@ export default function ProjectDetailModal({ visible, project, refreshKey, onClo
   const uniqueDays = [...new Set(entries.map(e => e.sessionDate))];
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[ss.container, { backgroundColor: colors.bg }]}>
-        {/* Header */}
-        <View style={[ss.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose} style={ss.headerBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[ss.backTxt, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={[ss.title, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]} numberOfLines={1}>
-            {project.name}
-          </Text>
-          <TouchableOpacity
-            onPress={onEdit}
-            style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit Project</Text>
-          </TouchableOpacity>
-        </View>
-
+    <PushScreen
+      visible={visible}
+      title={project.name}
+      onBack={onClose}
+      headerRight={
+        <TouchableOpacity
+          onPress={onEdit}
+          style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit</Text>
+        </TouchableOpacity>
+      }
+    >
         {/* Project summary */}
         <View style={[ss.summary, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
           <View style={ss.summaryRow}>
@@ -193,23 +196,13 @@ export default function ProjectDetailModal({ visible, project, refreshKey, onClo
               );
             })
           )}
-          <View style={{ height: 40 }} />
+          <View style={{ height: tabBarSpace }} />
         </ScrollView>
-      </View>
-    </Modal>
+    </PushScreen>
   );
 }
 
 const ss = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-  },
-  headerBtn: { minWidth: 60 },
-  backTxt: { fontSize: FONTS.sizes.md },
-  title: { fontSize: FONTS.sizes.lg, flex: 1, textAlign: 'center', marginHorizontal: SPACING.sm },
   editPill: {
     borderRadius: 20, borderWidth: 1,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs,

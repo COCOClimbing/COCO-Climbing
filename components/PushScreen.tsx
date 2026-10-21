@@ -11,15 +11,18 @@ const SCREEN_W = Dimensions.get('window').width;
 // Back button row: the button plus SPACING.sm above and below.
 const HEADER_HEIGHT = BACK_BUTTON_SIZE + SPACING.sm * 2;
 
-// A full page that slides in from the right over the app, Strava-style, with
+// A full page that slides in from the right over the app, with
 // a round back button and a centered title. Stands in for a navigation push
 // (the app has no navigator) for pages opened from the header's buttons.
 // Swiping in from the left edge drags it away. It carries its own copy of the
 // bottom tab bar, pinned where the real one sits, so the bar stays usable;
 // tapping a tab closes the page and switches tabs.
-export default function PushScreen({ visible, title, onBack, onDismiss, children }: {
+export default function PushScreen({ visible, title, subtitle, headerRight, onBack, onDismiss, children }: {
   visible: boolean;
   title: string;
+  subtitle?: string;
+  // e.g. an Edit button, shown opposite the back button.
+  headerRight?: React.ReactNode;
   onBack: () => void;
   // Called once the page has finished sliding away.
   onDismiss?: () => void;
@@ -43,7 +46,7 @@ export default function PushScreen({ visible, title, onBack, onDismiss, children
   }, [visible]);
 
   // Follows the finger and reveals the screen underneath, which stays mounted.
-  const edgeSwipe = useEdgeSwipeBack(onBack, { skipTop: insets.top + HEADER_HEIGHT, follow: x });
+  const edgeSwipe = useEdgeSwipeBack(onBack, { skipTop: insets.top + HEADER_HEIGHT, follow: x, enabled: visible });
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onBack} onDismiss={onDismiss} statusBarTranslucent>
@@ -53,10 +56,17 @@ export default function PushScreen({ visible, title, onBack, onDismiss, children
           style={[styles.page, { backgroundColor: colors.bg, paddingTop: insets.top, transform: [{ translateX: x }] }]}
         >
           <View style={styles.header}>
-            <FloatingBackButton onPress={onBack} />
-            <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
-            {/* Balances the back button so the title stays centered. */}
-            <View style={styles.backBtnSpacer} />
+            {/* Equal-width sides keep the title centered whatever sits on the right. */}
+            <View style={styles.side}>
+              <FloatingBackButton onPress={onBack} />
+            </View>
+            <View style={styles.titleWrap}>
+              <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
+              {subtitle ? (
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>{subtitle}</Text>
+              ) : null}
+            </View>
+            <View style={[styles.side, styles.sideRight]}>{headerRight}</View>
           </View>
           <View style={styles.body}>{children}</View>
         </Animated.View>
@@ -76,9 +86,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
   },
-  backBtnSpacer: { width: BACK_BUTTON_SIZE },
+  side: { flex: 1, minWidth: BACK_BUTTON_SIZE, alignItems: 'flex-start' },
+  sideRight: { alignItems: 'flex-end' },
+  titleWrap: { flex: 2, alignItems: 'center' },
+  subtitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, marginTop: 1 },
   title: {
-    flex: 1,
     textAlign: 'center',
     fontSize: FONTS.sizes.lg,
     fontFamily: FONTS.family.bold,

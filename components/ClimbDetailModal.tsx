@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Image,
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
+import PushScreen from './PushScreen';
+import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING, CLIMB_TYPES, CLIMB_OUTCOMES, HOLD_COLORS, Climb } from '../utils/theme';
 import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
@@ -16,8 +18,14 @@ interface Props {
   onEdit?: () => void;
 }
 
-export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Props) {
+export default function ClimbDetailModal({ visible, climb: climbProp, onClose, onEdit }: Props) {
   const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
+  // Callers clear the climb as they close, so keep showing the last one while
+  // the page slides away.
+  const lastClimb = useRef(climbProp);
+  if (climbProp) lastClimb.current = climbProp;
+  const climb = climbProp ?? lastClimb.current;
 
   if (!climb) return null;
 
@@ -35,38 +43,22 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
   })();
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[ss.container, { backgroundColor: colors.bg }]}>
-        {/* Header */}
-        <View style={[ss.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[ss.backTxt, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>← Back</Text>
-          </TouchableOpacity>
-          <View style={ss.headerCenter}>
-            <Text style={[ss.headerGrade, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>
-              {isTraining ? (typeInfo?.label ?? climb.type) : climb.grade}
-            </Text>
-            {(climb.routeName || climb.projectName) ? (
-              <Text style={[ss.headerName, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]} numberOfLines={1}>
-                {climb.routeName || climb.projectName}
-              </Text>
-            ) : null}
-          </View>
-          {onEdit ? (
-            <TouchableOpacity
-              onPress={onEdit}
-              style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit</Text>
-            </TouchableOpacity>
-          ) : (
-            // Keeps the title centred when there's no Edit button
-            <View style={{ width: 52 }} />
-          )}
-        </View>
-
-        <ScrollView contentContainerStyle={ss.content} showsVerticalScrollIndicator={false}>
+    <PushScreen
+      visible={visible}
+      title={isTraining ? (typeInfo?.label ?? climb.type) : climb.grade}
+      subtitle={climb.routeName || climb.projectName || undefined}
+      onBack={onClose}
+      headerRight={onEdit ? (
+        <TouchableOpacity
+          onPress={onEdit}
+          style={[ss.editPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[ss.editPillTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Edit</Text>
+        </TouchableOpacity>
+      ) : null}
+    >
+        <ScrollView contentContainerStyle={[ss.content, { paddingBottom: tabBarSpace }]} showsVerticalScrollIndicator={false}>
           {/* Grade + outcome row */}
           <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={ss.mainRow}>
@@ -169,22 +161,11 @@ export default function ClimbDetailModal({ visible, climb, onClose, onEdit }: Pr
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </View>
-    </Modal>
+    </PushScreen>
   );
 }
 
 const ss = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-  },
-  backTxt: { fontSize: FONTS.sizes.md, minWidth: 60 },
-  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: SPACING.sm },
-  headerGrade: { fontSize: FONTS.sizes.lg },
-  headerName: { fontSize: FONTS.sizes.sm, marginTop: 1 },
   editPill: {
     borderRadius: 20, borderWidth: 1,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs,
