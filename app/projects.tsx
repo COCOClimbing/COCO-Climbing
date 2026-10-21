@@ -33,6 +33,8 @@ export default function ProjectsScreen() {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editingProject, setEditingProject] = useState<NamedProject | null>(null);
   const [detailProject, setDetailProject] = useState<NamedProject | null>(null);
+  // Project to open in the edit form once its detail page has finished closing.
+  const editAfterCloseRef = React.useRef<NamedProject | null>(null);
   const [projectsRefreshKey, setProjectsRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
@@ -273,8 +275,13 @@ export default function ProjectsScreen() {
         refreshKey={projectsRefreshKey}
         onClose={() => setDetailProject(null)}
         onEdit={() => {
-          setEditingProject(detailProject);
+          editAfterCloseRef.current = detailProject;
           setDetailProject(null);
+        }}
+        onClosed={() => {
+          const project = editAfterCloseRef.current;
+          editAfterCloseRef.current = null;
+          if (project) setEditingProject(project);
         }}
       />
     </View>

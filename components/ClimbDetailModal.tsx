@@ -16,9 +16,13 @@ interface Props {
   onClose: () => void;
   // Omit for climbs the viewer can't edit (e.g. a friend's, opened from the feed)
   onEdit?: () => void;
+  // Runs once the page has fully slid away. Open any follow-up modal (e.g. the
+  // edit form) from here: iOS can't present one while this is still closing,
+  // and trying leaves an invisible layer that blocks every tap.
+  onClosed?: () => void;
 }
 
-export default function ClimbDetailModal({ visible, climb: climbProp, onClose, onEdit }: Props) {
+export default function ClimbDetailModal({ visible, climb: climbProp, onClose, onEdit, onClosed }: Props) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   // Callers clear the climb as they close, so keep showing the last one while
@@ -48,6 +52,7 @@ export default function ClimbDetailModal({ visible, climb: climbProp, onClose, o
       title={isTraining ? (typeInfo?.label ?? climb.type) : climb.grade}
       subtitle={climb.routeName || climb.projectName || undefined}
       onBack={onClose}
+      onDismiss={onClosed}
       headerRight={onEdit ? (
         <TouchableOpacity
           onPress={onEdit}

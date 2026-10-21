@@ -17,6 +17,9 @@ interface Props {
   refreshKey?: number;
   onClose: () => void;
   onEdit: () => void;
+  // Runs once the page has fully slid away — open the edit form from here
+  // (see ClimbDetailModal's onClosed).
+  onClosed?: () => void;
 }
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -42,7 +45,7 @@ interface ClimbEntry {
   sessionDate: string;
 }
 
-export default function ProjectDetailModal({ visible, project: projectProp, refreshKey, onClose, onEdit }: Props) {
+export default function ProjectDetailModal({ visible, project: projectProp, refreshKey, onClose, onEdit, onClosed }: Props) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   // The caller clears the project as it closes, so keep showing the last one
@@ -113,6 +116,7 @@ export default function ProjectDetailModal({ visible, project: projectProp, refr
       visible={visible}
       title={project.name}
       onBack={onClose}
+      onDismiss={onClosed}
       headerRight={
         <TouchableOpacity
           onPress={onEdit}

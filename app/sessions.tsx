@@ -103,6 +103,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const [modalSessionId, setModalSessionId] = useState<string | undefined>();
   const [editingClimb, setEditingClimb] = useState<Climb | undefined>();
   const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
+  // Climb to open in the edit form once its detail page has finished closing.
+  const editAfterCloseRef = useRef<Climb | null>(null);
   const [changeDateSession, setChangeDateSession] = useState<DaySession | null>(null);
   const [selectedCalDate, setSelectedCalDate] = useState<string | undefined>();
   const [sessionTitle, setSessionTitle] = useState('');
@@ -1398,7 +1400,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
         visible={!!detailClimb}
         climb={detailClimb}
         onClose={() => setDetailClimb(null)}
-        onEdit={() => { setEditingClimb(detailClimb ?? undefined); setDetailClimb(null); setLogModalVisible(true); }}
+        onEdit={() => { editAfterCloseRef.current = detailClimb; setDetailClimb(null); }}
+        onClosed={() => {
+          const climb = editAfterCloseRef.current;
+          editAfterCloseRef.current = null;
+          if (climb) { setEditingClimb(climb); setLogModalVisible(true); }
+        }}
       />
       <MiniCalendar
         visible={changeDateSession !== null}
