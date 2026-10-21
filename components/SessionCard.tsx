@@ -4,7 +4,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
-import { DaySession, sessionStats, formatSessionLabel, sessionTimeOfDay, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, sessionTimeOfDay, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
+import { formatRelativeDate } from '../utils/formatRelativeDate';
+import { format } from 'date-fns';
+import Avatar from './Avatar';
 import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import {
@@ -101,7 +104,11 @@ export default function SessionCard({
   day, colors, currentUserId, myAvatar, onEdit, onShare, onViewProfile, condensed = false,
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
-  const label = formatSessionLabel(day);
+  // Header matches the Activity feed: "Yesterday at 3:29 PM · Indoor".
+  const sessionTime = day.startedAt || day.lastClimbAt || day.climbs[0]?.date;
+  const timeLabel = sessionTime && !isNaN(new Date(sessionTime).getTime()) ? ` at ${format(new Date(sessionTime), 'h:mm a')}` : '';
+  const climbEnvs = [...new Set(day.climbs.map(c => c.environment).filter(Boolean))];
+  const isOutdoor = climbEnvs.length === 1 && climbEnvs[0] === 'outdoor';
   // A session of only custom-graded climbs has no "hardest", so fall back to its first non-training climb.
   // A lift/hangboard-only session shows its training type and no climb count.
   const trainingOnly = training !== null;
@@ -212,7 +219,26 @@ export default function SessionCard({
     <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.bgElevated }]} onPress={onEdit}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{label.top} · {label.bottom}</Text>
+        <Avatar
+          name="You"
+          avatarUrl={myAvatar ?? null}
+          size={44}
+          backgroundColor={colors.accentSoft}
+          textColor={colors.accent}
+          style={{ borderWidth: 2, borderColor: colors.accent }}
+        />
+        <View style={styles.headerInfo}>
+          <Text style={[styles.cardName, { color: colors.textPrimary }]}>You</Text>
+          <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>
+            {formatRelativeDate(day.date)}{timeLabel} · {isOutdoor ? 'Outdoor' : 'Indoor'}
+          </Text>
+          {hasLocation ? (
+            <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
+              <Ionicons name="location-sharp" size={13} color={colors.textSecondary} />
+              <Text style={[styles.cardLocation, { color: colors.textSecondary }]} numberOfLines={1}>{day.location!.trim()}</Text>
+            </View>
+          ) : null}
+        </View>
         <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
         </TouchableOpacity>
@@ -228,14 +254,6 @@ export default function SessionCard({
       {/* Notes */}
       {!condensed && hasNotes && (
         <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{day.notes}</Text>
-      )}
-
-      {/* Location */}
-      {!condensed && hasLocation && (
-        <View style={styles.cardLocationRow}>
-          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
-          <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{day.location}</Text>
-        </View>
       )}
 
       {/* Climbing with */}
@@ -317,6 +335,20 @@ export default function SessionCard({
             />
           ))}
         </ScrollView>
+      )}
+
+      {/* View climbs — opens the session, like the feed's button */}
+      {!condensed && (
+        <TouchableOpacity
+          onPress={onEdit}
+          activeOpacity={0.7}
+          style={[styles.cardExpandBtn, { borderColor: colors.border }]}
+        >
+          <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
+            {training === 'lift' ? 'View lift' : training === 'hangboard' ? 'View hang' : training === 'both' ? 'View lift + hang' : 'View climbs'}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       )}
 
       {/* Likes / comment counts */}
@@ -423,7 +455,21 @@ const styles = StyleSheet.create({
     marginHorizontal: -SPACING.xl,
     paddingHorizontal: SPACING.xl,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: SPACING.xs },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingBottom: SPACING.md },
+  headerInfo: { flex: 1 },
+  cardName: { fontSize: 14, fontFamily: FONTS.family.bold, marginBottom: 1 },
+  cardExpandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  cardExpandTxt: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   dateLabel: { fontSize: 12, fontFamily: FONTS.family.regular },
   cardTitleRow: { paddingTop: SPACING.xs, paddingBottom: SPACING.xs },
   cardTitle: { fontSize: 19, fontFamily: FONTS.family.bold, letterSpacing: -0.3 },

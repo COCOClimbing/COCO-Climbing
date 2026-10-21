@@ -20,9 +20,12 @@ interface Props {
   // edit form) from here: iOS can't present one while this is still closing,
   // and trying leaves an invisible layer that blocks every tap.
   onClosed?: () => void;
+  // Modals to present on top of this page (e.g. the edit form). They must be
+  // rendered in here: iOS only stacks a modal on the one that presents it.
+  children?: React.ReactNode;
 }
 
-export default function ClimbDetailModal({ visible, climb: climbProp, onClose, onEdit, onClosed }: Props) {
+export default function ClimbDetailModal({ visible, climb: climbProp, onClose, onEdit, onClosed, children }: Props) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   // Callers clear the climb as they close, so keep showing the last one while
@@ -166,6 +169,7 @@ export default function ClimbDetailModal({ visible, climb: climbProp, onClose, o
 
           <View style={{ height: 40 }} />
         </ScrollView>
+        {children}
     </PushScreen>
   );
 }

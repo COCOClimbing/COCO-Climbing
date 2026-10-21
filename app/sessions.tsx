@@ -103,8 +103,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const [modalSessionId, setModalSessionId] = useState<string | undefined>();
   const [editingClimb, setEditingClimb] = useState<Climb | undefined>();
   const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
-  // Climb to open in the edit form once its detail page has finished closing.
-  const editAfterCloseRef = useRef<Climb | null>(null);
+  // Edit form opened from a climb's page; it sits on top of that page.
+  const [detailEditOpen, setDetailEditOpen] = useState(false);
   const [changeDateSession, setChangeDateSession] = useState<DaySession | null>(null);
   const [selectedCalDate, setSelectedCalDate] = useState<string | undefined>();
   const [sessionTitle, setSessionTitle] = useState('');
@@ -270,6 +270,14 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const activeSessionId = getActiveSessionId();
   const activeSession = activeSessionId ? (days.find(d => d.sessionId === activeSessionId) ?? null) : null;
   const listDays = days.filter(d => d.sessionId !== activeSessionId);
+
+  // After editing from a climb's page, show the saved version of that climb
+  // (or close the page if the climb no longer exists).
+  useEffect(() => {
+    if (!detailClimb) return;
+    const fresh = days.flatMap(d => d.climbs).find(c => c.id === detailClimb.id);
+    if (fresh !== detailClimb) setDetailClimb(fresh ?? null);
+  }, [days]);
   const activeDates = [...new Set(days.map(d => d.date))];
 
   // Sync active-session editing state when a different session becomes active
@@ -1400,13 +1408,17 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
         visible={!!detailClimb}
         climb={detailClimb}
         onClose={() => setDetailClimb(null)}
-        onEdit={() => { editAfterCloseRef.current = detailClimb; setDetailClimb(null); }}
-        onClosed={() => {
-          const climb = editAfterCloseRef.current;
-          editAfterCloseRef.current = null;
-          if (climb) { setEditingClimb(climb); setLogModalVisible(true); }
-        }}
-      />
+        // The edit form opens on top of the climb page, so saving or
+        // cancelling lands back on this climb.
+        onEdit={() => setDetailEditOpen(true)}
+      >
+        <LogClimbModal
+          visible={detailEditOpen}
+          onClose={() => setDetailEditOpen(false)}
+          onSaved={load}
+          existingClimb={detailClimb ?? undefined}
+        />
+      </ClimbDetailModal>
       <MiniCalendar
         visible={changeDateSession !== null}
         onClose={() => setChangeDateSession(null)}
