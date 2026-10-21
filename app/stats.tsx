@@ -4,6 +4,8 @@ import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
+import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
@@ -119,6 +121,7 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function StatsScreen() {
+  const tabBarSpace = useTabBarSpace();
   const { colors } = useTheme();
   const { screen, navigateToSession } = useNav();
   const [climbs, setClimbs] = useState<Climb[]>([]);
@@ -329,6 +332,8 @@ export default function StatsScreen() {
     };
   }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
+  const { onScroll, topInset } = useHeaderScroll(!loading && !!computed);
+
   if (loading) {
     return (
       <View style={[ss.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
@@ -401,7 +406,12 @@ export default function StatsScreen() {
 
   return (
     <View style={[ss.container, { backgroundColor: colors.bg }]}>
-      <ScrollView contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[ss.scroll, { paddingTop: SPACING.lg + topInset, paddingBottom: tabBarSpace }]}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={onScroll}
+      >
 
         {/* ── Overview ── */}
         <View style={ss.overviewRow}>

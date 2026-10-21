@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from './BottomTabBar';
 import { useNav, ScreenId } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
+import { useHeaderScrollContext } from '../utils/HeaderScroll';
+import StatusBarFade from './StatusBarFade';
+import PushScreen from './PushScreen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh } from '../utils/storage';
 import { FONTS, SPACING } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
@@ -33,11 +39,17 @@ type AppNotification = {
 export default function AppHeader() {
   const { colors } = useTheme();
   const nav = useNav();
-  const { screen, navigate, openSettings, openFriends } = nav;
-  const { user, pendingRequestCount, avatarUrl, localAvatarUri, profileName } = useAuth();
-  const initials = profileName
-    ? profileName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : '?';
+  const { screen, openSettings, closeSettings, openFriends, navigateToSession } = nav;
+  const { user, pendingRequestCount } = useAuth();
+  const { scrollY, floating, setHeaderHeight } = useHeaderScrollContext();
+  const insets = useSafeAreaInsets();
+  const tabBarSpace = useTabBarSpace();
+  // On screens whose content runs under the header, the bar and title fade
+  // out as you scroll; the round buttons stay.
+  const barOpacity = floating
+    ? scrollY.interpolate({ inputRange: [0, 40], outputRange: [1, 0], extrapolate: 'clamp' })
+    : 1;
+  const circle = [styles.circleBtn, { backgroundColor: colors.bgCard }];
 
   const [notifVisible, setNotifVisible] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -125,6 +137,18 @@ export default function AppHeader() {
     loadingMoreNotifsRef.current = false;
   }
 
+  // Same as the Sessions tab's "+ Session": reuse the open session if there
+  // is one, otherwise start a new one, then show it on the Sessions tab.
+  async function startSession() {
+    let id = await getValidActiveSessionId();
+    if (!id) {
+      id = await createNewSession('indoor');
+      setActiveSessionId(id);
+      triggerSessionsRefresh();
+    }
+    navigateToSession(id);
+  }
+
   function routeTap(n: AppNotification) {
     routeNotificationTap(nav, n.type, { senderId: n.sender_id, sessionId: n.session_id }).catch(err => {
       console.error('[notifications] Failed to resolve tap routing:', err);
@@ -160,21 +184,26 @@ export default function AppHeader() {
   }
 
   return (
-    <View style={[styles.header, { backgroundColor: colors.bg, borderBottomColor: colors.border }]}>
-      {/* Left side — profile avatar + search icon */}
+    <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]} onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)} pointerEvents="box-none">
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, styles.bar, { backgroundColor: colors.bg, borderBottomColor: colors.border, opacity: barOpacity }]}
+      />
+      {floating && <StatusBarFade />}
+      {/* Left side — start session + search (your profile lives in the bottom
+          bar's You tab); just a back button on Settings, which isn't a tab. */}
       <View style={styles.side}>
-        <View style={styles.leftGroup}>
-          <TouchableOpacity onPress={() => navigate('account')} activeOpacity={0.7}>
-            <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
-              {(localAvatarUri ?? avatarUrl) ? (
-                <Image source={{ uri: localAvatarUri ?? avatarUrl! }} style={styles.avatarImage} />
-              ) : (
-                <Text style={[styles.avatarInitials, { color: colors.accent }]}>{initials}</Text>
-              )}
-            </View>
+        {screen === 'settings' ? (
+          <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={circle} accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={openFriends} activeOpacity={0.7} style={styles.searchBtn}>
-            <Ionicons name="search" size={24} color={colors.textPrimary} />
+        ) : (
+        <View style={styles.leftGroup}>
+          <TouchableOpacity onPress={startSession} activeOpacity={0.7} style={circle} accessibilityLabel="Start session">
+            <Ionicons name="add" size={26} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openFriends} activeOpacity={0.7} style={circle}>
+            <Ionicons name="search" size={22} color={colors.textPrimary} />
             {pendingRequestCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
                 <Text style={styles.badgeText}>{pendingRequestCount > 9 ? '9+' : pendingRequestCount}</Text>
@@ -182,20 +211,21 @@ export default function AppHeader() {
             )}
           </TouchableOpacity>
         </View>
+        )}
       </View>
 
-      <Text style={[styles.title, { color: colors.textPrimary }]}>
+      <Animated.Text style={[styles.title, { color: colors.textPrimary, opacity: barOpacity }]}>
         {SCREEN_TITLES[screen] ?? ''}
-      </Text>
+      </Animated.Text>
 
       <View style={styles.sideRight}>
-        {screen === 'account' ? (
-          <TouchableOpacity onPress={openSettings} style={[styles.pill, { borderColor: colors.border }]} activeOpacity={0.7}>
-            <Text style={[styles.pillText, { color: colors.textPrimary }]}>Settings</Text>
+        {screen === 'settings' ? null : screen === 'account' ? (
+          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} accessibilityLabel="Settings" style={circle}>
+            <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={openNotifications} activeOpacity={0.7} style={styles.bellBtn}>
-            <Ionicons name="notifications" size={24} color={colors.textPrimary} />
+          <TouchableOpacity onPress={openNotifications} activeOpacity={0.7} style={circle}>
+            <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
                 <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -205,15 +235,8 @@ export default function AppHeader() {
         )}
       </View>
 
-      {/* Notifications modal */}
-      <Modal visible={notifVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setNotifVisible(false)} onDismiss={handleNotifModalDismiss}>
-        <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Notifications</Text>
-            <TouchableOpacity onPress={() => setNotifVisible(false)} activeOpacity={0.7}>
-              <Text style={{ color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: 15 }}>Done</Text>
-            </TouchableOpacity>
-          </View>
+      {/* Notifications page */}
+      <PushScreen visible={notifVisible} title="Notifications" onBack={() => setNotifVisible(false)} onDismiss={handleNotifModalDismiss}>
 
           {notifLoading ? (
             <ActivityIndicator color={colors.accent} style={{ marginTop: SPACING.xl }} />
@@ -221,7 +244,7 @@ export default function AppHeader() {
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>No notifications yet.</Text>
           ) : (
             <ScrollView
-              contentContainerStyle={{ paddingVertical: SPACING.sm }}
+              contentContainerStyle={{ paddingTop: SPACING.sm, paddingBottom: tabBarSpace }}
               scrollEventThrottle={16}
               onScroll={e => {
                 const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
@@ -260,77 +283,61 @@ export default function AppHeader() {
               )}
             </ScrollView>
           )}
-        </View>
-      </Modal>
+      </PushScreen>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  bar: {
     borderBottomWidth: 1,
   },
+  circleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
   side: {
-    width: 80,
+    width: 96,
     alignItems: 'flex-start',
   },
   leftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.lg,
-  },
-  searchBtn: {
-    position: 'relative',
-  },
-  bellBtn: {
-    position: 'relative',
+    gap: SPACING.md,
   },
   sideRight: {
-    width: 80,
+    width: 96,
     alignItems: 'flex-end',
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  avatarInitials: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.semibold,
   },
   title: {
     fontSize: FONTS.sizes.lg,
     fontFamily: FONTS.family.bold,
     letterSpacing: 0.5,
   },
-  pill: {
-    borderWidth: 1.5,
-    borderRadius: 20,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  pillText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.semibold },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -6,
+    top: -2,
+    right: -2,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -339,16 +346,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: '#fff', fontSize: 10, fontFamily: FONTS.family.bold, lineHeight: 12 },
-  modalContainer: { flex: 1 },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-  },
-  modalTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold },
   emptyText: { textAlign: 'center', marginTop: SPACING.xl, fontFamily: FONTS.family.regular },
   notifRow: {
     flexDirection: 'row',

@@ -16,6 +16,8 @@ import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Lin
 import * as ImagePicker from 'expo-image-picker';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
+import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { upsertProfile } from '../utils/cloudSync';
@@ -26,14 +28,26 @@ import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/
 import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
+import { getMyGalleryPhotos } from '../utils/gallery';
+import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
+import PhotoGallery from '../components/PhotoGallery';
 
+
+type ProfileTab = 'progress' | 'gallery';
+const PROFILE_TABS: UnderlineTab<ProfileTab>[] = [
+  { id: 'progress', label: 'Progress', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
+  { id: 'gallery',  label: 'Gallery',  icon: 'grid-outline',        iconActive: 'grid' },
+];
 
 export default function AccountScreen() {
+  const tabBarSpace = useTabBarSpace();
   const { colors, mode, setMode } = useTheme();
   const { settingsOpen, closeSettings, navigate, screen, friendsOpen, viewFriendProfile } = useNav();
   const { user, profileName, avatarUrl, localAvatarUri, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
 
   const [friendCounts, setFriendCounts] = useState<{ followers: number; following: number } | null>(null);
+  const [profileTab, setProfileTab] = useState<ProfileTab>('progress');
+  const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
   const [followListModal, setFollowListModal] = useState<'following' | 'followers' | null>(null);
   const [followTab, setFollowTab] = useState<'following' | 'followers'>('following');
   const [followingList, setFollowingList] = useState<FriendProfile[]>([]);
@@ -80,6 +94,12 @@ export default function AccountScreen() {
       loadStats();
     }
   }, [screen]);
+
+  useEffect(() => {
+    if (screen === 'account' && profileTab === 'gallery') {
+      getMyGalleryPhotos().then(setGalleryUris).catch(() => setGalleryUris([]));
+    }
+  }, [screen, profileTab]);
 
   async function loadStats() {
     const { boulder, rope } = await getPreferredDisplayGrades();
@@ -147,6 +167,8 @@ export default function AccountScreen() {
       dominantSys,
     });
   }
+
+  const { onScroll, topInset } = useHeaderScroll(!!user);
 
   if (!user) {
     return (
@@ -294,8 +316,10 @@ export default function AccountScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
-      contentContainerStyle={styles.scroll}
+      contentContainerStyle={[styles.scroll, { paddingTop: topInset, paddingBottom: tabBarSpace }]}
       showsVerticalScrollIndicator={false}
+      scrollEventThrottle={16}
+      onScroll={onScroll}
     >
       {/* Profile Header */}
       <View style={styles.profileHeader}>
@@ -352,8 +376,16 @@ export default function AccountScreen() {
         </View>
       </View>
 
-      {/* Stats Section */}
-      {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} />}
+      {/* Last 30 days, then a Progress / Gallery toggle */}
+      {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="month" />}
+      <UnderlineTabs<ProfileTab> tabs={PROFILE_TABS} value={profileTab} onChange={setProfileTab} />
+      {profileTab === 'progress' ? (
+        climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="progress" />
+      ) : (
+        <View style={styles.gallery}>
+          <PhotoGallery uris={galleryUris ?? []} loading={galleryUris === null} emptyText="Photos you add to sessions and climbs show up here." />
+        </View>
+      )}
 
       {/* Following / Followers Modal */}
       {/* Avatar preview / confirm modal */}
@@ -750,11 +782,13 @@ function GradeChart({ pts, dominantSys, colors }: {
   );
 }
 
-function ClimbStatsSection({ stats, colors }: { stats: ClimbStatsData; colors: any }) {
+// part "month" is the Last 30 Days block above the profile's toggle; part
+// "progress" is everything shown under its Progress tab.
+function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; colors: any; part: 'month' | 'progress' }) {
   const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, sessionPoints, dominantSys } = stats;
 
-  return (
-    <View style={statStyles.wrapper}>
+  if (part === 'month') return (
+    <View style={[statStyles.wrapper, { marginBottom: SPACING.md }]}>
       {/* This Month */}
       <View style={statStyles.sectionLabelRow}>
         <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>LAST 30 DAYS</Text>
@@ -771,11 +805,14 @@ function ClimbStatsSection({ stats, colors }: { stats: ClimbStatsData; colors: a
           </View>
         ))}
       </View>
+    </View>
+  );
 
+  return (
+    <View style={[statStyles.wrapper, { marginTop: SPACING.lg }]}>
       {/* Avg Grade Per Session line chart */}
       {sessionPoints.length >= 2 && (
         <>
-          <View style={[statStyles.divider, { backgroundColor: colors.border }]} />
           <View style={statStyles.sectionLabelRow}>
             <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
           </View>
@@ -785,7 +822,7 @@ function ClimbStatsSection({ stats, colors }: { stats: ClimbStatsData; colors: a
 
       {/* Hardest All Time */}
       <>
-        <View style={[statStyles.divider, { backgroundColor: colors.border }]} />
+        {sessionPoints.length >= 2 && <View style={[statStyles.divider, { backgroundColor: colors.border }]} />}
         <View style={statStyles.sectionLabelRow}>
           <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>HARDEST SENDS</Text>
         </View>
@@ -895,6 +932,7 @@ const statStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  gallery: { marginTop: 2 },
   container: {
     flex: 1,
   },

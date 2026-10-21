@@ -269,7 +269,7 @@ export default function ActivityCard({
           <ProfileAvatar name={entry.friend.name} avatarUrl={entry.friend.avatar_url ?? null} size={44} colors={colors} />
           <View style={styles.cardHeaderInfo}>
             <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
-            <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
+            <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
               {formatRelativeDate(entry.sessionDate)} · {isOutdoor ? 'Outdoor' : 'Indoor'}
             </Text>
           </View>
@@ -288,14 +288,14 @@ export default function ActivityCard({
 
       {/* Notes */}
       {entry.notes?.trim() ? (
-        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
+        <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{entry.notes.trim()}</Text>
       ) : null}
 
       {/* Location */}
       {entry.location?.trim() ? (
         <View style={styles.cardLocationRow}>
-          <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
-          <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
+          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
+          <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{entry.location.trim()}</Text>
         </View>
       ) : null}
 
@@ -328,19 +328,19 @@ export default function ActivityCard({
           <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
             {CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—'}
           </Text>
-          <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
+          <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
         </View>
         <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
         <View style={styles.cardStat}>
           <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
-          <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+          <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
         </View>
         {entry.hardestGrade ? (
           <>
             <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
             <View style={styles.cardStat}>
               <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
-              <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Hardest</Text>
+              <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
             </View>
           </>
         ) : null}
@@ -495,11 +495,11 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingBottom: SPACING.md },
   cardHeaderInfo: { flex: 1 },
   cardName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold, marginBottom: 4 },
-  cardMeta: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardMeta: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardTitleRow: { paddingTop: SPACING.xs, paddingBottom: SPACING.xs },
-  cardTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.2 },
+  cardTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, letterSpacing: -0.3 },
   cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
-  cardLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardLocation: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardNotes: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22, paddingBottom: SPACING.sm },
   partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
   partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
@@ -507,8 +507,8 @@ const styles = StyleSheet.create({
   partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatNum: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
-  cardStatLbl: { fontSize: 10, fontFamily: FONTS.family.medium, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardStatNum: { fontSize: 20, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },

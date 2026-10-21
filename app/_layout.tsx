@@ -22,13 +22,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../utils/ThemeContext';
 import { NavigationProvider, useNav } from '../utils/NavigationContext';
 import { AuthProvider, useAuth } from '../utils/AuthContext';
+import { HeaderScrollProvider, useHeaderScrollContext } from '../utils/HeaderScroll';
 import AppHeader from '../components/AppHeader';
 import BottomTabBar from '../components/BottomTabBar';
 import ResetPasswordScreen from './reset-password';
 
 import LogScreen from './index';
-import SessionsScreen from './sessions';
-import ProjectsScreen from './projects';
+import SessionsHub from './sessions-hub';
 import StatsScreen from './stats';
 import SettingsScreen from './settings';
 import LoginScreen from './login';
@@ -65,6 +65,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const { colors, mode } = useTheme();
   const { screen, navigate } = useNav();
   const { user, loading, isPasswordRecovery } = useAuth();
+  const { floating, headerHeight } = useHeaderScrollContext();
   useNotificationTapRouting();
 
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
@@ -184,8 +185,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const renderScreen = () => {
     switch (screen) {
       case 'log':      return <LogScreen />;
-      case 'sessions': return <SessionsScreen />;
-      case 'projects': return <ProjectsScreen />;
+      case 'sessions': return <SessionsHub />;
       case 'stats':    return <StatsScreen />;
       case 'settings': return <SettingsScreen />;
       case 'friends':  return <FriendsScreen />;
@@ -197,11 +197,17 @@ function AppShell({ onReady }: { onReady: () => void }) {
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       <StatusBar style={statusBarStyle} />
-      <SafeAreaView style={styles.root} edges={['top']}>
-        <AppHeader />
-        <View style={[styles.body, { backgroundColor: colors.bg }]}>
-          {screen !== 'friends' && renderScreen()}
-          <FriendsScreen />
+      {/* No top safe-area padding: the header covers the status bar area
+          itself, so scrolled content can run all the way to the top. */}
+      <SafeAreaView style={styles.root} edges={[]}>
+        <View style={styles.body}>
+          {/* Screens that opt into useHeaderScroll run under the floating
+              header; the rest start below it. */}
+          <View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating ? 0 : headerHeight }]}>
+            {screen !== 'friends' && renderScreen()}
+            <FriendsScreen />
+          </View>
+          <AppHeader />
         </View>
         <BottomTabBar />
       </SafeAreaView>
@@ -236,7 +242,9 @@ function ThemedRoot({ onReady }: { onReady: () => void }) {
       <SafeAreaProvider>
         <AuthProvider>
           <NavigationProvider>
-            <AppShell onReady={onReady} />
+            <HeaderScrollProvider>
+              <AppShell onReady={onReady} />
+            </HeaderScrollProvider>
           </NavigationProvider>
         </AuthProvider>
       </SafeAreaProvider>

@@ -1,13 +1,14 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, Modal, Dimensions, PanResponder, Animated
+  SafeAreaView, Modal, Dimensions, PanResponder, Animated, FlatList
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING } from '../utils/theme';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
-  getDay, addMonths, subMonths, isToday
+  getDay, addMonths, subMonths, isToday, differenceInCalendarMonths, parseISO
 } from 'date-fns';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -21,11 +22,122 @@ interface Props {
   onSelectDate: (date: string) => void;
   selectedDate?: string;
   mode: 'view' | 'pick';
+  // Render in place (e.g. as a tab) as a vertically scrolling list of months
+  // instead of as a modal sheet that swipes between months.
+  inline?: boolean;
 }
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHS_PER_PAGE = 12;
 
-export default function MiniCalendar({ visible, onClose, activeDates, onSelectDate, selectedDate, mode }: Props) {
+// Day cells for one month. Shared by the modal and the scrolling list.
+function MonthGrid({ month, activeDates, selectedDate, onPressDay }: {
+  month: Date; activeDates: string[]; selectedDate?: string; onPressDay: (iso: string) => void;
+}) {
+  const { colors } = useTheme();
+  const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
+  const startPad = getDay(startOfMonth(month));
+  return (
+    <>
+      {Array.from({ length: startPad }).map((_, i) => (
+        <View key={`pad-${i}`} style={styles.cell} />
+      ))}
+      {days.map(day => {
+        const iso = format(day, 'yyyy-MM-dd');
+        const hasClimbs = activeDates.includes(iso);
+        const isSelected = selectedDate === iso;
+        const today = isToday(day);
+        return (
+          <TouchableOpacity key={iso} style={styles.cell} onPress={() => onPressDay(iso)} activeOpacity={0.7}>
+            <View style={[
+              styles.dayCircle,
+              hasClimbs && !today && { borderWidth: 1.5, borderColor: colors.accent },
+              isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 1.5, borderColor: colors.accent },
+              today && { backgroundColor: colors.accent },
+            ]}>
+              <Text style={[styles.dayNum, {
+                color: today ? '#000' : (isSelected || hasClimbs) ? colors.accent : colors.textPrimary,
+                fontFamily: isSelected || hasClimbs || today ? FONTS.family.bold : FONTS.family.regular,
+                fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
+              }]}>
+                {format(day, 'd')}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </>
+  );
+}
+
+// Chronological, like the iOS Calendar: the current month sits at the bottom
+// and scrolling up goes into the past. Starts far enough back to cover the
+// oldest session and loads another year whenever you reach the top. The list
+// is inverted, so item 0 (this month) renders at the bottom and "end reached"
+// fires at the top.
+function ScrollingMonths({ activeDates, selectedDate, onSelectDate }: {
+  activeDates: string[]; selectedDate?: string; onSelectDate: (date: string) => void;
+}) {
+  const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
+  const oldest = activeDates.reduce<string | null>((min, d) => (min === null || d < min ? d : min), null);
+  const monthsToOldest = oldest ? differenceInCalendarMonths(new Date(), parseISO(oldest)) + 1 : 0;
+  const [monthCount, setMonthCount] = useState(Math.max(MONTHS_PER_PAGE, monthsToOldest));
+  const offsets = Array.from({ length: monthCount }, (_, i) => i);
+
+  return (
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+      <View style={[styles.row, styles.stickyDays, { borderBottomColor: colors.border }]}>
+        {DAYS.map((d, i) => (
+          <View key={i} style={styles.dayHeaderCell}>
+            <Text style={[styles.dayHeader, { color: colors.textMuted, fontFamily: FONTS.family.medium }]}>{d}</Text>
+          </View>
+        ))}
+      </View>
+      <FlatList
+        data={offsets}
+        keyExtractor={i => String(i)}
+        inverted
+        // Inverted, so paddingTop is the visual bottom — room for the tab bar.
+        contentContainerStyle={{ paddingTop: tabBarSpace }}
+        showsVerticalScrollIndicator={false}
+        onEndReached={() => setMonthCount(c => c + MONTHS_PER_PAGE)}
+        onEndReachedThreshold={1}
+        initialNumToRender={3}
+        renderItem={({ item }) => {
+          const month = subMonths(startOfMonth(new Date()), item);
+          return (
+            <View style={styles.monthBlock}>
+              <Text style={[styles.listMonthName, { color: colors.textPrimary, fontFamily: FONTS.family.heavy }]}>
+                {format(month, 'MMMM')}
+                <Text style={[styles.listYearName, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>
+                  {'  '}{format(month, 'yyyy')}
+                </Text>
+              </Text>
+              <View style={styles.listGrid}>
+                <MonthGrid month={month} activeDates={activeDates} selectedDate={selectedDate} onPressDay={onSelectDate} />
+              </View>
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+export default function MiniCalendar({ visible, onClose, activeDates, onSelectDate, selectedDate, mode, inline = false }: Props) {
+  if (inline) {
+    return <ScrollingMonths activeDates={activeDates} selectedDate={selectedDate} onSelectDate={onSelectDate} />;
+  }
+  return (
+    <ModalCalendar
+      visible={visible} onClose={onClose} activeDates={activeDates}
+      onSelectDate={onSelectDate} selectedDate={selectedDate} mode={mode}
+    />
+  );
+}
+
+function ModalCalendar({ visible, onClose, activeDates, onSelectDate, selectedDate }: Props) {
   const { colors } = useTheme();
   const [month, setMonth] = useState(new Date());
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -60,11 +172,7 @@ export default function MiniCalendar({ visible, onClose, activeDates, onSelectDa
     })
   ).current;
 
-  const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
-  const startPad = getDay(startOfMonth(month));
-
-  function handleDay(day: Date) {
-    const iso = format(day, 'yyyy-MM-dd');
+  function handleDay(iso: string) {
     onSelectDate(iso);
     onClose();
   }
@@ -101,33 +209,7 @@ export default function MiniCalendar({ visible, onClose, activeDates, onSelectDa
 
         {/* Grid — swipe left/right to change month */}
         <Animated.View style={[styles.grid, { transform: [{ translateX: slideAnim }] }]} {...panResponder.panHandlers}>
-          {Array.from({ length: startPad }).map((_, i) => (
-            <View key={`pad-${i}`} style={styles.cell} />
-          ))}
-          {days.map(day => {
-            const iso = format(day, 'yyyy-MM-dd');
-            const hasClimbs = activeDates.includes(iso);
-            const isSelected = selectedDate === iso;
-            const today = isToday(day);
-            return (
-              <TouchableOpacity key={iso} style={styles.cell} onPress={() => handleDay(day)} activeOpacity={0.7}>
-                <View style={[
-                  styles.dayCircle,
-                  hasClimbs && !today && { borderWidth: 1.5, borderColor: colors.accent },
-                  isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 1.5, borderColor: colors.accent },
-                  today && { backgroundColor: colors.accent },
-                ]}>
-                  <Text style={[styles.dayNum, {
-                    color: today ? '#000' : (isSelected || hasClimbs) ? colors.accent : colors.textPrimary,
-                    fontFamily: isSelected || hasClimbs || today ? FONTS.family.bold : FONTS.family.regular,
-                    fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
-                  }]}>
-                    {format(day, 'd')}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+          <MonthGrid month={month} activeDates={activeDates} selectedDate={selectedDate} onPressDay={handleDay} />
         </Animated.View>
 
         {/* Footer */}
@@ -169,4 +251,10 @@ const styles = StyleSheet.create({
   todayTxt: { fontSize: FONTS.sizes.md },
   doneBtn: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: 10 },
   doneTxt: { color: '#000', fontSize: FONTS.sizes.md },
+  stickyDays: { alignItems: 'center', borderBottomWidth: 1 },
+  dayHeaderCell: { width: CELL_W, alignItems: 'center' },
+  monthBlock: { paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
+  listMonthName: { fontSize: FONTS.sizes.xl, paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm },
+  listYearName: { fontSize: FONTS.sizes.md },
+  listGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md },
 });

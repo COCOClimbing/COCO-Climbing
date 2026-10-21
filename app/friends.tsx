@@ -21,6 +21,8 @@ import {
 } from 'react-native';
 import ShareModal from '../components/ShareModal';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
+import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
@@ -78,6 +80,11 @@ import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 import { MediaBox } from '../components/TrainingEntry';
+import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
+import PhotoGallery from '../components/PhotoGallery';
+import { getMyGalleryPhotos, getFriendGalleryPhotos } from '../utils/gallery';
+import StatusBarFade from '../components/StatusBarFade';
+import PushScreen from '../components/PushScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -175,6 +182,13 @@ function ProfileAvatar({ name, avatarUrl, size, colors }: { name: string; avatar
   );
 }
 
+type FriendTab = 'progress' | 'activities' | 'gallery';
+const FRIEND_TABS: UnderlineTab<FriendTab>[] = [
+  { id: 'progress',   label: 'Progress',   icon: 'stats-chart-outline', iconActive: 'stats-chart' },
+  { id: 'activities', label: 'Sessions',   icon: 'list-outline',        iconActive: 'list' },
+  { id: 'gallery',    label: 'Gallery',    icon: 'grid-outline',        iconActive: 'grid' },
+];
+
 function FriendDetailView({
   friend,
   onBack,
@@ -197,7 +211,9 @@ function FriendDetailView({
   const { navigateToSession, viewFriendProfile } = useNav();
   const handleViewProfile = onViewProfile ?? viewFriendProfile;
   const isSelf = user?.id === friend.id;
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const tabBarSpace = useTabBarSpace();
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
@@ -223,6 +239,17 @@ function FriendDetailView({
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
   const [preferredRope, setPreferredRope] = useState('yds');
   const [bio, setBio] = useState<string | null>(friend.bio ?? null);
+  const [profileTab, setProfileTab] = useState<FriendTab>('progress');
+  const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
+
+  // Gallery photos load the first time the tab is opened (they need the
+  // climb list, which loads with the profile).
+  useEffect(() => {
+    if (profileTab !== 'gallery' || galleryUris !== null || loadingClimbs) return;
+    (isSelf ? getMyGalleryPhotos() : getFriendGalleryPhotos(friend.id, climbs))
+      .then(setGalleryUris)
+      .catch(() => setGalleryUris([]));
+  }, [profileTab, galleryUris, loadingClimbs]);
 
   useEffect(() => {
     Promise.all([loadClimbs(), loadCounts(), loadFriendStatus(), loadSessions(), loadBio()]).catch(() => {});
@@ -417,25 +444,19 @@ function FriendDetailView({
 
   return (
     <View style={[detailStyles.container, { backgroundColor: colors.bg }]}>
-      {/* Back */}
-      <View style={[detailStyles.topBar, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={onBack} style={detailStyles.backBtn} activeOpacity={0.7}>
-          <Text style={[detailStyles.backText, { color: colors.accent }]}>← Back</Text>
-        </TouchableOpacity>
-      </View>
 
       <PhotoClipContext.Provider value={scrollRef}>
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={detailStyles.scrollContent}
+        contentContainerStyle={[detailStyles.scrollContent, { paddingTop: insets.top + SPACING.xl, paddingBottom: tabBarSpace }]}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={e => {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
           const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
           if (distanceFromBottom < 200) {
-            loadMoreSessions();
+            if (profileTab === 'activities') loadMoreSessions();
           } else {
             canTriggerLoadMoreSessionsRef.current = true;
           }
@@ -532,7 +553,8 @@ function FriendDetailView({
             </Text>
           </View>
         ) : (
-          <View style={detailStyles.statsWrapper}>
+          <>
+          <View style={[detailStyles.statsWrapper, { marginBottom: SPACING.sm }]}>
 
             {/* ── This Month ── */}
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>LAST 30 DAYS</Text>
@@ -547,9 +569,20 @@ function FriendDetailView({
                 </View>
               ))}
             </View>
+          </View>
 
-            <View style={[detailStyles.divider, { backgroundColor: colors.border }]} />
+          <UnderlineTabs<FriendTab> tabs={FRIEND_TABS} value={profileTab} onChange={setProfileTab} />
 
+          {profileTab === 'gallery' ? (
+            <View style={{ marginTop: 2 }}>
+              <PhotoGallery
+                uris={galleryUris ?? []}
+                loading={galleryUris === null}
+                emptyText={isSelf ? 'Photos you add to sessions and climbs show up here.' : `${friend.name} hasn't shared any photos yet.`}
+              />
+            </View>
+          ) : profileTab === 'progress' ? (
+          <View style={[detailStyles.statsWrapper, { marginTop: SPACING.lg }]}>
             {/* ── Hardest Sends ── */}
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>HARDEST SENDS</Text>
             <View style={detailStyles.hardestRow}>
@@ -576,11 +609,10 @@ function FriendDetailView({
                 </View>
               ))}
             </View>
-
-            <View style={[detailStyles.divider, { backgroundColor: colors.border }]} />
-
+          </View>
+          ) : (
+          <View style={[detailStyles.statsWrapper, { marginTop: SPACING.lg }]}>
             {/* ── Sessions ── */}
-            <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>SESSIONS</Text>
             {loadingSessions ? (
               <ActivityIndicator color={colors.accent} style={{ marginVertical: SPACING.lg }} />
             ) : isSelf ? (
@@ -632,9 +664,25 @@ function FriendDetailView({
               )
             )}
           </View>
+          )}
+          </>
         )}
       </ScrollView>
       </PhotoClipContext.Provider>
+
+      {/* The profile scrolls up under the status bar, like the main tabs. */}
+      <StatusBarFade />
+
+      {/* Round back button, like the app header's — floats over the profile
+          and stays put while it scrolls. */}
+      <TouchableOpacity
+        onPress={onBack}
+        style={[detailStyles.backBtn, { backgroundColor: colors.bgCard, top: insets.top + SPACING.sm }]}
+        activeOpacity={0.7}
+        accessibilityLabel="Back"
+      >
+        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+      </TouchableOpacity>
 
       {/* Followers / Following list sheet */}
       <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
@@ -725,9 +773,11 @@ function FriendDetailView({
 
 const detailStyles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
-  backBtn: { paddingVertical: SPACING.xs },
-  backText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },
+  backBtn: {
+    position: 'absolute', left: SPACING.lg, zIndex: 10,
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   scrollContent: { paddingBottom: SPACING.xxl * 2 },
 
   // Profile header — matches account page
@@ -776,6 +826,7 @@ const detailStyles = StyleSheet.create({
 // ─── Main FriendsScreen ───────────────────────────────────────────────────────
 
 export default function FriendsScreen() {
+  const tabBarSpace = useTabBarSpace();
   const { colors } = useTheme();
   const { navigate, screen, returnTo, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
@@ -1739,6 +1790,9 @@ export default function FriendsScreen() {
     );
   }
 
+  const feedVisible = screen === 'friends' && !!user && !viewingFriend && !viewingSession && !loadingFeed && activityFeed.length > 0;
+  const { onScroll: onHeaderScroll, topInset } = useHeaderScroll(feedVisible);
+
   // Guest view
   if (!user) {
     return (
@@ -1763,6 +1817,7 @@ export default function FriendsScreen() {
   // Show friend detail sub-screen when a friend is selected
   if (viewingFriend) {
     return (
+      // Covers the app header; FriendDetailView handles the status bar itself.
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, zIndex: 100 }]}>
         <FriendDetailView
           key={viewingFriend.id}
@@ -1843,7 +1898,7 @@ export default function FriendsScreen() {
             <Text style={[styles.detailBackTxt, { color: colors.accent }]}>← Back</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={styles.detailContent}>
+        <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}>
           {/* Header */}
           <View style={styles.detailHeader}>
             <ProfileAvatar
@@ -1854,13 +1909,13 @@ export default function FriendsScreen() {
             />
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
-              <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
+              <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
                 {format(date, 'EEE, MMM d, yyyy')} · {defaultSessionTitle(entry.sessionTime, entry.training)}
               </Text>
               {entry.location?.trim() ? (
                 <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 2 }]}>
-                  <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
-                  <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{entry.location.trim()}</Text>
+                  <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
+                  <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{entry.location.trim()}</Text>
                 </View>
               ) : null}
             </View>
@@ -1951,12 +2006,13 @@ export default function FriendsScreen() {
         <ScrollView
           ref={feedScrollRef}
           style={styles.scrollArea}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: SPACING.xl + topInset, paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={() => { setDaysLoaded(14); setCaughtUp(false); loadFeed(14); }} />}
           scrollEventThrottle={16}
           onScroll={e => {
+            onHeaderScroll(e);
             feedScrollY.current = e.nativeEvent.contentOffset.y;
             const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
             const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
@@ -1991,13 +2047,13 @@ export default function FriendsScreen() {
                     />
                     <View style={styles.cardHeaderInfo}>
                       <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
-                      <Text style={[styles.cardMeta, { color: colors.textMuted }]}>
+                      <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
                         {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
                       </Text>
                       {entry.location?.trim() ? (
                         <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
-                          <Ionicons name="location-sharp" size={12} color={colors.textMuted} />
-                          <Text style={[styles.cardLocation, { color: colors.textMuted }]} numberOfLines={1}>{entry.location.trim()}</Text>
+                          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} />
+                          <Text style={[styles.cardLocation, { color: colors.textSecondary }]} numberOfLines={1}>{entry.location.trim()}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -2022,7 +2078,7 @@ export default function FriendsScreen() {
 
                 {/* ── Session notes ── */}
                 {entry.notes?.trim() ? (
-                  <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{entry.notes.trim()}</Text>
+                  <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{entry.notes.trim()}</Text>
                 ) : null}
 
                 {/* ── Partners row ── */}
@@ -2054,7 +2110,7 @@ export default function FriendsScreen() {
                     <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
                       {entry.training ? TRAINING_KIND_LABEL[entry.training] : (CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
                     </Text>
-                    <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
+                    <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
                   </View>
                   {/* Lift/hangboard-only sessions have no climbs to count; empty columns keep
                       Type in the same left-hand spot as on climbing cards */}
@@ -2069,7 +2125,7 @@ export default function FriendsScreen() {
                       <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
                       <View style={styles.cardStat}>
                         <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
-                        <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+                        <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
                       </View>
                     </>
                   )}
@@ -2078,7 +2134,7 @@ export default function FriendsScreen() {
                       <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
                       <View style={styles.cardStat}>
                         <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
-                        <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Hardest</Text>
+                        <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
                       </View>
                     </>
                   ) : null}
@@ -2293,22 +2349,11 @@ export default function FriendsScreen() {
         onDismiss={() => setShareEntry(null)}
       />
 
-      {/* ── Friends Manager Modal ── */}
-      <Modal
-        visible={friendsOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => closeFriends()}
-      >
+      {/* ── Friends page (search, requests, following) ── */}
+      <PushScreen visible={friendsOpen} title="Friends" onBack={() => { closeFriends(); setSearchQuery(''); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.manageModalContainer, { backgroundColor: colors.bg }]}>
-          <View style={[styles.manageModalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.manageModalTitle, { color: colors.textPrimary }]}>Friends</Text>
-            <TouchableOpacity onPress={() => { closeFriends(); setSearchQuery(''); }} activeOpacity={0.7}>
-              <Text style={[styles.doneButton, { color: colors.accent }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.scrollArea} contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Search */}
             <View style={[styles.searchBar, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <TextInput
@@ -2431,7 +2476,7 @@ export default function FriendsScreen() {
             )}
           </ScrollView>
         </KeyboardAvoidingView>
-      </Modal>
+      </PushScreen>
 
     </KeyboardAvoidingView>
   );
@@ -2575,7 +2620,7 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   cardMeta: {
-    fontSize: FONTS.sizes.xs,
+    fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.regular,
   },
   cardTitleRow: {
@@ -2583,7 +2628,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   cardTitle: {
-    fontSize: FONTS.sizes.lg,
+    fontSize: FONTS.sizes.xl,
     fontFamily: FONTS.family.bold,
     letterSpacing: -0.2,
   },
@@ -2614,7 +2659,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   cardLocation: {
-    fontSize: FONTS.sizes.xs,
+    fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.regular,
   },
   cardNotes: {
@@ -2631,17 +2676,15 @@ const styles = StyleSheet.create({
   },
   cardStat: { flex: 1, alignItems: 'center' },
   cardStatNum: {
-    fontSize: FONTS.sizes.lg,
+    fontSize: 20,
     fontFamily: FONTS.family.bold,
     letterSpacing: -0.3,
     marginBottom: 2,
     textAlign: 'center',
   },
   cardStatLbl: {
-    fontSize: 10,
-    fontFamily: FONTS.family.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.family.regular,
   },
   cardStatDivider: { width: 1, height: 32 },
   cardExpandTxt: {
@@ -2730,23 +2773,6 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   manageModalContainer: { flex: 1 },
-  manageModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
-    borderBottomWidth: 1,
-  },
-  manageModalTitle: {
-    fontSize: FONTS.sizes.lg,
-    fontFamily: FONTS.family.bold,
-  },
-  doneButton: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.semibold,
-  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -9,13 +9,14 @@ import LocationPicker from '../components/LocationPicker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
 import { useAuth } from '../utils/AuthContext';
 import {
   getAllSessions, getAllClimbs, deleteSession, deleteClimb,
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
   setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession, isInitialSyncSettled,
-  triggerFeedRefresh, triggerStatsRefresh, getSessionsCondensed, saveSessionsCondensed,
+  triggerFeedRefresh, triggerStatsRefresh,
 } from '../utils/storage';
 import FriendPicker from '../components/FriendPicker';
 import ClimbCard from '../components/ClimbCard';
@@ -34,7 +35,6 @@ import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/Ph
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
 let _cachedDays: DaySession[] = [];
-let _cachedCondensed = false;
 
 // Multiline input that sizes itself to its text. iOS's own multiline growth (and the
 // height onContentSizeChange reports) is unreliable on device: inputs either stayed one
@@ -67,10 +67,13 @@ function AutoGrowTextInput({ style, containerStyle, onChangeText, defaultValue, 
   );
 }
 
-export default function SessionsScreen() {
+// calendarMode: the Sessions tab's Calendar toggle — shows the month view in
+// place of the list. Picking a date hands back to the list via onShowList.
+export default function SessionsScreen({ calendarMode = false, onShowList }: { calendarMode?: boolean; onShowList?: () => void } = {}) {
   const { colors } = useTheme();
   const { user, avatarUrl, localAvatarUri } = useAuth();
   const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, viewFriendProfile } = useNav();
+  const tabBarSpace = useTabBarSpace();
 
   // Keep refs current so load() (stable useCallback with [] deps) can read
   // the latest navPendingSessionId without a stale closure
@@ -87,19 +90,17 @@ export default function SessionsScreen() {
     if (!navPendingSessionId) return;
     const target = days.find(d => d.sessionId === navPendingSessionId);
     if (target) {
-      scrollToSessionCard(navPendingSessionId);
+      revealSession(navPendingSessionId);
       clearPendingSessionId();
     }
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
-  const [sessionsCondensed, setSessionsCondensed] = useState(_cachedCondensed);
   const [activeSessionExpanded, setActiveSessionExpanded] = useState(false);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [modalSessionId, setModalSessionId] = useState<string | undefined>();
   const [editingClimb, setEditingClimb] = useState<Climb | undefined>();
   const [detailClimb, setDetailClimb] = useState<Climb | null>(null);
-  const [calendarVisible, setCalendarVisible] = useState(false);
   const [changeDateSession, setChangeDateSession] = useState<DaySession | null>(null);
   const [selectedCalDate, setSelectedCalDate] = useState<string | undefined>();
   const [sessionTitle, setSessionTitle] = useState('');
@@ -231,7 +232,7 @@ export default function SessionsScreen() {
     if (navId) {
       const navTarget = result.find(d => d.sessionId === navId);
       if (navTarget) {
-        scrollToSessionCard(navId);
+        revealSession(navId);
         clearNavPendingRef.current();
         return;
       }
@@ -255,9 +256,6 @@ export default function SessionsScreen() {
 
   useEffect(() => { load(); }, []);
 
-  useEffect(() => {
-    getSessionsCondensed().then(v => { _cachedCondensed = v; setSessionsCondensed(v); });
-  }, []);
 
   // Register load() so BottomTabBar can trigger a refresh after saving via FAB
   useEffect(() => {
@@ -615,37 +613,6 @@ export default function SessionsScreen() {
   }
 
 
-  async function handleToggleCondensed() {
-    const next = !sessionsCondensed;
-    _cachedCondensed = next;
-    setSessionsCondensed(next);
-    await saveSessionsCondensed(next);
-    // Scroll-position preservation across this toggle is handled natively —
-    // see maintainVisibleContentPosition on the list ScrollView below.
-  }
-
-  async function handleNewSession() {
-    // If a session is already open, just navigate into it
-    if (activeSession) {
-      setSelectedDay(activeSession);
-      return;
-    }
-
-    const sessionId = await createNewSession('indoor');
-    setActiveSessionId(sessionId);
-    setDays(prev => {
-      const newEntry: DaySession = {
-        date: todayISO,
-        sessionId,
-        climbs: [],
-        startedAt: new Date().toISOString(),
-      };
-      return [newEntry, ...prev.filter(d => d.sessionId !== sessionId)];
-    });
-    // The new card goes in at the top, and maintainVisibleContentPosition would keep
-    // the feed where it was, so jump up to show it
-    requestAnimationFrame(() => sessionsScrollRef.current?.scrollTo({ y: 0, animated: true }));
-  }
 
   async function handleAddPastSession(dateStr: string) {
     const sessionId = await getOrCreateSessionForDate(dateStr, 'indoor');
@@ -691,15 +658,29 @@ export default function SessionsScreen() {
     ));
   }
 
+  // Scroll a session navigated to from another tab into view. The active
+  // session is its own card at the very top, outside the measured list — and
+  // when it was just created, maintainVisibleContentPosition pushes it above
+  // the viewport once it lays out — so wait for that, then jump to the top.
+  function revealSession(sessionId: string) {
+    if (sessionId !== getActiveSessionId()) {
+      scrollToSessionCard(sessionId);
+      return;
+    }
+    scrollToSessionTimeoutsRef.current.forEach(clearTimeout);
+    scrollToSessionTimeoutsRef.current = [setTimeout(
+      () => sessionsScrollRef.current?.scrollTo({ y: 0, animated: true }), 150,
+    )];
+  }
+
   function handleCalendarSelect(dateStr: string) {
     setSelectedCalDate(dateStr);
+    onShowList?.();
     const existing = listDays.find(d => d.date === dateStr);
     if (existing) {
-      setCalendarVisible(false);
       scrollToSessionCard(existing.sessionId);
     } else {
       handleAddPastSession(dateStr);
-      setCalendarVisible(false);
     }
   }
 
@@ -853,7 +834,7 @@ export default function SessionsScreen() {
         </View>
         <ScrollView
           ref={detailScrollRef}
-          contentContainerStyle={styles.detailContent}
+          contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}
           onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
         >
@@ -1130,7 +1111,7 @@ export default function SessionsScreen() {
 
         <ScrollView
           ref={detailScrollRef}
-          contentContainerStyle={styles.detailContent}
+          contentContainerStyle={[styles.detailContent, { paddingBottom: tabBarSpace }]}
           keyboardShouldPersistTaps="never"
           onScroll={e => { detailScrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
@@ -1365,31 +1346,23 @@ export default function SessionsScreen() {
           SessionEditModalContent({ day: selectedDay })
         ) : activeSessionExpanded ? (
           ActiveSessionCard()
+        ) : calendarMode ? (
+          <MiniCalendar
+            inline
+            visible
+            onClose={() => {}}
+            activeDates={activeDates}
+            onSelectDate={handleCalendarSelect}
+            selectedDate={selectedCalDate}
+            mode="view"
+          />
         ) : (
           <>
-            <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
-              <TouchableOpacity
-                style={[styles.addSessionBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
-                onPress={handleNewSession}
-              >
-                <Text style={[styles.addSessionTxt, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>+ Session</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleToggleCondensed}
-                style={[styles.condenseToggleBtn, { borderColor: colors.borderLight }]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name={sessionsCondensed ? 'expand-outline' : 'contract-outline'} size={18} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setCalendarVisible(true)} style={[styles.calTextBtn, { borderColor: colors.borderLight }]}>
-                <Text style={[styles.calTxt, { color: colors.textPrimary, fontFamily: FONTS.family.medium }]}>Calendar</Text>
-              </TouchableOpacity>
-            </View>
 
             <PhotoClipContext.Provider value={sessionsScrollRef}>
             <ScrollView
               ref={sessionsScrollRef}
-              contentContainerStyle={styles.list}
+              contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
               scrollEnabled={listScrollEnabled}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             >
@@ -1407,7 +1380,6 @@ export default function SessionsScreen() {
                     onEdit={() => setSelectedDay(day)}
                     onShare={() => setShareDay(day)}
                     onViewProfile={viewFriendProfile}
-                    condensed={sessionsCondensed}
                   />
                 </View>
               ))}
@@ -1415,15 +1387,6 @@ export default function SessionsScreen() {
             </PhotoClipContext.Provider>
           </>
         )}
-
-        <MiniCalendar
-          visible={calendarVisible}
-          onClose={() => setCalendarVisible(false)}
-          activeDates={activeDates}
-          onSelectDate={handleCalendarSelect}
-          selectedDate={selectedCalDate}
-          mode="view"
-        />
       </View>
 
       {/* Shared modals — used by both list and detail contexts */}
@@ -1466,19 +1429,6 @@ export default function SessionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-  },
-  addSessionBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  addSessionTxt: { fontSize: FONTS.sizes.sm },
-  condenseToggleBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.sm },
-  calTextBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
-  calTxt: { fontSize: FONTS.sizes.sm },
   list: { padding: SPACING.xl },
 
   activeBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch, Linking, Image, Modal } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
 import { useAuth } from '../utils/AuthContext';
-import { useNav } from '../utils/NavigationContext';
 import { FONTS, SPACING } from '../utils/theme';
 import { getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { upsertProfile } from '../utils/cloudSync';
@@ -13,9 +13,9 @@ import { registerForPushNotifications } from '../utils/notifications';
 import EditProfileModal from '../components/EditProfileModal';
 
 export default function SettingsScreen() {
+  const tabBarSpace = useTabBarSpace();
   const { mode, colors, setMode } = useTheme();
   const { user, profileName, avatarUrl, username, hometown, bio, isPrivate, deleteAccount, signOut, syncNow, refreshProfile } = useAuth();
-  const { closeSettings } = useNav();
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
@@ -115,11 +115,8 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: tabBarSpace }]}
     >
-      <TouchableOpacity onPress={closeSettings} style={styles.backBtn} activeOpacity={0.7}>
-        <Text style={[styles.backText, { color: colors.accent, fontFamily: FONTS.family.regular }]}>← Account</Text>
-      </TouchableOpacity>
       {/* About */}
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ABOUT</Text>
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.sm }]}>
@@ -451,8 +448,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: SPACING.xl, paddingBottom: 60 },
-  backBtn: { marginBottom: SPACING.lg },
-  backText: { fontSize: FONTS.sizes.md },
   sectionLabel: {
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.family.bold,

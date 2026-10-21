@@ -212,7 +212,7 @@ export default function SessionCard({
     <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.border }]} onPress={onEdit}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={[styles.dateLabel, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
+        <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{label.top} · {label.bottom}</Text>
         <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
         </TouchableOpacity>
@@ -227,14 +227,14 @@ export default function SessionCard({
 
       {/* Notes */}
       {!condensed && hasNotes && (
-        <Text style={[styles.cardNotes, { color: colors.textSecondary }]}>{day.notes}</Text>
+        <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{day.notes}</Text>
       )}
 
       {/* Location */}
       {!condensed && hasLocation && (
         <View style={styles.cardLocationRow}>
-          <Ionicons name="location-sharp" size={11} color={colors.textMuted} style={{ marginTop: 1 }} />
-          <Text style={[styles.cardLocation, { color: colors.textMuted }]}>{day.location}</Text>
+          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
+          <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{day.location}</Text>
         </View>
       )}
 
@@ -269,7 +269,7 @@ export default function SessionCard({
           <>
             <View style={styles.cardStat}>
               <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{climbTypeLabel}</Text>
-              <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Type</Text>
+              <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
             </View>
             {/* Empty columns keep Type in the same left-hand spot as on climbing cards */}
             {trainingOnly && (
@@ -283,7 +283,7 @@ export default function SessionCard({
                 <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.cardStat}>
                   <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{gradedCount}</Text>
-                  <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Climbs</Text>
+                  <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
                 </View>
               </>
             )}
@@ -292,7 +292,7 @@ export default function SessionCard({
                 <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.cardStat}>
                   <Text style={[styles.cardStatNum, { color: colors.accent }]}>{hardest.grade}</Text>
-                  <Text style={[styles.cardStatLbl, { color: colors.textMuted }]}>Hardest</Text>
+                  <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
                 </View>
               </>
             )}
@@ -424,11 +424,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: SPACING.xs },
-  dateLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  dateLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardTitleRow: { paddingTop: SPACING.xs, paddingBottom: SPACING.xs },
-  cardTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.2 },
+  cardTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, letterSpacing: -0.3 },
   cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
-  cardLocation: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
+  cardLocation: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardNotes: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22, paddingBottom: SPACING.sm },
   partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
   partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
@@ -438,8 +438,8 @@ const styles = StyleSheet.create({
   partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatNum: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
-  cardStatLbl: { fontSize: 10, fontFamily: FONTS.family.medium, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardStatNum: { fontSize: 20, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },

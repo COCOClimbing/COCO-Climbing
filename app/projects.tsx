@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
+import { useTabBarSpace } from '../components/BottomTabBar';
 import { getAllClimbs, saveClimb, deleteClimb, getAllNamedProjects, deleteNamedProject, getAllSessions, NamedProject, setProjectsRefreshCallback } from '../utils/storage';
 import { EmptyState, GradeBadge } from '../components/UI';
 import SwipeableProjectCard from '../components/SwipeableProjectCard';
@@ -19,10 +20,11 @@ interface PastProject {
 export default function ProjectsScreen() {
   const { colors } = useTheme();
   const { tabResetCount } = useNav();
+  const tabBarSpace = useTabBarSpace();
 
   useEffect(() => {
-    if (tabResetCount['projects']) setDetailProject(null);
-  }, [tabResetCount['projects']]);
+    if (tabResetCount['sessions']) setDetailProject(null);
+  }, [tabResetCount['sessions']]);
   const [projects, setProjects] = useState<Climb[]>([]);
   const [namedProjects, setNamedProjects] = useState<NamedProject[]>([]);
   const [showingPast, setShowingPast] = useState(false);
@@ -235,7 +237,7 @@ export default function ProjectsScreen() {
           data={pastProjects}
           keyExtractor={item => item.projectId}
           renderItem={renderPastProject}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
           ListEmptyComponent={
             <EmptyState icon="" title="No sent projects yet" subtitle="Projects you send will appear here" />
           }
@@ -245,7 +247,7 @@ export default function ProjectsScreen() {
           data={projects}
           keyExtractor={item => item.id}
           renderItem={renderCurrentProject}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
           ListEmptyComponent={
             <EmptyState icon="" title="No active projects" subtitle={'Use \"+ Add Project\" to track a climb you want to work on'} />
           }
