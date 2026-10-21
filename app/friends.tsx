@@ -2599,12 +2599,12 @@ const styles = StyleSheet.create({
   },
   cardHeaderInfo: { flex: 1 },
   cardName: {
-    fontSize: FONTS.sizes.md,
+    fontSize: 14,
     fontFamily: FONTS.family.bold,
     marginBottom: 1,
   },
   cardMeta: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
     fontFamily: FONTS.family.regular,
   },
   cardTitleRow: {
@@ -2612,7 +2612,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   cardTitle: {
-    fontSize: FONTS.sizes.xl,
+    fontSize: 19,
     fontFamily: FONTS.family.bold,
     letterSpacing: -0.2,
   },
@@ -2624,7 +2624,7 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   partnersLabel: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
     fontFamily: FONTS.family.regular,
   },
   partnerChip: {
@@ -2633,7 +2633,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   partnerName: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
     fontFamily: FONTS.family.medium,
   },
   cardLocationRow: {
@@ -2643,13 +2643,13 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   cardLocation: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
     fontFamily: FONTS.family.regular,
   },
   cardNotes: {
-    fontSize: FONTS.sizes.md,
+    fontSize: 14,
     fontFamily: FONTS.family.regular,
-    lineHeight: 22,
+    lineHeight: 20,
     paddingBottom: SPACING.sm,
   },
   cardStatsRow: {
@@ -2660,14 +2660,14 @@ const styles = StyleSheet.create({
   },
   cardStat: { flex: 1, alignItems: 'center' },
   cardStatNum: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: FONTS.family.bold,
     letterSpacing: -0.3,
     marginBottom: 2,
     textAlign: 'center',
   },
   cardStatLbl: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
     fontFamily: FONTS.family.regular,
   },
   cardStatDivider: { width: 1, height: 32 },

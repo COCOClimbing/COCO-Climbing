@@ -11,6 +11,7 @@ import SwipeableComment from './SwipeableComment';
 import LikesAvatarRow from './LikesAvatarRow';
 import Avatar from './Avatar';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
+import { format } from 'date-fns';
 import {
   getSessionLikes, getSessionComments, getCommentLikes,
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
@@ -270,8 +271,14 @@ export default function ActivityCard({
           <View style={styles.cardHeaderInfo}>
             <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
             <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-              {formatRelativeDate(entry.sessionDate)} · {isOutdoor ? 'Outdoor' : 'Indoor'}
+              {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
             </Text>
+            {entry.location?.trim() ? (
+              <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
+                <Ionicons name="location-sharp" size={13} color={colors.textSecondary} />
+                <Text style={[styles.cardLocation, { color: colors.textSecondary }]} numberOfLines={1}>{entry.location.trim()}</Text>
+              </View>
+            ) : null}
           </View>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleMoreMenu} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -289,14 +296,6 @@ export default function ActivityCard({
       {/* Notes */}
       {entry.notes?.trim() ? (
         <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{entry.notes.trim()}</Text>
-      ) : null}
-
-      {/* Location */}
-      {entry.location?.trim() ? (
-        <View style={styles.cardLocationRow}>
-          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
-          <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{entry.location.trim()}</Text>
-        </View>
       ) : null}
 
       {/* Partners */}
@@ -494,21 +493,21 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingBottom: SPACING.md },
   cardHeaderInfo: { flex: 1 },
-  cardName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold, marginBottom: 4 },
-  cardMeta: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  cardName: { fontSize: 14, fontFamily: FONTS.family.bold, marginBottom: 1 },
+  cardMeta: { fontSize: 12, fontFamily: FONTS.family.regular },
   cardTitleRow: { paddingTop: SPACING.xs, paddingBottom: SPACING.xs },
-  cardTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.bold, letterSpacing: -0.3 },
+  cardTitle: { fontSize: 19, fontFamily: FONTS.family.bold, letterSpacing: -0.3 },
   cardLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingBottom: SPACING.xs },
-  cardLocation: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
-  cardNotes: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, lineHeight: 22, paddingBottom: SPACING.sm },
+  cardLocation: { fontSize: 12, fontFamily: FONTS.family.regular },
+  cardNotes: { fontSize: 14, fontFamily: FONTS.family.regular, lineHeight: 20, paddingBottom: SPACING.sm },
   partnersRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingBottom: SPACING.md, gap: SPACING.xs },
-  partnersLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  partnersLabel: { fontSize: 12, fontFamily: FONTS.family.regular },
   partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  partnerName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium },
+  partnerName: { fontSize: 12, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatNum: { fontSize: 20, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
-  cardStatLbl: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  cardStatNum: { fontSize: 18, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
+  cardStatLbl: { fontSize: 12, fontFamily: FONTS.family.regular },
   cardStatDivider: { width: 1, height: 32 },
   photoStrip: { marginTop: SPACING.md, marginHorizontal: -SPACING.xl },
   photoStripContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },
