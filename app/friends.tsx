@@ -26,7 +26,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
-import { isCustomGrade } from '../utils/gradeUtils';
+import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
+import GradeChart from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
@@ -436,6 +437,28 @@ function FriendDetailView({
     return { label, grade: convertGrade(best.grade, best.grade_system, sys) };
   });
 
+  // Avg grade sent per session (last 30 sessions), as on your own profile:
+  // only sends in the grade system they use most, so averages are comparable.
+  const sysCounts: Record<string, number> = {};
+  allSends.filter(c => c.grade_system && !isCustomGrade(c.grade_system)).forEach(c => { sysCounts[c.grade_system] = (sysCounts[c.grade_system] || 0) + 1; });
+  const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
+  const sessionDates = new Map<string, string>();
+  climbs.forEach(c => {
+    if (!c.session_id) return;
+    const d = normDate(c.date);
+    const prev = sessionDates.get(c.session_id);
+    if (!prev || d < prev) sessionDates.set(c.session_id, d);
+  });
+  const sessionPoints = [...sessionDates.entries()]
+    .sort((a, b) => b[1].localeCompare(a[1])).slice(0, 30).reverse()
+    .map(([sessionId, date]) => {
+      const sessionSends = allSends.filter(c => c.session_id === sessionId && c.grade_system === dominantSys);
+      if (sessionSends.length === 0) return null;
+      const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
+      return { date: date.slice(5, 10), avg };
+    })
+    .filter(Boolean) as { date: string; avg: number }[];
+
   const friendBtnLabel = friendStatus === 'accepted' ? 'Following'
     : friendStatus === 'pending_sent' ? 'Requested'
     : friendStatus === 'pending_received' ? 'Accept Request'
@@ -587,6 +610,15 @@ function FriendDetailView({
             </View>
           ) : profileTab === 'progress' ? (
           <View style={[detailStyles.statsWrapper, { marginTop: SPACING.lg }]}>
+            {/* ── Avg grade per session ── */}
+            {sessionPoints.length >= 2 && (
+              <>
+                <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
+                <GradeChart pts={sessionPoints} dominantSys={dominantSys} colors={colors} />
+                <View style={[detailStyles.divider, { backgroundColor: colors.border }]} />
+              </>
+            )}
+
             {/* ── Hardest Sends ── */}
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>HARDEST SENDS</Text>
             <View style={detailStyles.hardestRow}>

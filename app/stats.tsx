@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
+import StatCard from '../components/StatCard';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
@@ -15,7 +16,9 @@ import { EmptyState } from '../components/UI';
 import { parseISO, differenceInDays } from 'date-fns';
 
 const W = Dimensions.get('window').width;
-const CHART_W = W - SPACING.lg * 2;
+// Charts and grids sit inside a StatCard, which pads its content by SPACING.lg.
+const CARD_INNER_W = W - SPACING.lg * 4;
+const CHART_W = CARD_INNER_W;
 const CHART_H = 120;
 const PAD = { top: 8, bottom: 24, left: 32, right: 8 };
 
@@ -367,14 +370,6 @@ export default function StatsScreen() {
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
-  function Divider() {
-    return <View style={[ss.divider, { backgroundColor: colors.border }]} />;
-  }
-
-  function SectionLabel({ title }: { title: string }) {
-    return <Text style={[ss.sectionLabel, { color: colors.textMuted }]}>{title}</Text>;
-  }
-
   function ImprovementRow({ label, sys }: { label: string; sys: string }) {
     const all = hardestSend(allSends, sys);
     const year = hardestSend(yearSends, sys);
@@ -414,6 +409,7 @@ export default function StatsScreen() {
       >
 
         {/* ── Overview ── */}
+        <StatCard colors={colors}>
         <View style={ss.overviewRow}>
           <View style={ss.overviewItem}>
             <Text style={[ss.bigNum, { color: colors.textPrimary, fontFamily: FONTS.family.heavy }]}>{climbs.length}</Text>
@@ -435,11 +431,10 @@ export default function StatsScreen() {
             <Text style={[ss.bigLabel, { color: colors.textMuted }]}>send rate</Text>
           </View>
         </View>
-
-        <Divider />
+        </StatCard>
 
         {/* ── Hardest Sends ── */}
-        <SectionLabel title="HARDEST SENDS" />
+        <StatCard title="Hardest Sends" colors={colors}>
         {(() => {
           const TYPES = [
             { id: 'boulder',    label: 'Boulder'    },
@@ -450,7 +445,7 @@ export default function StatsScreen() {
           ].map(t => ({ ...t, count: typeCounts[t.id] || 0 }))
            .sort((a, b) => b.count - a.count);
 
-          const gridW = W - SPACING.lg * 2;
+          const gridW = CARD_INNER_W;
           const BIG_SIZE = (gridW - SPACING.sm) / 2;
           const SMALL_SIZE = (gridW - SPACING.sm * 2) / 3;
 
@@ -490,11 +485,11 @@ export default function StatsScreen() {
             </View>
           );
         })()}
-
-        <Divider />
+        </StatCard>
 
         {/* ── Environment ── */}
-        <SectionLabel title="ENVIRONMENT" />
+        <StatCard title="Environment" colors={colors}>
+        <View style={ss.cardRows}>
         <View style={ss.envRow}>
           <Text style={[ss.envLabel, { color: colors.textSecondary }]}>Indoor</Text>
           <View style={[ss.envTrack, { backgroundColor: colors.bgElevated }]}>
@@ -509,16 +504,16 @@ export default function StatsScreen() {
           </View>
           <Text style={[ss.envPct, { color: colors.textMuted }]}>{outdoorCount}</Text>
         </View>
+        </View>
         {outdoorSends > 0 && (
           <Text style={[ss.envSub, { color: colors.textMuted }]}>
             {outdoorSends} outdoor {outdoorSends === 1 ? 'send' : 'sends'}
           </Text>
         )}
-
-        <Divider />
+        </StatCard>
 
         {/* ── Improvement ── */}
-        <SectionLabel title="PROGRESSION" />
+        <StatCard title="Progression" colors={colors}>
         <View style={ss.impHeader}>
           <Text style={[ss.impLabel, { color: colors.textMuted }]} />
           <Text style={[ss.impColHead, { color: colors.textMuted }]}>All time</Text>
@@ -568,11 +563,11 @@ export default function StatsScreen() {
             </Svg>
           </View>
         )}
-
-        <Divider />
+        </StatCard>
 
         {/* ── Climb Types ── */}
-        <SectionLabel title="CLIMB TYPE" />
+        <StatCard title="Climb Type" colors={colors}>
+        <View style={ss.cardRows}>
         {topTypes.map(t => {
           const count = typeCounts[t.id] || 0;
           const pct = count / maxTypeCount;
@@ -587,13 +582,13 @@ export default function StatsScreen() {
             </TouchableOpacity>
           );
         })}
-
-        <Divider />
+        </View>
+        </StatCard>
 
         {/* ── Climb Style ── */}
         {topStyles.length > 0 && (
-          <>
-            <SectionLabel title="CLIMB STYLE" />
+          <StatCard title="Climb Style" colors={colors}>
+            <View style={ss.cardRows}>
             {topStyles.map(([style, count]) => {
               const allStyleClimbs = climbs.filter(c => c.styles.includes(style));
               const hardest = allStyleClimbs.filter(c => !isCustomGrade(c.gradeSystem)).sort((a, b) => gradeNum(b) - gradeNum(a))[0];
@@ -614,14 +609,13 @@ export default function StatsScreen() {
                 </TouchableOpacity>
               );
             })}
-            <Divider />
-          </>
+            </View>
+          </StatCard>
         )}
 
         {/* ── Insights ── */}
-        <SectionLabel title="INSIGHTS" />
-
         {/* Sessions row */}
+        <StatCard title="Sessions" colors={colors}>
         {(() => {
           const items = [
             { label: 'Sessions', value: String(sessionCount), unit: '' },
@@ -645,9 +639,10 @@ export default function StatsScreen() {
             </View>
           );
         })()}
+        </StatCard>
 
         {/* Training sub-section */}
-        <Text style={[ss.insightSubhead, { color: colors.textMuted }]}>TRAINING</Text>
+        <StatCard title="Training" colors={colors}>
         {(() => {
           const items = [
             { label: 'Longest streak', value: String(longestStreak), unit: longestStreak === 1 ? 'week' : 'weeks' },
@@ -670,13 +665,11 @@ export default function StatsScreen() {
             </View>
           );
         })()}
+        </StatCard>
         {favLocation && (
-          <>
-            <Text style={[ss.insightSubhead, { color: colors.textMuted }]}>FAVOURITE SPOT</Text>
-            <View style={{ marginBottom: SPACING.lg }}>
-              <Text style={[ss.insightVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{favLocation}</Text>
-            </View>
-          </>
+          <StatCard title="Favourite Spot" colors={colors}>
+            <Text style={[ss.insightVal, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{favLocation}</Text>
+          </StatCard>
         )}
 
         <View style={{ height: SPACING.xxl * 2 }} />
@@ -705,7 +698,8 @@ const ss = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: SPACING.lg },
 
-  divider: { height: 1, marginVertical: SPACING.xl },
+  // Rows end with marginBottom: md; cancel the last one so cards don't sag at the bottom.
+  cardRows: { marginBottom: -SPACING.md },
   sectionLabel: {
     fontSize: FONTS.sizes.xs, letterSpacing: 1.5,
     fontFamily: FONTS.family.semibold, marginBottom: SPACING.lg,
@@ -788,7 +782,7 @@ const ss = StyleSheet.create({
   legendText: { fontSize: FONTS.sizes.xs },
 
   // Insights
-  insightRow: { flexDirection: 'row', marginBottom: SPACING.lg },
+  insightRow: { flexDirection: 'row' },
   insightDivider: { width: 1, marginHorizontal: SPACING.lg, alignSelf: 'stretch' },
   insightItem: { flex: 1 },
   insightValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
