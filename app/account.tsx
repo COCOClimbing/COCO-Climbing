@@ -32,6 +32,7 @@ import { getMyGalleryPhotos } from '../utils/gallery';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
 import PushScreen from '../components/PushScreen';
+import EditProfileModal from '../components/EditProfileModal';
 
 
 type ProfileTab = 'progress' | 'gallery';
@@ -48,6 +49,7 @@ export default function AccountScreen() {
 
   const [friendCounts, setFriendCounts] = useState<{ followers: number; following: number } | null>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('progress');
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
   const [followListModal, setFollowListModal] = useState<'following' | 'followers' | null>(null);
   const [followTab, setFollowTab] = useState<'following' | 'followers'>('following');
@@ -355,7 +357,7 @@ export default function AccountScreen() {
           <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{bio}</Text>
         ) : null}
 
-        {/* Bottom row: counts left, invite friends pill right */}
+        {/* Follow counts, then Edit Profile / Invite Friends side by side */}
         <View style={styles.profileBottom}>
           <View style={styles.countsRow}>
             <TouchableOpacity style={styles.countItem} onPress={() => openFollowList('following')} activeOpacity={0.7}>
@@ -367,15 +369,25 @@ export default function AccountScreen() {
               <Text style={[styles.countNumber, { color: colors.textPrimary }]}>{friendCounts?.followers ?? '—'}</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={handleInviteFriends}
-            activeOpacity={0.7}
-            style={[styles.editProfileBtn, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Invite Friends</Text>
-          </TouchableOpacity>
+          <View style={styles.profileButtons}>
+            <TouchableOpacity
+              onPress={() => setEditProfileVisible(true)}
+              activeOpacity={0.7}
+              style={[styles.editProfileBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleInviteFriends}
+              activeOpacity={0.7}
+              style={[styles.editProfileBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.editProfileText, { color: colors.textPrimary }]}>Invite Friends</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
+      <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
 
       {/* Last 30 days, then a Progress / Gallery toggle */}
       {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="month" />}
@@ -964,9 +976,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   profileBottom: {
+    gap: SPACING.lg,
+  },
+  profileButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: SPACING.md,
   },
   countsRow: {
     flexDirection: 'row',
@@ -1068,13 +1082,15 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.semibold,
   },
   editProfileBtn: {
+    flex: 1,
+    alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: 20,
-    paddingVertical: SPACING.sm,
+    borderRadius: 22,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
   },
   editProfileText: {
-    fontSize: FONTS.sizes.xs,
+    fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.semibold,
   },
   // Settings modal
