@@ -1984,7 +1984,7 @@ export default function FriendsScreen() {
           style={styles.scrollArea}
           contentContainerStyle={[styles.scrollContent, { paddingTop: SPACING.xl + topInset, paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="never"
           refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={() => { setDaysLoaded(14); setCaughtUp(false); loadFeed(14); }} />}
           scrollEventThrottle={16}
           onScroll={e => {
