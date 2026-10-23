@@ -354,7 +354,7 @@ export default function AccountScreen() {
 
         {/* Bio */}
         {bio ? (
-          <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{bio}</Text>
+          <Text style={[styles.profileBio, { color: colors.textPrimary }]}>{bio}</Text>
         ) : null}
 
         {/* Follow counts, then Edit Profile / Invite Friends side by side */}
@@ -874,9 +874,9 @@ const styles = StyleSheet.create({
   profileHeader: {
     flexDirection: 'column',
     paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xxl,
-    paddingBottom: SPACING.xl,
-    gap: SPACING.lg,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    gap: SPACING.md,
   },
   profileTop: {
     flexDirection: 'row',
@@ -971,16 +971,14 @@ const styles = StyleSheet.create({
   profileBio: {
     fontSize: FONTS.sizes.sm,
     fontFamily: FONTS.family.regular,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
     lineHeight: 20,
   },
   profileBottom: {
-    gap: SPACING.lg,
+    gap: SPACING.md,
   },
   profileButtons: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
   countsRow: {
     flexDirection: 'row',
@@ -1085,9 +1083,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: 22,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.md,
   },
   editProfileText: {
     fontSize: FONTS.sizes.sm,
