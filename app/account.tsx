@@ -31,6 +31,7 @@ import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredD
 import { getMyGalleryPhotos } from '../utils/gallery';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
+import PushScreen from '../components/PushScreen';
 
 
 type ProfileTab = 'progress' | 'gallery';
@@ -387,7 +388,6 @@ export default function AccountScreen() {
         </View>
       )}
 
-      {/* Following / Followers Modal */}
       {/* Avatar preview / confirm modal */}
       <Modal
         visible={pendingAvatarUri !== null}
@@ -428,13 +428,9 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={followListModal !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setFollowListModal(null)}
-      >
-        <View style={[styles.followModalContainer, { backgroundColor: colors.bg }]}>
+      {/* Following / Followers page — slides in like the app's other pages */}
+      <PushScreen visible={followListModal !== null} title={profileName || 'You'} onBack={() => setFollowListModal(null)}>
+        <View style={styles.followModalContainer}>
           {/* Header with tab switcher */}
           <View style={[styles.followModalHeader, { borderBottomColor: colors.border }]}>
             <View style={styles.followModalTabs}>
@@ -451,9 +447,6 @@ export default function AccountScreen() {
                 {followTab === 'followers' && <View style={[styles.followModalTabBar, { backgroundColor: colors.accent }]} />}
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => setFollowListModal(null)} activeOpacity={0.7}>
-              <Text style={[styles.followModalDone, { color: colors.accent }]}>Done</Text>
-            </TouchableOpacity>
           </View>
 
           {followListLoading ? (
@@ -464,7 +457,7 @@ export default function AccountScreen() {
             return list.length === 0 ? (
               <Text style={[styles.followModalEmpty, { color: colors.textMuted }]}>{emptyText}</Text>
             ) : (
-              <ScrollView contentContainerStyle={styles.followModalList}>
+              <ScrollView contentContainerStyle={[styles.followModalList, { paddingBottom: tabBarSpace }]}>
                 {list.map(p => (
                   <TouchableOpacity
                     key={p.id}
@@ -494,7 +487,7 @@ export default function AccountScreen() {
             );
           })()}
         </View>
-      </Modal>
+      </PushScreen>
 
       {/* Settings Modal */}
       <Modal
@@ -1021,10 +1014,6 @@ const styles = StyleSheet.create({
     right: SPACING.lg,
     height: 2,
     borderRadius: 1,
-  },
-  followModalDone: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.medium,
   },
   followModalEmpty: {
     textAlign: 'center',

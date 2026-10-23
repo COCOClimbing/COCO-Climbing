@@ -192,6 +192,10 @@ function FriendDetailView({
   const [listSheetFollowers, setListSheetFollowers] = useState<FriendProfile[]>([]);
   const [listSheetLoading, setListSheetLoading] = useState(false);
   const [listSheetProfile, setListSheetProfile] = useState<FriendProfile | null>(null);
+  // The last profile opened from the list, kept so it stays drawn while its page slides out.
+  const lastListProfile = useRef<FriendProfile | null>(null);
+  if (listSheetProfile) lastListProfile.current = listSheetProfile;
+  const shownListProfile = listSheetProfile ?? lastListProfile.current;
   const [ownDays, setOwnDays] = useState<DaySession[]>([]);
   const [friendSessions, setFriendSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
@@ -674,65 +678,67 @@ function FriendDetailView({
           and stays put while it scrolls. */}
       <FloatingBackButton onPress={onBack} style={[detailStyles.backBtn, { top: insets.top + SPACING.sm }]} />
 
-      {/* Followers / Following list sheet */}
-      <Modal visible={listSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setListSheetOpen(false); setListSheetProfile(null); }}>
-        <View style={[detailStyles.container, { backgroundColor: colors.bg }]}>
-          {listSheetProfile ? (
+      {/* Followers / Following page — slides in like the app's other pages */}
+      <PushScreen visible={listSheetOpen} title={friend.name} onBack={() => setListSheetOpen(false)} onDismiss={() => setListSheetProfile(null)}>
+        <View style={[{ flexDirection: 'row', paddingHorizontal: SPACING.lg, borderBottomWidth: 1 }, { borderBottomColor: colors.border }]}>
+          {(['following', 'followers'] as const).map(tab => (
+            <TouchableOpacity key={tab} onPress={() => setListSheetTab(tab)} activeOpacity={0.7} style={{ paddingVertical: SPACING.md, marginRight: SPACING.xl }}>
+              <Text style={{ color: listSheetTab === tab ? colors.textPrimary : colors.textMuted, fontFamily: listSheetTab === tab ? FONTS.family.bold : FONTS.family.regular, fontSize: 15 }}>
+                {tab === 'following' ? 'Following' : 'Followers'}
+              </Text>
+              {listSheetTab === tab && <View style={{ height: 2, backgroundColor: colors.accent, borderRadius: 1, marginTop: 4 }} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {listSheetLoading ? (
+          <ActivityIndicator color={colors.accent} style={{ marginTop: SPACING.xl }} />
+        ) : (() => {
+          const list = listSheetTab === 'following' ? listSheetFollowing : listSheetFollowers;
+          const emptyText = listSheetTab === 'following' ? 'Not following anyone yet.' : 'No followers yet.';
+          return list.length === 0 ? (
+            <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: SPACING.xl }}>{emptyText}</Text>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: tabBarSpace }}>
+              {list.map(u => (
+                <TouchableOpacity
+                  key={u.id}
+                  onPress={() => setListSheetProfile(u)}
+                  activeOpacity={0.75}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                >
+                  <ProfileAvatar name={u.name} avatarUrl={u.avatar_url} size={44} colors={colors} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontFamily: FONTS.family.semibold, fontSize: 15 }}>{u.name}</Text>
+                    {u.username ? <Text style={{ color: colors.textMuted, fontSize: 13 }}>@{u.username}</Text> : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          );
+        })()}
+
+        {/* A profile tapped in the list slides in on top; back returns to the list.
+            Rendered inside the list page so iOS stacks it on that modal. */}
+        <PushScreen
+          visible={!!listSheetProfile}
+          title=""
+          hideHeader
+          onBack={() => setListSheetProfile(null)}
+          onTabPress={() => { setListSheetProfile(null); setListSheetOpen(false); }}
+        >
+          {shownListProfile && (
             <FriendDetailView
-              friend={listSheetProfile}
+              key={shownListProfile.id}
+              friend={shownListProfile}
               onBack={() => setListSheetProfile(null)}
               colors={colors}
               onViewProfile={setListSheetProfile}
             />
-          ) : (
-            <>
-              <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, borderBottomWidth: 1 }, { borderBottomColor: colors.border }]}>
-                <View style={{ flexDirection: 'row' }}>
-                  {(['following', 'followers'] as const).map(tab => (
-                    <TouchableOpacity key={tab} onPress={() => setListSheetTab(tab)} activeOpacity={0.7} style={{ paddingVertical: SPACING.md, marginRight: SPACING.xl }}>
-                      <Text style={{ color: listSheetTab === tab ? colors.textPrimary : colors.textMuted, fontFamily: listSheetTab === tab ? FONTS.family.bold : FONTS.family.regular, fontSize: 15 }}>
-                        {tab === 'following' ? 'Following' : 'Followers'}
-                      </Text>
-                      {listSheetTab === tab && <View style={{ height: 2, backgroundColor: colors.accent, borderRadius: 1, marginTop: 4 }} />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity onPress={() => { setListSheetOpen(false); setListSheetProfile(null); }} activeOpacity={0.7}>
-                  <Text style={{ color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: 15 }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-
-              {listSheetLoading ? (
-                <ActivityIndicator color={colors.accent} style={{ marginTop: SPACING.xl }} />
-              ) : (() => {
-                const list = listSheetTab === 'following' ? listSheetFollowing : listSheetFollowers;
-                const emptyText = listSheetTab === 'following' ? 'Not following anyone yet.' : 'No followers yet.';
-                return list.length === 0 ? (
-                  <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: SPACING.xl }}>{emptyText}</Text>
-                ) : (
-                  <ScrollView contentContainerStyle={{ paddingHorizontal: SPACING.lg }}>
-                    {list.map(u => (
-                      <TouchableOpacity
-                        key={u.id}
-                        onPress={() => setListSheetProfile(u)}
-                        activeOpacity={0.75}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}
-                      >
-                        <ProfileAvatar name={u.name} avatarUrl={u.avatar_url} size={44} colors={colors} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: colors.textPrimary, fontFamily: FONTS.family.semibold, fontSize: 15 }}>{u.name}</Text>
-                          {u.username ? <Text style={{ color: colors.textMuted, fontSize: 13 }}>@{u.username}</Text> : null}
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                );
-              })()}
-            </>
           )}
-        </View>
-      </Modal>
+        </PushScreen>
+      </PushScreen>
 
       <ShareModal
         visible={!!shareDay || !!shareFriendEntry}
@@ -857,6 +863,11 @@ export default function FriendsScreen() {
 
   // Inline friend profile sub-screen
   const [viewingFriend, setViewingFriend] = useState<FriendProfile | null>(null);
+  // A profile draws over every tab, so leaving the tab (e.g. from the tab bar
+  // on a followers page) closes it.
+  useEffect(() => {
+    if (screen !== 'friends') setViewingFriend(null);
+  }, [screen]);
   const [friendSource, setFriendSource] = useState<'activity' | 'friends'>('activity');
 
   // Clear friend/session views on any navigation
