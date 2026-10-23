@@ -88,6 +88,7 @@ import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
 import FloatingBackButton from '../components/FloatingBackButton';
 import { useEdgeSwipeBack } from '../utils/useEdgeSwipeBack';
 import PushScreen from '../components/PushScreen';
+import DiscussionScreen from '../components/DiscussionScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -949,10 +950,11 @@ export default function FriendsScreen() {
   const [likesMap, setLikesMap] = useState<Record<string, SessionLike[]>>({});
   const [commentsMap, setCommentsMap] = useState<Record<string, SessionComment[]>>({});
   const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
-  const [commentingKey, setCommentingKey] = useState<string | null>(null);
-  const [commentText, setCommentText] = useState('');
-  const [expandedCommentsKeys, setExpandedCommentsKeys] = useState<Record<string, boolean>>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // The post whose Discussion page is open, and whether to raise the keyboard on it.
+  const [discussionKey, setDiscussionKey] = useState<string | null>(null);
+  const [discussionFocus, setDiscussionFocus] = useState(false);
+  // Keeps the last post drawn while its Discussion page slides away.
+  const lastDiscussionEntry = useRef<SessionSummary | null>(null);
 
   // Photo viewer
   const [viewerPhotos, setViewerPhotos] = useState<string[]>([]);
@@ -1011,11 +1013,6 @@ export default function FriendsScreen() {
   }, [friendsOpen]);
 
 
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardWillShow', e => setKeyboardHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardWillHide', () => { setKeyboardHeight(0); setCommentingKey(null); setCommentText(''); });
-    return () => { show.remove(); hide.remove(); };
-  }, []);
 
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -1663,22 +1660,28 @@ export default function FriendsScreen() {
     setCommentsMap(prev => ({ ...prev, [sessionKey]: updated }));
   }
 
-  async function handleSendComment(sessionKey: string, sessionId: string) {
-    if (!user || !commentText.trim()) return;
+  async function handleSendComment(sessionKey: string, sessionId: string, text: string): Promise<boolean> {
+    if (!user || !text.trim()) return false;
     try {
-      await addSessionComment(sessionId, user.id, commentText.trim());
+      await addSessionComment(sessionId, user.id, text.trim());
     } catch (err: any) {
       Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
-      return;
+      return false;
     }
-    setCommentText('');
-    Keyboard.dismiss();
     const updated = await getSessionComments(sessionId);
     setCommentsMap(prev => ({ ...prev, [sessionKey]: updated }));
     const entry = activityFeed.find(e => e.sessionId === sessionId);
     if (entry && entry.friend.id !== user.id) {
       sendCommentNotification(entry.friend.id, user.id, sessionId).catch(() => {});
     }
+    return true;
+  }
+
+  function openDiscussion(sessionKey: string, sessionId: string | undefined, focus: boolean) {
+    if (!sessionId) return;
+    setDiscussionFocus(focus);
+    setDiscussionKey(sessionKey);
+    loadLikesAndComments(sessionKey, sessionId);
   }
 
   function handleMoreMenu(entry: SessionSummary) {
@@ -1737,6 +1740,13 @@ export default function FriendsScreen() {
         { text: 'Cancel', style: 'cancel' },
       ],
     );
+  }
+
+  function reportComment(c: SessionComment) {
+    Alert.alert('Report Comment', 'Are you sure you want to report this comment?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', style: 'destructive', onPress: () => submitReport(c.user_id, c.id, 'comment', 'Inappropriate comment') },
+    ]);
   }
 
   async function submitReport(reportedUserId: string, contentId: string, contentType: 'session' | 'comment' | 'user', reason: string) {
@@ -2158,7 +2168,6 @@ export default function FriendsScreen() {
                   const likes = likesMap[sessionKey] ?? [];
                   const comments = commentsMap[sessionKey] ?? [];
                   const liked = likes.some(l => l.user_id === user?.id);
-                  const isCommenting = commentingKey === sessionKey;
                   return (
                     <>
                       {/* Like/comment counts */}
@@ -2171,7 +2180,7 @@ export default function FriendsScreen() {
                             colors={colors}
                           />
                           {comments.length > 0 && (
-                            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
+                            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]} onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}>
                               {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
                             </Text>
                           )}
@@ -2192,21 +2201,9 @@ export default function FriendsScreen() {
                         <TouchableOpacity
                           style={styles.cardActionBtn}
                           activeOpacity={0.7}
-                          onPress={() => {
-                            setCommentingKey(isCommenting ? null : sessionKey);
-                            setCommentText('');
-                            if (!isCommenting && entry.sessionId) {
-                              getSessionComments(entry.sessionId).then(c =>
-                                setCommentsMap(prev => ({ ...prev, [sessionKey]: c }))
-                              );
-                            }
-                          }}
+                          onPress={() => openDiscussion(sessionKey, entry.sessionId, true)}
                         >
-                          <Ionicons
-                            name={isCommenting ? 'chatbubble' : 'chatbubble-outline'}
-                            size={24}
-                            color={isCommenting ? colors.accent : colors.textPrimary}
-                          />
+                          <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.cardActionBtn}
@@ -2217,49 +2214,33 @@ export default function FriendsScreen() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* Comment section */}
+                      {/* First few comments — the rest are on the Discussion page */}
                       {comments.length > 0 && (
                         <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
-                          {(() => {
-                            const isExpanded = expandedCommentsKeys[sessionKey];
-                            const visible = isExpanded ? comments : comments.slice(0, 3);
-                            const hidden = comments.length - 3;
-                            return (
-                              <>
-                                {visible.map(c => (
-                                  <SwipeableComment
-                                    key={c.id}
-                                    c={c}
-                                    isOwn={c.user_id === user?.id || entry.friend.id === user?.id}
-                                    onDelete={() => entry.sessionId && handleDeleteComment(sessionKey, entry.sessionId, c.id)}
-                                    onReport={(c.user_id !== user?.id && entry.friend.id !== user?.id) ? () => Alert.alert('Report Comment', 'Are you sure you want to report this comment?', [
-                                      { text: 'Cancel', style: 'cancel' },
-                                      { text: 'Report', style: 'destructive', onPress: () => submitReport(c.user_id, c.id, 'comment', 'Inappropriate comment') },
-                                    ]) : () => {}}
-                                    onLike={() => entry.sessionId && handleCommentLike(c.id, entry.sessionId)}
-                                    onNamePress={() => {
-                                      if (c.user_id === user?.id) return;
-                                      openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
-                                    }}
-                                    colors={colors}
-                                    commentAvatarUrl={c.user_id === user?.id ? myAvatar : (c.profile?.avatar_url ?? null)}
-                                    likedByUserIds={commentLikesMap[c.id] ?? []}
-                                    currentUserId={user?.id ?? ''}
-                                  />
-                                ))}
-                                {!isExpanded && hidden > 0 && (
-                                  <TouchableOpacity onPress={() => setExpandedCommentsKeys(prev => ({ ...prev, [sessionKey]: true }))} activeOpacity={0.7}>
-                                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hidden} more comment{hidden > 1 ? 's' : ''}</Text>
-                                  </TouchableOpacity>
-                                )}
-                                {isExpanded && comments.length > 3 && (
-                                  <TouchableOpacity onPress={() => setExpandedCommentsKeys(prev => ({ ...prev, [sessionKey]: false }))} activeOpacity={0.7}>
-                                    <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
-                                  </TouchableOpacity>
-                                )}
-                              </>
-                            );
-                          })()}
+                          {comments.slice(0, 3).map(c => (
+                            <SwipeableComment
+                              key={c.id}
+                              c={c}
+                              isOwn={c.user_id === user?.id || entry.friend.id === user?.id}
+                              onDelete={() => entry.sessionId && handleDeleteComment(sessionKey, entry.sessionId, c.id)}
+                              onReport={(c.user_id !== user?.id && entry.friend.id !== user?.id) ? () => reportComment(c) : () => {}}
+                              onLike={() => entry.sessionId && handleCommentLike(c.id, entry.sessionId)}
+                              onNamePress={() => {
+                                if (c.user_id === user?.id) return;
+                                openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
+                              }}
+                              onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}
+                              colors={colors}
+                              commentAvatarUrl={c.user_id === user?.id ? myAvatar : (c.profile?.avatar_url ?? null)}
+                              likedByUserIds={commentLikesMap[c.id] ?? []}
+                              currentUserId={user?.id ?? ''}
+                            />
+                          ))}
+                          {comments.length > 3 && (
+                            <TouchableOpacity onPress={() => openDiscussion(sessionKey, entry.sessionId, false)} activeOpacity={0.7}>
+                              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View all {comments.length} comments</Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                       )}
                     </>
@@ -2279,38 +2260,32 @@ export default function FriendsScreen() {
         </ScrollView>
       ))}
 
-      {/* Comment bar — sibling of ScrollView, pushed up by KAV */}
-      {commentingKey && screen === 'friends' && (() => {
-        const commentingEntry = activityFeed.find(e => {
-          const key = e.sessionId ? `sid-${e.sessionId}` : `fid-${e.friend.id}|${e.sessionDate}`;
-          return key === commentingKey;
-        });
-        const sendComment = () => {
-          if (commentingEntry?.sessionId) handleSendComment(commentingKey, commentingEntry.sessionId);
-        };
+      {/* Full comment thread for a post */}
+      {(() => {
+        const entry = discussionKey ? activityFeed.find(e => e.sessionId && `sid-${e.sessionId}` === discussionKey) : undefined;
+        if (entry) lastDiscussionEntry.current = entry;
+        const shown = entry ?? lastDiscussionEntry.current;
+        const key = shown?.sessionId ? `sid-${shown.sessionId}` : '';
+        const likes = likesMap[key] ?? [];
         return (
-          <View style={[styles.stickyCommentBar, { borderTopColor: colors.border, backgroundColor: colors.bg }]}>
-            {myAvatar
-              ? <Image source={{ uri: myAvatar }} style={styles.commentAvatar} />
-              : <View style={[styles.commentAvatar, { backgroundColor: colors.border }]} />
-            }
-            <View style={[styles.commentInput, { borderColor: colors.border, backgroundColor: colors.bgCard, flex: 1 }]}>
-              <TextInput
-                style={[styles.commentInputText, { color: colors.textPrimary }]}
-                placeholder="Add a comment..."
-                placeholderTextColor={colors.textMuted}
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-                blurOnSubmit
-                autoFocus
-                onSubmitEditing={sendComment}
-              />
-              <TouchableOpacity onPress={sendComment} activeOpacity={0.7}>
-                <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <DiscussionScreen
+            visible={!!entry}
+            onClose={() => setDiscussionKey(null)}
+            subtitle={shown ? `${shown.friend.id === user?.id ? 'You' : shown.friend.name} · ${formatRelativeDate(shown.sessionDate)}` : undefined}
+            likes={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+            comments={commentsMap[key] ?? []}
+            commentLikesMap={commentLikesMap}
+            currentUserId={user?.id ?? ''}
+            myAvatar={myAvatar ?? null}
+            isPostOwner={shown?.friend.id === user?.id}
+            autoFocus={discussionFocus}
+            colors={colors}
+            onSend={text => shown?.sessionId ? handleSendComment(key, shown.sessionId, text) : Promise.resolve(false)}
+            onDeleteComment={c => shown?.sessionId && handleDeleteComment(key, shown.sessionId, c.id)}
+            onReportComment={reportComment}
+            onLikeComment={c => shown?.sessionId && handleCommentLike(c.id, shown.sessionId)}
+            onViewProfile={p => openFriendProfile(p, 'activity')}
+          />
         );
       })()}
 
@@ -2684,15 +2659,9 @@ const styles = StyleSheet.create({
   cardCountTxt: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
   commentSection: { borderTopWidth: 1, marginTop: SPACING.md, paddingTop: SPACING.lg, gap: SPACING.sm },
   commentRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start' },
-  commentAvatar: { width: 20, height: 20, borderRadius: 10, marginTop: 2 },
   commentName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
-  commentText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
   commentTime: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
   commentShowMore: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingVertical: 2 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xs },
-  stickyCommentBar: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderTopWidth: 1 },
-  commentInput: { flexDirection: 'row', alignItems: 'flex-end', borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: SPACING.sm },
-  commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, paddingBottom: 4, maxHeight: 100 },
   detailContent: { padding: SPACING.lg, gap: SPACING.md },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
   detailStatsRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: SPACING.lg, marginBottom: SPACING.sm },

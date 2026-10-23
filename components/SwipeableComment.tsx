@@ -13,6 +13,7 @@ export default function SwipeableComment({
   onReport,
   onLike,
   onNamePress,
+  onPress,
   colors,
   commentAvatarUrl,
   likedByUserIds,
@@ -24,6 +25,8 @@ export default function SwipeableComment({
   onReport: () => void;
   onLike: () => void;
   onNamePress: () => void;
+  // Tapping the comment itself (e.g. opens the full discussion).
+  onPress?: () => void;
   colors: any;
   commentAvatarUrl: string | null;
   likedByUserIds: string[];
@@ -35,6 +38,7 @@ export default function SwipeableComment({
       <TouchableOpacity
         style={[swipeCommentStyles.row, { backgroundColor: colors.bg }]}
         activeOpacity={0.85}
+        onPress={onPress}
         onLongPress={onReport}
         delayLongPress={500}
       >

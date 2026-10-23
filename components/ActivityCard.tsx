@@ -8,6 +8,7 @@ import ClimbCard from './ClimbCard';
 import { defaultSessionTitle, trainingKind } from '../utils/sessionHelpers';
 import ClimbDetailModal from './ClimbDetailModal';
 import SwipeableComment from './SwipeableComment';
+import DiscussionScreen from './DiscussionScreen';
 import LikesAvatarRow from './LikesAvatarRow';
 import Avatar from './Avatar';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
@@ -104,9 +105,9 @@ export default function ActivityCard({
   const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
   const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
   const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
-  const [commentText, setCommentText] = useState('');
-  const [commentsExpanded, setCommentsExpanded] = useState(false);
-  const [isCommenting, setIsCommenting] = useState(false);
+  // Full comment thread page; the card shows only the first few comments.
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+  const [discussionFocus, setDiscussionFocus] = useState(false);
 
   useEffect(() => {
     if (!entry.sessionId) return;
@@ -206,21 +207,25 @@ export default function ActivityCard({
     ]);
   }
 
-  async function handleSendSessionComment() {
-    if (!currentUserId || !commentText.trim() || !entry.sessionId) return;
+  async function handleSendSessionComment(text: string): Promise<boolean> {
+    if (!currentUserId || !text.trim() || !entry.sessionId) return false;
     try {
-      await addSessionComment(entry.sessionId, currentUserId, commentText.trim());
+      await addSessionComment(entry.sessionId, currentUserId, text.trim());
     } catch (err: any) {
       Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
-      return;
+      return false;
     }
-    setCommentText('');
-    Keyboard.dismiss();
     const updated = await getSessionComments(entry.sessionId);
     setSessionComments(updated);
     if (entry.friend.id !== currentUserId) {
       sendCommentNotification(entry.friend.id, currentUserId, entry.sessionId).catch(() => {});
     }
+    return true;
+  }
+
+  function openDiscussion(focus: boolean) {
+    setDiscussionFocus(focus);
+    setDiscussionOpen(true);
   }
 
   async function submitReportPost(reason: string) {
@@ -255,8 +260,6 @@ export default function ActivityCard({
   const photoClip = useContext(PhotoClipContext);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  const visibleComments = commentsExpanded ? sessionComments : sessionComments.slice(0, 3);
-  const hiddenCommentCount = sessionComments.length - 3;
 
   return (
     <View style={[styles.card, { borderBottomColor: colors.bgElevated }]}>
@@ -398,7 +401,7 @@ export default function ActivityCard({
             colors={colors}
           />
           {sessionComments.length > 0 && (
-            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]}>
+            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]} onPress={() => openDiscussion(false)}>
               {sessionComments.length} {sessionComments.length === 1 ? 'comment' : 'comments'}
             </Text>
           )}
@@ -410,8 +413,8 @@ export default function ActivityCard({
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
           <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => setIsCommenting(prev => !prev)}>
-          <Ionicons name={isCommenting ? 'chatbubble' : 'chatbubble-outline'} size={24} color={isCommenting ? colors.accent : colors.textPrimary} />
+        <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => openDiscussion(true)}>
+          <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
           <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
@@ -421,7 +424,7 @@ export default function ActivityCard({
       {/* Comment thread */}
       {sessionComments.length > 0 && (
         <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
-          {visibleComments.map(c => (
+          {sessionComments.slice(0, 3).map(c => (
             <SwipeableComment
               key={c.id}
               c={c}
@@ -437,37 +440,35 @@ export default function ActivityCard({
               commentAvatarUrl={c.user_id === currentUserId ? (myAvatar ?? null) : (c.profile?.avatar_url ?? null)}
               likedByUserIds={commentLikesMap[c.id] ?? []}
               currentUserId={currentUserId ?? ''}
+              onPress={() => openDiscussion(false)}
             />
           ))}
-          {!commentsExpanded && hiddenCommentCount > 0 && (
-            <TouchableOpacity onPress={() => setCommentsExpanded(true)} activeOpacity={0.7}>
-              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View {hiddenCommentCount} more comment{hiddenCommentCount > 1 ? 's' : ''}</Text>
-            </TouchableOpacity>
-          )}
-          {commentsExpanded && sessionComments.length > 3 && (
-            <TouchableOpacity onPress={() => setCommentsExpanded(false)} activeOpacity={0.7}>
-              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>Show less</Text>
+          {sessionComments.length > 3 && (
+            <TouchableOpacity onPress={() => openDiscussion(false)} activeOpacity={0.7}>
+              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View all {sessionComments.length} comments</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
 
-      {/* Comment input */}
-      {isCommenting && (
-        <View style={[styles.commentInputRow, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-          <TextInput
-            style={[styles.commentInputText, { color: colors.textPrimary }]}
-            placeholder="Add a comment..."
-            placeholderTextColor={colors.textMuted}
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline
-          />
-          <TouchableOpacity onPress={handleSendSessionComment} activeOpacity={0.7}>
-            <Ionicons name="send" size={18} color={commentText.trim() ? colors.accent : colors.textMuted} />
-          </TouchableOpacity>
-        </View>
-      )}
+      <DiscussionScreen
+        visible={discussionOpen}
+        onClose={() => setDiscussionOpen(false)}
+        subtitle={`${entry.friend.id === currentUserId ? 'You' : entry.friend.name} · ${formatRelativeDate(entry.sessionDate)}`}
+        likes={sessionLikes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === currentUserId ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+        comments={sessionComments}
+        commentLikesMap={commentLikesMap}
+        currentUserId={currentUserId ?? ''}
+        myAvatar={myAvatar ?? null}
+        isPostOwner={entry.friend.id === currentUserId}
+        autoFocus={discussionFocus}
+        colors={colors}
+        onSend={handleSendSessionComment}
+        onDeleteComment={c => handleDeleteSessionComment(c.id)}
+        onReportComment={c => handleReportComment(c.user_id, c.id)}
+        onLikeComment={c => handleCommentLikeToggle(c.id, c.user_id)}
+        onViewProfile={onViewProfile}
+      />
 
       {/* Photo viewer for this card's media */}
       {viewerUris && (
@@ -530,6 +531,4 @@ const styles = StyleSheet.create({
   cardActionBtn: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md },
   commentSection: { borderTopWidth: 1, marginTop: SPACING.md, paddingTop: SPACING.lg, gap: SPACING.sm },
   commentShowMore: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingVertical: 2 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginTop: SPACING.sm },
-  commentInputText: { flex: 1, fontSize: FONTS.sizes.sm, maxHeight: 80 },
 });
