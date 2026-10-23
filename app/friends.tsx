@@ -819,7 +819,6 @@ export default function FriendsScreen() {
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
   const myAvatar = localAvatarUri ?? avatarUrl;
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 70 + (insets.bottom || 0);
 
   // Activity feed state
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
@@ -1955,7 +1954,7 @@ export default function FriendsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={tabBarHeight} style={screen === 'friends' ? [styles.container, { backgroundColor: colors.bg }] : { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={screen === 'friends' ? [styles.container, { backgroundColor: colors.bg }] : { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
       {/* Activity feed — only when on friends screen */}
       {screen === 'friends' && (loadingFeed ? (
         <View style={styles.loadingContainer}>
