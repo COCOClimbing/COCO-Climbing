@@ -8,488 +8,295 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Modal,
+  Image,
 } from 'react-native';
+import ImageCropPicker from 'react-native-image-crop-picker';
 import { useTheme } from '../utils/ThemeContext';
 import { useAuth } from '../utils/AuthContext';
 import { upsertProfile } from '../utils/cloudSync';
 import { supabase } from '../utils/supabase';
 import { isUsernameAvailable } from '../utils/friendsApi';
+import { uploadMedia } from '../utils/mediaUpload';
 import { FONTS, SPACING } from '../utils/theme';
+import PushScreen from './PushScreen';
+import { useTabBarSpace } from './BottomTabBar';
 
+const AVATAR_SIZE = 88;
+const BIO_MAX_HEIGHT = 140;
+
+// Edit Profile page: slides in like the app's other pages, edits every field
+// at once and saves them together with the Save button. The photo can be
+// changed here too; it uploads when you save.
 export default function EditProfileModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const { user, profileName, avatarUrl, username, hometown, bio, refreshProfile } = useAuth();
+  const { user, profileName, avatarUrl, localAvatarUri, username, hometown, bio, refreshProfile } = useAuth();
+  const tabBarSpace = useTabBarSpace();
 
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(profileName ?? '');
-  const [savingName, setSavingName] = useState(false);
-
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [usernameValue, setUsernameValue] = useState(username ?? '');
-  const [savingUsername, setSavingUsername] = useState(false);
+  const [name, setName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [town, setTown] = useState('');
+  const [about, setAbout] = useState('');
+  const [email, setEmail] = useState('');
+  const [newPhoto, setNewPhoto] = useState<string | null>(null);
+  const [bioHeight, setBioHeight] = useState<number | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
-
-  const [editingHometown, setEditingHometown] = useState(false);
-  const [hometownValue, setHometownValue] = useState(hometown ?? '');
-  const [savingHometown, setSavingHometown] = useState(false);
-
-  const [editingBio, setEditingBio] = useState(false);
-  const [bioValue, setBioValue] = useState(bio ?? '');
-  const [savingBio, setSavingBio] = useState(false);
-
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [emailValue, setEmailValue] = useState(user?.email ?? '');
-  const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
 
+  // Start from the saved profile each time the page opens.
   useEffect(() => {
-    if (visible) {
-      setNameValue(profileName ?? '');
-      setUsernameValue(username ?? '');
-      setHometownValue(hometown ?? '');
-      setBioValue(bio ?? '');
-      setEmailValue(user?.email ?? '');
-      setEditingName(false);
-      setEditingUsername(false);
-      setEditingHometown(false);
-      setEditingBio(false);
-      setEditingEmail(false);
-      setUsernameError(null);
-      setEmailError(null);
-      setEmailSent(false);
-    }
+    if (!visible) return;
+    setName(profileName ?? '');
+    setHandle(username ?? '');
+    setTown(hometown ?? '');
+    setAbout(bio ?? '');
+    setEmail(user?.email ?? '');
+    setNewPhoto(null);
+    setNameError(null);
+    setUsernameError(null);
+    setEmailError(null);
   }, [visible]);
 
   if (!user) return null;
 
-  async function handleSaveName() {
-    if (!nameValue.trim()) return;
-    setSavingName(true);
-    try {
-      await upsertProfile(user.id, nameValue.trim(), avatarUrl ?? undefined);
-      await refreshProfile();
-      setEditingName(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save name.');
-    }
-    setSavingName(false);
+  // Usernames are saved lowercase, but older ones may have capitals — leave
+  // those alone unless the username is actually edited.
+  const rawHandle = handle.trim().replace(/^@/, '');
+  const handleChanged = rawHandle !== (username ?? '');
+  const cleanHandle = handleChanged ? rawHandle.toLowerCase() : (username ?? '');
+  const cleanEmail = email.trim().toLowerCase();
+  const dirty =
+    !!newPhoto ||
+    name.trim() !== (profileName ?? '') ||
+    handleChanged ||
+    town.trim() !== (hometown ?? '') ||
+    about.trim() !== (bio ?? '') ||
+    cleanEmail !== (user.email ?? '').toLowerCase();
+
+  function handleBack() {
+    if (!dirty || saving) { onClose(); return; }
+    Alert.alert('Discard changes?', 'Your edits haven\'t been saved.', [
+      { text: 'Keep Editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: onClose },
+    ]);
   }
 
-  async function handleSaveUsername() {
-    const trimmed = usernameValue.trim().toLowerCase().replace(/^@/, '');
-    if (!trimmed) { setUsernameError('Username cannot be empty.'); return; }
-    if (!/^[a-z0-9_]{3,20}$/.test(trimmed)) {
-      setUsernameError('3–20 characters: letters, numbers, underscores only.');
-      return;
-    }
-    if (trimmed === username) { setEditingUsername(false); return; }
-    setSavingUsername(true);
-    setUsernameError(null);
+  async function handlePickPhoto() {
     try {
-      const available = await isUsernameAvailable(trimmed);
-      if (!available) {
-        setUsernameError('That username is already taken.');
-        setSavingUsername(false);
-        return;
+      const image = await ImageCropPicker.openPicker({
+        width: 400,
+        height: 400,
+        cropping: true,
+        cropperCircleOverlay: true,
+        compressImageQuality: 0.9,
+        cropperToolbarTitle: 'Move and Scale',
+      });
+      setNewPhoto(image.path);
+    } catch {
+      // Picker cancelled
+    }
+  }
+
+  async function handleSave() {
+    if (!user || saving) return;
+    if (!dirty) { onClose(); return; }
+
+    // Check everything before writing anything.
+    let ok = true;
+    if (!name.trim()) { setNameError('Name cannot be empty.'); ok = false; }
+    if (handleChanged) {
+      if (!/^[a-z0-9_]{3,20}$/.test(cleanHandle)) {
+        setUsernameError('3–20 characters: letters, numbers, underscores only.');
+        ok = false;
       }
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, trimmed);
-      await refreshProfile();
-      setEditingUsername(false);
-    } catch {
-      setUsernameError('Failed to save username.');
     }
-    setSavingUsername(false);
-  }
+    if (!cleanEmail) { setEmailError('Email cannot be empty.'); ok = false; }
+    if (!ok) return;
 
-  async function handleSaveHometown() {
-    const trimmed = hometownValue.trim();
-    setSavingHometown(true);
+    setSaving(true);
     try {
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, trimmed || undefined);
+      // Only changing the capitals of your own username isn't a clash.
+      if (handleChanged && cleanHandle !== (username ?? '').toLowerCase()) {
+        const available = await isUsernameAvailable(cleanHandle);
+        if (!available) { setUsernameError('That username is already taken.'); return; }
+      }
+
+      let photoUrl = avatarUrl ?? undefined;
+      if (newPhoto) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not signed in.');
+        photoUrl = await uploadMedia(newPhoto, `${user.id}/avatar.jpg`, session.access_token);
+      }
+
+      await upsertProfile(user.id, name.trim(), photoUrl, cleanHandle || undefined, town.trim(), about.trim());
+
+      let emailNote: string | null = null;
+      if (cleanEmail !== (user.email ?? '').toLowerCase()) {
+        const { error } = await supabase.auth.updateUser({ email: cleanEmail });
+        if (error) {
+          // The rest saved; keep the page open so the email can be fixed.
+          await refreshProfile();
+          setEmailError(error.message);
+          return;
+        }
+        emailNote = 'A confirmation link was sent to your new email.';
+      }
+
       await refreshProfile();
-      setEditingHometown(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save hometown.');
+      onClose();
+      if (emailNote) Alert.alert('Check your inbox', emailNote);
+    } catch (e: any) {
+      Alert.alert('Could not save', e?.message ?? 'Please try again.');
+    } finally {
+      setSaving(false);
     }
-    setSavingHometown(false);
   }
 
-  async function handleSaveBio() {
-    const trimmed = bioValue.trim();
-    setSavingBio(true);
-    try {
-      await upsertProfile(user.id, profileName ?? '', avatarUrl ?? undefined, username ?? undefined, hometown ?? undefined, trimmed || undefined);
-      await refreshProfile();
-      setEditingBio(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save bio.');
-    }
-    setSavingBio(false);
-  }
+  const photo = newPhoto ?? localAvatarUri ?? avatarUrl;
+  const initials = (name || profileName || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const inputText = { color: colors.textPrimary };
 
-  async function handleSaveEmail() {
-    const trimmed = emailValue.trim().toLowerCase();
-    if (!trimmed) { setEmailError('Email cannot be empty.'); return; }
-    if (trimmed === user?.email) { setEditingEmail(false); return; }
-    setSavingEmail(true);
-    setEmailError(null);
-    try {
-      const { error } = await supabase.auth.updateUser({ email: trimmed });
-      if (error) { setEmailError(error.message); }
-      else { setEmailSent(true); setEditingEmail(false); }
-    } catch {
-      setEmailError('Failed to update email.');
-    }
-    setSavingEmail(false);
-  }
-
-  const inputStyle = [
-    styles.input,
-    {
-      backgroundColor: colors.bgElevated,
-      borderColor: colors.border,
-      color: colors.textPrimary,
-    },
-  ];
+  const saveButton = saving
+    ? <ActivityIndicator color={colors.accent} />
+    : (
+      <TouchableOpacity onPress={handleSave} activeOpacity={0.7} hitSlop={10}>
+        <Text style={[styles.save, { color: dirty ? colors.accent : colors.textMuted }]}>Save</Text>
+      </TouchableOpacity>
+    );
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => onClose()}
-    >
-      <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
-        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Edit Profile</Text>
-          <TouchableOpacity onPress={() => onClose()} activeOpacity={0.7}>
-            <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
+    <PushScreen visible={visible} title="Edit Profile" onBack={handleBack} headerRight={saveButton}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: tabBarSpace + SPACING.xl }}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Photo + name / username */}
+        <View style={[styles.topBlock, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8} style={styles.avatarWrap}>
+            <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+              {photo
+                ? <Image source={{ uri: photo }} style={styles.avatarImage} />
+                : <Text style={[styles.avatarInitials, { color: colors.accent }]}>{initials}</Text>}
+            </View>
           </TouchableOpacity>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.modalScroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PROFILE</Text>
-
-            {/* Name */}
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Name</Text>
-              {editingName ? (
-                <View style={styles.editRow}>
-                  <TextInput
-                    style={[inputStyle, styles.fieldInput]}
-                    value={nameValue}
-                    onChangeText={setNameValue}
-                    autoFocus
-                    returnKeyType="done"
-                    onSubmitEditing={handleSaveName}
-                  />
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                    onPress={handleSaveName}
-                    disabled={savingName}
-                    activeOpacity={0.8}
-                  >
-                    {savingName ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.fieldValueRow}
-                  onPress={() => { setNameValue(profileName ?? ''); setEditingName(true); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.fieldValue, { color: profileName ? colors.textPrimary : colors.textMuted }]}>
-                    {profileName || 'Tap to add name'}
-                  </Text>
-                  <Text style={[styles.editHint, { color: colors.accent }]}>Edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            {/* Username */}
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Username</Text>
-              {editingUsername ? (
-                <View>
-                  <View style={styles.editRow}>
-                    <TextInput
-                      style={[inputStyle, styles.fieldInput]}
-                      value={usernameValue}
-                      onChangeText={v => { setUsernameValue(v); setUsernameError(null); }}
-                      autoFocus
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      onSubmitEditing={handleSaveUsername}
-                      placeholder="letters, numbers, _"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                      onPress={handleSaveUsername}
-                      disabled={savingUsername}
-                      activeOpacity={0.8}
-                    >
-                      {savingUsername ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                  {usernameError && <Text style={[styles.errorText, { color: colors.danger }]}>{usernameError}</Text>}
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.fieldValueRow}
-                  onPress={() => { setUsernameValue(username ?? ''); setUsernameError(null); setEditingUsername(true); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.fieldValue, { color: username ? colors.textPrimary : colors.textMuted }]}>
-                    {username ? `@${username}` : 'Tap to set username'}
-                  </Text>
-                  <Text style={[styles.editHint, { color: colors.accent }]}>{username ? 'Edit' : 'Add'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            {/* Hometown */}
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Hometown</Text>
-              {editingHometown ? (
-                <View style={styles.editRow}>
-                  <TextInput
-                    style={[inputStyle, styles.fieldInput]}
-                    value={hometownValue}
-                    onChangeText={setHometownValue}
-                    autoFocus
-                    returnKeyType="done"
-                    onSubmitEditing={handleSaveHometown}
-                    placeholder="e.g. Boulder, CO"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                    onPress={handleSaveHometown}
-                    disabled={savingHometown}
-                    activeOpacity={0.8}
-                  >
-                    {savingHometown ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.fieldValueRow}
-                  onPress={() => { setHometownValue(hometown ?? ''); setEditingHometown(true); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.fieldValue, { color: hometown ? colors.textPrimary : colors.textMuted }]}>
-                    {hometown || 'Tap to add hometown'}
-                  </Text>
-                  <Text style={[styles.editHint, { color: colors.accent }]}>{hometown ? 'Edit' : 'Add'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            {/* Bio */}
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Bio</Text>
-              {editingBio ? (
-                <View>
-                  <TextInput
-                    style={[inputStyle, styles.bioInput]}
-                    value={bioValue}
-                    onChangeText={setBioValue}
-                    autoFocus
-                    multiline
-                    numberOfLines={4}
-                    placeholder="A little about yourself"
-                    placeholderTextColor={colors.textMuted}
-                    maxLength={300}
-                    textAlignVertical="top"
-                  />
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: colors.accent, marginTop: SPACING.sm }]}
-                    onPress={handleSaveBio}
-                    disabled={savingBio}
-                    activeOpacity={0.8}
-                  >
-                    {savingBio ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.fieldValueRow}
-                  onPress={() => { setBioValue(bio ?? ''); setEditingBio(true); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.fieldValue, { color: bio ? colors.textPrimary : colors.textMuted }]}>
-                    {bio || 'Tap to add a bio'}
-                  </Text>
-                  <Text style={[styles.editHint, { color: colors.accent }]}>{bio ? 'Edit' : 'Add'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            {/* Email */}
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
-              {editingEmail ? (
-                <View>
-                  <View style={styles.editRow}>
-                    <TextInput
-                      style={[inputStyle, styles.fieldInput]}
-                      value={emailValue}
-                      onChangeText={v => { setEmailValue(v); setEmailError(null); }}
-                      autoFocus
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      returnKeyType="done"
-                      onSubmitEditing={handleSaveEmail}
-                      placeholderTextColor={colors.textMuted}
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: colors.accent }]}
-                      onPress={handleSaveEmail}
-                      disabled={savingEmail}
-                      activeOpacity={0.8}
-                    >
-                      {savingEmail ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                  {emailError && <Text style={[styles.errorText, { color: colors.danger }]}>{emailError}</Text>}
-                  <Text style={[styles.hint, { color: colors.textMuted }]}>A confirmation link will be sent to the new address.</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.fieldValueRow}
-                  onPress={() => { setEmailValue(user?.email ?? ''); setEmailError(null); setEmailSent(false); setEditingEmail(true); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>{user?.email}</Text>
-                  <Text style={[styles.editHint, { color: colors.accent }]}>Edit</Text>
-                </TouchableOpacity>
-              )}
-              {emailSent && !editingEmail && (
-                <Text style={[styles.hint, { color: colors.accentGreen }]}>Confirmation sent — check your inbox.</Text>
-              )}
+          <View style={styles.nameBox}>
+            <TextInput
+              style={[styles.nameInput, inputText]}
+              value={name}
+              onChangeText={v => { setName(v); setNameError(null); }}
+              placeholder="Name"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="next"
+            />
+            <View style={[styles.hairline, { backgroundColor: colors.border }]} />
+            <View style={styles.handleRow}>
+              <Text style={[styles.at, { color: colors.textMuted }]}>@</Text>
+              <TextInput
+                style={[styles.nameInput, styles.handleInput, inputText]}
+                value={handle}
+                onChangeText={v => { setHandle(v); setUsernameError(null); }}
+                placeholder="username"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
             </View>
           </View>
-        </ScrollView>
-      </View>
-    </Modal>
+        </View>
+        {(nameError || usernameError) && (
+          <Text style={[styles.error, { color: colors.danger }]}>{nameError ?? usernameError}</Text>
+        )}
+
+        {/* Bio — sized from a hidden copy of its text (iOS auto-grow is unreliable on device) */}
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View>
+            <Text
+              style={[styles.rowInput, styles.mirror]}
+              onLayout={e => setBioHeight(Math.ceil(e.nativeEvent.layout.height))}
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+            >
+              {(about || 'Bio') + (about.endsWith('\n') ? ' ' : '')}
+            </Text>
+            <TextInput
+              style={[styles.rowInput, inputText, bioHeight !== undefined && { height: Math.min(bioHeight, BIO_MAX_HEIGHT) }]}
+              value={about}
+              onChangeText={setAbout}
+              placeholder="Bio"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={300}
+              scrollEnabled={(bioHeight ?? 0) > BIO_MAX_HEIGHT}
+            />
+          </View>
+        </View>
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <TextInput
+            style={[styles.rowInput, inputText]}
+            value={town}
+            onChangeText={setTown}
+            placeholder="Hometown (e.g. Boulder, CO)"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+
+        {/* Account */}
+        <View style={styles.sectionBand}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+        </View>
+        <View style={[styles.row, styles.labeledRow, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Email</Text>
+          <TextInput
+            style={[styles.rowInput, styles.rowValue, inputText]}
+            value={email}
+            onChangeText={v => { setEmail(v); setEmailError(null); }}
+            placeholder="you@example.com"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+          />
+        </View>
+        <Text style={[styles.note, { color: emailError ? colors.danger : colors.textMuted }]}>
+          {emailError ?? 'Changing your email sends a confirmation link to the new address.'}
+        </Text>
+      </ScrollView>
+    </PushScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  modalContainer: { flex: 1 },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-  },
-  modalTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold },
-  doneText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },
-  modalScroll: { padding: SPACING.xl, paddingBottom: SPACING.xxl * 2 },
-  section: {
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    marginBottom: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.semibold,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.md,
-  },
-  field: {
-    paddingVertical: SPACING.sm,
-  },
-  fieldLabel: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.semibold,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.xs,
-  },
-  editRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.regular,
-    marginBottom: SPACING.sm,
-  },
-  fieldInput: {
-    flex: 1,
-    marginBottom: 0,
-  },
-  saveButton: {
-    borderRadius: 10,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+  save: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold },
+  topBlock: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, padding: SPACING.lg, borderBottomWidth: StyleSheet.hairlineWidth },
+  avatarWrap: { alignItems: 'center' },
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 60,
+    overflow: 'hidden',
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.bold,
-  },
-  fieldValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  fieldValue: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.regular,
-    flex: 1,
-  },
-  editHint: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.medium,
-    marginLeft: SPACING.sm,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: SPACING.sm,
-  },
-  errorText: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.medium,
-    marginTop: SPACING.xs,
-  },
-  bioInput: {
-    minHeight: 90,
-    paddingTop: SPACING.md,
-  },
-  hint: {
-    fontSize: FONTS.sizes.xs,
-    fontFamily: FONTS.family.regular,
-    marginTop: SPACING.xs,
-  },
+  avatarImage: { width: AVATAR_SIZE, height: AVATAR_SIZE },
+  avatarInitials: { fontSize: 30, fontFamily: FONTS.family.bold },
+  nameBox: { flex: 1 },
+  nameInput: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold, paddingVertical: SPACING.md },
+  hairline: { height: StyleSheet.hairlineWidth },
+  handleRow: { flexDirection: 'row', alignItems: 'center' },
+  at: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold, marginRight: 1 },
+  handleInput: { flex: 1 },
+  error: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
+  row: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  labeledRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  rowLabel: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular },
+  rowInput: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 0 },
+  rowValue: { flex: 1, textAlign: 'right' },
+  mirror: { position: 'absolute', left: 0, right: 0, opacity: 0 },
+  sectionBand: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.sm, marginTop: SPACING.lg },
+  sectionTitle: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.semibold, letterSpacing: 1 },
+  note: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
 });
