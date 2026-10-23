@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   Animated,
+  Easing,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -991,6 +992,14 @@ export default function FriendsScreen() {
   }, [user?.id, screen]);
 
   // Keep a stable ref so the callback always calls the latest loadFeed
+  // Feed eases up into place after each full load instead of popping in.
+  const feedEntrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (loadingFeed) { feedEntrance.setValue(0); return; }
+    if (activityFeed.length === 0) return;
+    Animated.timing(feedEntrance, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [loadingFeed, activityFeed.length > 0]);
+
   const loadFeedRef = useRef(loadFeed);
   loadFeedRef.current = loadFeed;
   useEffect(() => {
@@ -2013,6 +2022,7 @@ export default function FriendsScreen() {
           )}
         </View>
       ) : (
+        <Animated.View style={{ flex: 1, opacity: feedEntrance, transform: [{ translateY: feedEntrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
         <ScrollView
           ref={feedScrollRef}
           style={styles.scrollArea}
@@ -2271,6 +2281,7 @@ export default function FriendsScreen() {
             </Text>
           )}
         </ScrollView>
+        </Animated.View>
       ))}
 
       {/* Full comment thread for a post */}
