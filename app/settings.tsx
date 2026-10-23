@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch, Linking, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch, Linking, Image } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
@@ -11,6 +11,7 @@ import { getBlockedUsers, unblockUser, BlockedUser } from '../utils/moderationAp
 import { getNotificationPrefs, saveNotificationPrefs, NotificationPrefs } from '../utils/notificationPrefs';
 import { registerForPushNotifications } from '../utils/notifications';
 import EditProfileModal from '../components/EditProfileModal';
+import PushScreen from '../components/PushScreen';
 
 export default function SettingsScreen() {
   const tabBarSpace = useTabBarSpace();
@@ -326,15 +327,10 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <Modal visible={blockedOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setBlockedOpen(false)}>
-            <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
-              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Blocked Accounts</Text>
-                <TouchableOpacity onPress={() => setBlockedOpen(false)} activeOpacity={0.7}>
-                  <Text style={[styles.modalDone, { color: colors.accent }]}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView contentContainerStyle={styles.modalContent}>
+          {/* Slides in like the app's other pages */}
+          <PushScreen visible={blockedOpen} title="Blocked Accounts" onBack={() => setBlockedOpen(false)}>
+            <View style={styles.modalContainer}>
+              <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: tabBarSpace }]}>
                 {blockedUsers.length === 0 ? (
                   <Text style={[styles.blockedEmpty, { color: colors.textMuted }]}>No blocked accounts</Text>
                 ) : (
@@ -388,7 +384,7 @@ export default function SettingsScreen() {
                 )}
               </ScrollView>
             </View>
-          </Modal>
+          </PushScreen>
         </>
       )}
 
@@ -580,22 +576,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.regular,
   },
   modalContainer: { flex: 1 },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.bold,
-  },
-  modalDone: {
-    fontSize: FONTS.sizes.md,
-    fontFamily: FONTS.family.medium,
-  },
   modalContent: {
     padding: SPACING.xl,
   },

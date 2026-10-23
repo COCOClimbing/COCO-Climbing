@@ -67,7 +67,7 @@ export default function PushScreen({ visible, title, subtitle, headerRight, hide
               <FloatingBackButton onPress={onBack} />
             </View>
             <View style={styles.titleWrap}>
-              <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
+              <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
               {subtitle ? (
                 <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>{subtitle}</Text>
               ) : null}
