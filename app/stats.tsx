@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
 import StatCard from '../components/StatCard';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
@@ -135,8 +135,11 @@ export default function StatsScreen() {
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Only the first load shows the spinner; later refreshes (e.g. cloud sync
+  // finishing after launch) update the stats in place.
+  const hasLoadedRef = useRef(false);
   const loadData = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     let cloudClimbs: Climb[] | null = null;
     let cloudSessionCount: number | null = null;
     let cloudSessionMap: Record<string, string> | null = null;
@@ -201,6 +204,7 @@ export default function StatsScreen() {
       setSessionLocationMap(locMap);
     }
     setLoading(false);
+    hasLoadedRef.current = true;
   }, []);
 
   useEffect(() => {

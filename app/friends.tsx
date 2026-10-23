@@ -994,7 +994,9 @@ export default function FriendsScreen() {
   const loadFeedRef = useRef(loadFeed);
   loadFeedRef.current = loadFeed;
   useEffect(() => {
-    setFeedRefreshCallback(() => loadFeedRef.current());
+    // Background refreshes (e.g. cloud sync finishing after launch) update the
+    // feed in place — no spinner swapping out what's already on screen.
+    setFeedRefreshCallback(() => loadFeedRef.current(undefined, false));
     return () => setFeedRefreshCallback(null);
   }, []);
 
