@@ -1306,24 +1306,35 @@ export default function FriendsScreen() {
       // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size immediately
       const allUris = [...new Set(deduped.flatMap(e => e.sessionPhotos ?? []))];
       const widthCache: Record<string, number> = {};
-      await Promise.all(
-        allUris.map(uri => new Promise<void>(resolve => {
-          Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
-        }))
-      );
+      // Likes and comments load alongside the photo sizes, so each post shows
+      // up complete instead of its buttons and counts filling in afterward.
+      const [, social] = await Promise.all([
+        Promise.all(
+          allUris.map(uri => new Promise<void>(resolve => {
+            Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
+          }))
+        ),
+        Promise.all(
+          deduped.filter(e => e.sessionId).map(async e => {
+            const [likes, comments] = await Promise.all([
+              getSessionLikes(e.sessionId!).catch(() => [] as SessionLike[]),
+              getSessionComments(e.sessionId!).catch(() => [] as SessionComment[]),
+            ]);
+            return { key: `sid-${e.sessionId}`, likes, comments };
+          })
+        ),
+      ]);
+      const commentIds = social.flatMap(x => x.comments.map(c => c.id));
+      const commentLikes = commentIds.length > 0 ? await getCommentLikes(commentIds).catch(() => ({})) : {};
       const dedupedWithWidths = deduped.map(e => ({
         ...e,
         photoWidths: e.sessionPhotos ? Object.fromEntries(e.sessionPhotos.filter(u => widthCache[u]).map(u => [u, widthCache[u]])) : undefined,
       }));
+      // Set together so the feed renders once, complete.
+      setLikesMap(prev => ({ ...prev, ...Object.fromEntries(social.map(x => [x.key, x.likes])) }));
+      setCommentsMap(prev => ({ ...prev, ...Object.fromEntries(social.map(x => [x.key, x.comments])) }));
+      setCommentLikesMap(prev => ({ ...prev, ...commentLikes }));
       setActivityFeed(dedupedWithWidths);
-
-      // Load likes & comments for sessions that have an ID
-      deduped.forEach(e => {
-        if (e.sessionId) {
-          const key = `sid-${e.sessionId}`;
-          loadLikesAndComments(key, e.sessionId);
-        }
-      });
       everLoadedFeedRef.current = true;
       if (showLoading) setLoadingFeed(false);
       return dedupedWithWidths.length;
