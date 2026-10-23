@@ -100,45 +100,6 @@ type FriendWithActivity = FriendProfile & {
   recentClimbCount: number;
 };
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-
-function AvatarCircle({ name, size = 44, colors }: { name: string; size?: number; colors: any }) {
-  const initials = (name || '?')
-    .split(' ')
-    .map((w: string) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-  return (
-    <View style={[
-      avatarStyles.circle,
-      {
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: colors.accentSoft,
-        borderColor: colors.accent,
-      },
-    ]}>
-      <Text style={[avatarStyles.initials, { color: colors.accent, fontSize: size * 0.36 }]}>
-        {initials}
-      </Text>
-    </View>
-  );
-}
-
-const avatarStyles = StyleSheet.create({
-  circle: {
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initials: {
-    fontFamily: FONTS.family.bold,
-  },
-});
-
 // ─── FriendDetailView ─────────────────────────────────────────────────────────
 
 const PHOTO_HEIGHT = 220;
@@ -2404,7 +2365,7 @@ export default function FriendsScreen() {
                       onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(item, 'friends'); }}
                       activeOpacity={0.75}
                     >
-                      <AvatarCircle name={item.name} colors={colors} />
+                      <ProfileAvatar name={item.name} avatarUrl={item.avatar_url ?? null} size={44} colors={colors} />
                       <View style={styles.personInfo}>
                         <Text style={[styles.personName, { color: colors.textPrimary }]}>{item.name}</Text>
                         {item.username ? <Text style={[styles.personUsername, { color: colors.textMuted }]}>@{item.username}</Text> : null}
@@ -2436,7 +2397,7 @@ export default function FriendsScreen() {
                             onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(req.profile, 'friends'); }}
                             activeOpacity={0.75}
                           >
-                            <AvatarCircle name={req.profile.name} colors={colors} />
+                            <ProfileAvatar name={req.profile.name} avatarUrl={req.profile.avatar_url ?? null} size={44} colors={colors} />
                             <View style={styles.personInfo}>
                               <Text style={[styles.personName, { color: colors.textPrimary }]}>{req.profile.name}</Text>
                               {req.profile.username ? <Text style={[styles.personUsername, { color: colors.textMuted }]}>@{req.profile.username}</Text> : null}
@@ -2478,7 +2439,7 @@ export default function FriendsScreen() {
                         onLongPress={() => handleRemoveFriend(friend.id, friend.name)}
                         activeOpacity={0.75}
                       >
-                        <AvatarCircle name={friend.name} colors={colors} />
+                        <ProfileAvatar name={friend.name} avatarUrl={friend.avatar_url ?? null} size={44} colors={colors} />
                         <View style={styles.personInfo}>
                           <Text style={[styles.personName, { color: colors.textPrimary }]}>{friend.name}</Text>
                           {friend.username ? <Text style={[styles.personUsername, { color: colors.textMuted }]}>@{friend.username}</Text> : null}
