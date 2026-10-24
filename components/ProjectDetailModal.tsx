@@ -208,7 +208,7 @@ export default function ProjectDetailModal({ visible, project: projectProp, refr
 
 const ss = StyleSheet.create({
   editPill: {
-    borderRadius: 20, borderWidth: 1,
+    borderRadius: 7, borderWidth: 1,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs,
   },
   editPillTxt: { fontSize: FONTS.sizes.sm },

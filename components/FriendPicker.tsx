@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 7,
     borderWidth: 1,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,

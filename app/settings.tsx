@@ -15,7 +15,7 @@ import PushScreen from '../components/PushScreen';
 
 export default function SettingsScreen() {
   const tabBarSpace = useTabBarSpace();
-  const { mode, colors, setMode } = useTheme();
+  const { preference, colors, setMode } = useTheme();
   const { user, profileName, avatarUrl, username, hometown, bio, isPrivate, deleteAccount, signOut, syncNow, refreshProfile } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -158,11 +158,12 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: SPACING.xl }]}>APPEARANCE</Text>
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.md }]}>
         <View style={styles.modeRow}>
-          {(['light', 'dark'] as const).map(m => {
+          {(['light', 'dark', 'auto'] as const).map(m => {
             const isDarkBtn = m === 'dark';
-            const isActive = mode === m;
-            const bg = isDarkBtn ? '#141414' : '#F5F5F2';
-            const textColor = isDarkBtn ? '#F0EDE8' : '#1A1A18';
+            const isActive = preference === m;
+            // Auto follows the app's current colours; Light and Dark preview their own
+            const bg = m === 'auto' ? colors.bgElevated : isDarkBtn ? '#141414' : '#F5F5F2';
+            const textColor = m === 'auto' ? colors.textPrimary : isDarkBtn ? '#F0EDE8' : '#1A1A18';
             return (
               <TouchableOpacity
                 key={m}
@@ -175,12 +176,17 @@ export default function SettingsScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[styles.modeLabel, { color: isActive ? colors.accent : textColor }]}>
-                  {m === 'dark' ? 'Dark' : 'Light'}
+                  {m === 'dark' ? 'Dark' : m === 'light' ? 'Light' : 'Auto'}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
+        {preference === 'auto' && (
+          <Text style={{ color: colors.textMuted, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular }}>
+            Light during the day, dark after sunset
+          </Text>
+        )}
       </View>
 
       {/* Grades */}

@@ -787,7 +787,7 @@ const detailStyles = StyleSheet.create({
   countItem: { alignItems: 'flex-start' },
   countNumber: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold },
   countLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginBottom: 2 },
-  friendBtn: { borderWidth: 1.5, borderRadius: 20, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },
+  friendBtn: { borderWidth: 1.5, borderRadius: 10, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },
   friendBtnText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.semibold },
 
   loadingBox: { paddingTop: 60, alignItems: 'center' },
@@ -2518,7 +2518,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.xs,
     borderWidth: 1.5,
-    borderRadius: 20,
+    borderRadius: 7,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
   },

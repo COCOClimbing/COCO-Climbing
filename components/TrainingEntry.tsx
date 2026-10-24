@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: 2 },
   title: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
   time: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular },
-  editPill: { borderRadius: 20, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: 3 },
+  editPill: { borderRadius: 7, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: 3 },
   editPillTxt: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   box: { borderRadius: 12, borderWidth: 1, padding: SPACING.lg },
   sectionLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, letterSpacing: 1.5, marginBottom: SPACING.sm },

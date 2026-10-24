@@ -192,13 +192,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 20,
+    // Rounded square rather than a full pill, to match the app's buttons
+    borderRadius: 10,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     marginRight: SPACING.sm,
     marginBottom: SPACING.sm,
   },
-  pillSmall: { paddingHorizontal: SPACING.sm, paddingVertical: 4 },
+  // Smaller corner so the shorter pill keeps the same look
+  pillSmall: { paddingHorizontal: SPACING.sm, paddingVertical: 4, borderRadius: 7 },
   pillIcon: { fontSize: 14, marginRight: 4 },
   pillText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium, letterSpacing: 0.3 },
   pillTextSmall: { fontSize: FONTS.sizes.xs },

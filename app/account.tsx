@@ -43,7 +43,7 @@ const PROFILE_TABS: UnderlineTab<ProfileTab>[] = [
 
 export default function AccountScreen() {
   const tabBarSpace = useTabBarSpace();
-  const { colors, mode, setMode } = useTheme();
+  const { colors, preference, setMode } = useTheme();
   const { settingsOpen, closeSettings, navigate, screen, friendsOpen, viewFriendProfile } = useNav();
   const { user, profileName, avatarUrl, localAvatarUri, username, hometown, bio, isPrivate, signOut, deleteAccount, refreshProfile, syncNow } = useAuth();
 
@@ -534,11 +534,12 @@ export default function AccountScreen() {
             <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</Text>
               <View style={styles.modeRow}>
-                {(['light', 'dark'] as const).map(m => {
+                {(['light', 'dark', 'auto'] as const).map(m => {
                   const isDarkBtn = m === 'dark';
-                  const isActive = mode === m;
-                  const bg = isDarkBtn ? '#141414' : '#F5F5F2';
-                  const textColor = isDarkBtn ? '#F0EDE8' : '#1A1A18';
+                  const isActive = preference === m;
+                  // Auto follows the app's current colours; Light and Dark preview their own
+                  const bg = m === 'auto' ? colors.bgElevated : isDarkBtn ? '#141414' : '#F5F5F2';
+                  const textColor = m === 'auto' ? colors.textPrimary : isDarkBtn ? '#F0EDE8' : '#1A1A18';
                   return (
                     <TouchableOpacity
                       key={m}
@@ -551,12 +552,17 @@ export default function AccountScreen() {
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.modeLabel, { color: isActive ? colors.accent : textColor }]}>
-                        {m === 'dark' ? 'Dark' : 'Light'}
+                        {m === 'dark' ? 'Dark' : m === 'light' ? 'Light' : 'Auto'}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+              {preference === 'auto' && (
+                <Text style={{ color: colors.textMuted, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular }}>
+                  Light during the day, dark after sunset
+                </Text>
+              )}
             </View>
 
             {/* Grades */}
@@ -1071,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   editPill: {
     borderWidth: 1.5,
-    borderRadius: 20,
+    borderRadius: 10,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
@@ -1083,7 +1089,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: 15,
+    // Same corner as the Settings page's Edit Profile button
+    borderRadius: 10,
     paddingVertical: 5,
     paddingHorizontal: SPACING.md,
   },

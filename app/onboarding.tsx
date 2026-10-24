@@ -43,7 +43,7 @@ export const TERMS_ACCEPTED_KEY = '@coco_terms_accepted';
 
 export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const { navigate } = useNav();
-  const { colors, mode, setMode } = useTheme();
+  const { colors, preference, setMode } = useTheme();
   const { user, profileName, avatarUrl, username, hometown, bio, refreshProfile } = useAuth();
 
   const [step, setStep] = useState(0);
@@ -286,8 +286,8 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
             {/* Dark / Light */}
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>APPEARANCE</Text>
             <View style={styles.modeRow}>
-              {(['light', 'dark'] as const).map(m => {
-                const selected = mode === m;
+              {(['light', 'dark', 'auto'] as const).map(m => {
+                const selected = preference === m;
                 return (
                   <TouchableOpacity
                     key={m}
@@ -302,7 +302,7 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.modeLabel, { color: selected ? accent : colors.textPrimary }]}>
-                      {m === 'dark' ? 'Dark' : 'Light'}
+                      {m === 'dark' ? 'Dark' : m === 'light' ? 'Light' : 'Auto'}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
     alignSelf: 'flex-start',

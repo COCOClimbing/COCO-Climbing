@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
   attemptsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.md, borderRadius: 10, borderWidth: 1, padding: SPACING.md },
   attemptsLabel: { fontSize: FONTS.sizes.md },
   attemptsStepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
-  stepBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  stepBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   stepBtnText: { fontSize: 20, lineHeight: 24 },
   attemptsValue: { fontSize: FONTS.sizes.xl, minWidth: 28, textAlign: 'center' },
   mediaBtn: { borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.md },
@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
   mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
   mediaAddTile: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   swatchWrap: { borderWidth: 3, borderRadius: 22, padding: 2, marginRight: SPACING.sm, marginBottom: SPACING.sm },
-  pill: { borderWidth: 1, borderRadius: 20, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
+  pill: { borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.md },
   // Starts at 80 and grows as you type more, rather than scrolling inside a fixed box

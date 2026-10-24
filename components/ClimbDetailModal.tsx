@@ -176,7 +176,7 @@ export default function ClimbDetailModal({ visible, climb: climbProp, onClose, o
 
 const ss = StyleSheet.create({
   editPill: {
-    borderRadius: 20, borderWidth: 1,
+    borderRadius: 7, borderWidth: 1,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs,
     minWidth: 60, alignItems: 'center',
   },
