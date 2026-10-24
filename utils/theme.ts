@@ -285,10 +285,10 @@ export const SPACING = {
 // ─── Climb Data ──────────────────────────────────────────────────────────────
 
 export const CLIMB_TYPES = [
-  { id: 'boulder',    label: 'Boulder',    icon: 'B',  color: '#E0392D' },
+  { id: 'boulder',    label: 'Boulder',    icon: 'B',  color: ACCENT_COLORS.orange.color },
   { id: 'top_rope',  label: 'Top Rope',   icon: 'TR', color: '#00B4D8' },
   { id: 'sport',     label: 'Sport',      icon: 'S',  color: '#4361EE' },
-  { id: 'trad',      label: 'Trad',       icon: 'T',  color: '#C77B3E' },
+  { id: 'trad',      label: 'Trad',       icon: 'T',  color: '#E0392D' },
   { id: 'auto_belay',label: 'Auto Belay', icon: 'AB', color: '#E040FB' },
   { id: 'hangboard', label: 'Hangboard',  icon: 'HB', color: '#EF476F' },
   { id: 'lift',      label: 'Lift',       icon: 'LF', color: '#8D99AE' },

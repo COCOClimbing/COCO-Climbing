@@ -279,6 +279,16 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     if (fresh !== detailClimb) setDetailClimb(fresh ?? null);
   }, [days]);
   const activeDates = [...new Set(days.map(d => d.date))];
+  // Each day's climbing types (in the Type picker's order) as their colours, for the calendar rings
+  const dateTypeColors: Record<string, string[]> = {};
+  for (const d of days) {
+    const types = new Set([...(dateTypeColors[d.date] ?? []), ...d.climbs.map(c => c.type)]);
+    dateTypeColors[d.date] = [...types];
+  }
+  for (const date in dateTypeColors) {
+    const types = dateTypeColors[date];
+    dateTypeColors[date] = CLIMB_TYPES.filter(t => types.includes(t.id)).map(t => t.color);
+  }
 
   // Sync active-session editing state when a different session becomes active
   useEffect(() => {
@@ -700,8 +710,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     const sessions = await getAllSessions();
     const session = sessions.find(s => s.id === day.sessionId);
     if (session) await saveSession({ ...session, date: newDate });
-    setChangeDateSession(null);
-    setSelectedDay(null);
+    // The picker stays open (it closes from its Done button), so keep it pointed at the moved session
+    setChangeDateSession(prev => prev?.sessionId === day.sessionId ? { ...prev, date: newDate } : prev);
     await load();
   }
 
@@ -1358,6 +1368,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
             visible
             onClose={() => {}}
             activeDates={activeDates}
+            dateTypeColors={dateTypeColors}
             onSelectDate={handleCalendarSelect}
             selectedDate={selectedCalDate}
             mode="view"
@@ -1424,6 +1435,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
         onClose={() => setChangeDateSession(null)}
         activeDates={activeDates}
         onSelectDate={(date) => changeDateSession && handleChangeSessionDate(changeDateSession, date)}
+        selectedDate={changeDateSession?.date}
         mode="pick"
       />
       <ShareModal

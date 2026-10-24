@@ -231,19 +231,17 @@ export default function LocationPicker({ value, onChange }: Props) {
           >
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <GHTouchableOpacity onPress={close} style={styles.headerBtn}>
-              <Text style={[styles.cancelText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>
-                Cancel
-              </Text>
-            </GHTouchableOpacity>
+            <View style={styles.headerBtn}>
+              {/* Back keeps whatever was typed (there's no Done button) */}
+              <GHTouchableOpacity onPress={() => handleConfirm(searchText)} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
+                <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+              </GHTouchableOpacity>
+            </View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Location
             </Text>
-            <GHTouchableOpacity onPress={() => handleConfirm(searchText)} style={styles.headerBtn}>
-              <Text style={[styles.doneText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>
-                Done
-              </Text>
-            </GHTouchableOpacity>
+            {/* Empty slot balances the back button so the title stays centred */}
+            <View style={styles.headerBtn} />
           </View>
 
           {/* Search input */}
@@ -415,8 +413,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { minWidth: 60 },
-  cancelText: { fontSize: FONTS.sizes.md },
-  doneText: { fontSize: FONTS.sizes.md, textAlign: 'right' },
+  // Same look as the app's round back button (FloatingBackButton), but a gesture-handler
+  // touchable so it works inside this sheet like its other buttons
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   modalTitle: { fontSize: FONTS.sizes.lg },
   searchRow: {
     flexDirection: 'row',

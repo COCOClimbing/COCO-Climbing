@@ -1083,12 +1083,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: 16,
-    paddingVertical: 6,
+    borderRadius: 15,
+    paddingVertical: 5,
     paddingHorizontal: SPACING.md,
   },
   editProfileText: {
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12.5,
     fontFamily: FONTS.family.semibold,
   },
   // Settings modal

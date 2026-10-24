@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   SafeAreaView, Modal, Dimensions, PanResponder, Animated, FlatList
@@ -14,11 +14,15 @@ import {
 const SCREEN_W = Dimensions.get('window').width;
 const H_PAD = SPACING.md * 2;
 const CELL_W = Math.floor((SCREEN_W - H_PAD) / 7);
+const DAY_SIZE = 36;
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   activeDates: string[];
+  // Optional: each date's climbing-type colours. A day gets one ring per type
+  // (nested); days without an entry fall back to a single accent ring.
+  dateTypeColors?: Record<string, string[]>;
   onSelectDate: (date: string) => void;
   selectedDate?: string;
   mode: 'view' | 'pick';
@@ -31,8 +35,8 @@ const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS_PER_PAGE = 12;
 
 // Day cells for one month. Shared by the modal and the scrolling list.
-function MonthGrid({ month, activeDates, selectedDate, onPressDay }: {
-  month: Date; activeDates: string[]; selectedDate?: string; onPressDay: (iso: string) => void;
+function MonthGrid({ month, activeDates, dateTypeColors, selectedDate, onPressDay }: {
+  month: Date; activeDates: string[]; dateTypeColors?: Record<string, string[]>; selectedDate?: string; onPressDay: (iso: string) => void;
 }) {
   const { colors } = useTheme();
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
@@ -47,16 +51,31 @@ function MonthGrid({ month, activeDates, selectedDate, onPressDay }: {
         const hasClimbs = activeDates.includes(iso);
         const isSelected = selectedDate === iso;
         const today = isToday(day);
+        const ringColors = hasClimbs ? (dateTypeColors?.[iso]?.length ? dateTypeColors[iso] : [colors.accent]) : [];
+        const mainColor = ringColors[0] ?? colors.accent;
+        // Extra types get extra rings outside the first, spaced tighter past three so they fit the cell
+        const extraRings = ringColors.slice(1);
+        const ringStep = extraRings.length > 2 ? 3 : 4;
         return (
           <TouchableOpacity key={iso} style={styles.cell} onPress={() => onPressDay(iso)} activeOpacity={0.7}>
+            {extraRings.map((c, i) => {
+              const size = DAY_SIZE + ringStep * 2 * (i + 1);
+              return (
+                <View
+                  key={i}
+                  pointerEvents="none"
+                  style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor: c }}
+                />
+              );
+            })}
             <View style={[
               styles.dayCircle,
-              hasClimbs && !today && { borderWidth: 1.5, borderColor: colors.accent },
+              hasClimbs && !today && { borderWidth: 1.5, borderColor: mainColor },
               isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 1.5, borderColor: colors.accent },
               today && { backgroundColor: colors.accent },
             ]}>
               <Text style={[styles.dayNum, {
-                color: today ? '#000' : (isSelected || hasClimbs) ? colors.accent : colors.textPrimary,
+                color: today ? '#000' : hasClimbs ? mainColor : isSelected ? colors.accent : colors.textPrimary,
                 fontFamily: isSelected || hasClimbs || today ? FONTS.family.bold : FONTS.family.regular,
                 fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
               }]}>
@@ -75,8 +94,8 @@ function MonthGrid({ month, activeDates, selectedDate, onPressDay }: {
 // oldest session and loads another year whenever you reach the top. The list
 // is inverted, so item 0 (this month) renders at the bottom and "end reached"
 // fires at the top.
-function ScrollingMonths({ activeDates, selectedDate, onSelectDate }: {
-  activeDates: string[]; selectedDate?: string; onSelectDate: (date: string) => void;
+function ScrollingMonths({ activeDates, dateTypeColors, selectedDate, onSelectDate }: {
+  activeDates: string[]; dateTypeColors?: Record<string, string[]>; selectedDate?: string; onSelectDate: (date: string) => void;
 }) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
@@ -115,7 +134,7 @@ function ScrollingMonths({ activeDates, selectedDate, onSelectDate }: {
                 </Text>
               </Text>
               <View style={styles.listGrid}>
-                <MonthGrid month={month} activeDates={activeDates} selectedDate={selectedDate} onPressDay={onSelectDate} />
+                <MonthGrid month={month} activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onPressDay={onSelectDate} />
               </View>
             </View>
           );
@@ -125,9 +144,9 @@ function ScrollingMonths({ activeDates, selectedDate, onSelectDate }: {
   );
 }
 
-export default function MiniCalendar({ visible, onClose, activeDates, onSelectDate, selectedDate, mode, inline = false }: Props) {
+export default function MiniCalendar({ visible, onClose, activeDates, dateTypeColors, onSelectDate, selectedDate, mode, inline = false }: Props) {
   if (inline) {
-    return <ScrollingMonths activeDates={activeDates} selectedDate={selectedDate} onSelectDate={onSelectDate} />;
+    return <ScrollingMonths activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onSelectDate={onSelectDate} />;
   }
   return (
     <ModalCalendar
@@ -140,6 +159,15 @@ export default function MiniCalendar({ visible, onClose, activeDates, onSelectDa
 function ModalCalendar({ visible, onClose, activeDates, onSelectDate, selectedDate }: Props) {
   const { colors } = useTheme();
   const [month, setMonth] = useState(new Date());
+  // The highlighted day: starts on the date being edited, moves to whatever is tapped
+  const [picked, setPicked] = useState(selectedDate);
+  // Open on the month of the date being edited
+  useEffect(() => {
+    if (visible) {
+      setMonth(selectedDate ? parseISO(selectedDate) : new Date());
+      setPicked(selectedDate);
+    }
+  }, [visible]);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const animating = useRef(false);
 
@@ -172,9 +200,11 @@ function ModalCalendar({ visible, onClose, activeDates, onSelectDate, selectedDa
     })
   ).current;
 
+  // Tapping a day picks it and highlights it; the sheet stays open until Done
   function handleDay(iso: string) {
+    if (iso === picked) return;
+    setPicked(iso);
     onSelectDate(iso);
-    onClose();
   }
 
   return (
@@ -209,7 +239,7 @@ function ModalCalendar({ visible, onClose, activeDates, onSelectDate, selectedDa
 
         {/* Grid — swipe left/right to change month */}
         <Animated.View style={[styles.grid, { transform: [{ translateX: slideAnim }] }]} {...panResponder.panHandlers}>
-          <MonthGrid month={month} activeDates={activeDates} selectedDate={selectedDate} onPressDay={handleDay} />
+          <MonthGrid month={month} activeDates={activeDates} selectedDate={picked} onPressDay={handleDay} />
         </Animated.View>
 
         {/* Footer */}
@@ -241,7 +271,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, flex: 1, alignContent: 'flex-start' },
   cell: { width: CELL_W, height: CELL_W, alignItems: 'center', justifyContent: 'center' },
   dayHeader: { fontSize: FONTS.sizes.sm },
-  dayCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  dayCircle: { width: DAY_SIZE, height: DAY_SIZE, borderRadius: DAY_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
   dayNum: { fontSize: FONTS.sizes.md },
   footer: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

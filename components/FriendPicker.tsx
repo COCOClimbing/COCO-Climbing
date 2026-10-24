@@ -9,6 +9,8 @@ import { useAuth } from '../utils/AuthContext';
 import { getFollowing, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING } from '../utils/theme';
 import { useSlideSheet } from '../utils/useSlideSheet';
+import { Ionicons } from '@expo/vector-icons';
+import Avatar from './Avatar';
 
 interface SelectedFriend { id: string; name: string; }
 
@@ -109,13 +111,16 @@ export default function FriendPicker({ selected, onChange }: Props) {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <View style={styles.headerBtn} />
+            <View style={styles.headerBtn}>
+              <GHTouchableOpacity onPress={close} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
+                <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+              </GHTouchableOpacity>
+            </View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Climbing With
             </Text>
-            <GHTouchableOpacity onPress={close} style={styles.headerBtn}>
-              <Text style={[styles.doneText, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>Done</Text>
-            </GHTouchableOpacity>
+            {/* Empty slot balances the back button so the title stays centred */}
+            <View style={styles.headerBtn} />
           </View>
 
           {selected.length > 0 && (
@@ -172,11 +177,7 @@ export default function FriendPicker({ selected, onChange }: Props) {
                   style={[styles.row, { borderBottomColor: colors.border }]}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.avatar, { backgroundColor: colors.accentSoft }]}>
-                    <Text style={[styles.avatarLetter, { color: colors.accent }]}>
-                      {f.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <Avatar name={f.name} avatarUrl={f.avatar_url} size={36} backgroundColor={colors.accentSoft} textColor={colors.accent} />
                   <View style={styles.info}>
                     <Text style={[styles.name, { color: colors.textPrimary }]}>{f.name}</Text>
                     {f.username ? <Text style={[styles.username, { color: colors.textMuted }]}>@{f.username}</Text> : null}
@@ -260,8 +261,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { minWidth: 60 },
+  // Same look as the app's round back button (FloatingBackButton), but a gesture-handler
+  // touchable so it works inside this sheet like its other buttons
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   modalTitle: { fontSize: FONTS.sizes.lg },
-  doneText: { fontSize: FONTS.sizes.md, textAlign: 'right' },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,17 +308,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     gap: SPACING.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.family.bold,
   },
   info: { flex: 1 },
   name: {
