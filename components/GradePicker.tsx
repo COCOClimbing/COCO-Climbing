@@ -67,7 +67,8 @@ export default function GradePicker({ gradeSystem, selected, onSystemChange, onC
               key={s.id}
               style={[
                 styles.systemBtn,
-                isActive && { backgroundColor: colors.accent },
+                // Same tinted look as the other choices (Pill), not a solid fill
+                isActive && { backgroundColor: colors.accent + '25', borderColor: colors.accent },
                 isLocked && { opacity: 0.3 },
               ]}
               onPress={() => handleSystemChange(s.id)}
@@ -76,7 +77,7 @@ export default function GradePicker({ gradeSystem, selected, onSystemChange, onC
               <Text style={[
                 styles.systemTxt,
                 {
-                  color: isActive ? '#000' : colors.textSecondary,
+                  color: isActive ? colors.accent : colors.textSecondary,
                   fontFamily: isActive ? FONTS.family.bold : FONTS.family.regular,
                 },
               ]}>
@@ -143,6 +144,8 @@ const styles = StyleSheet.create({
   systemBtn: {
     flex: 1,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 2,

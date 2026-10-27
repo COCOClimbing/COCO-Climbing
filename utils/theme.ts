@@ -285,13 +285,15 @@ export const SPACING = {
 // ─── Climb Data ──────────────────────────────────────────────────────────────
 
 export const CLIMB_TYPES = [
-  { id: 'boulder',    label: 'Boulder',    icon: 'B',  color: ACCENT_COLORS.orange.color },
-  { id: 'top_rope',  label: 'Top Rope',   icon: 'TR', color: '#00B4D8' },
-  { id: 'sport',     label: 'Sport',      icon: 'S',  color: '#4361EE' },
-  { id: 'trad',      label: 'Trad',       icon: 'T',  color: '#E0392D' },
-  { id: 'auto_belay',label: 'Auto Belay', icon: 'AB', color: '#E040FB' },
-  { id: 'hangboard', label: 'Hangboard',  icon: 'HB', color: '#EF476F' },
-  { id: 'lift',      label: 'Lift',       icon: 'LF', color: '#8D99AE' },
+  // Hues spaced evenly around the wheel so types are easy to tell apart in
+  // the calendar, and none is the app orange (#BF5F29).
+  { id: 'boulder',    label: 'Boulder',    icon: 'B',  color: '#14A38B' }, // teal
+  { id: 'top_rope',  label: 'Top Rope',   icon: 'TR', color: '#E0469E' }, // pink
+  { id: 'sport',     label: 'Sport',      icon: 'S',  color: '#3D6CE8' }, // blue
+  { id: 'trad',      label: 'Trad',       icon: 'T',  color: '#D7263D' }, // red
+  { id: 'auto_belay',label: 'Auto Belay', icon: 'AB', color: '#8B4FE0' }, // violet
+  { id: 'hangboard', label: 'Hangboard',  icon: 'HB', color: '#6BAA1F' }, // green
+  { id: 'lift',      label: 'Lift',       icon: 'LF', color: '#8D99AE' }, // grey
 ] as const;
 
 export const CLIMB_OUTCOMES = [
