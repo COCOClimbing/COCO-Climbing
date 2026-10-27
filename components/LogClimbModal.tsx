@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import {
   View, Text, StyleSheet, ScrollView, Modal,
-  TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image
+  TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -42,14 +43,19 @@ let _lastUsedOutcome: OutcomeId = 'send';
 // One section of the form (label + its controls) in a rounded box that's
 // invisible until you tap something inside it, then highlighted so you can see
 // what you're editing. Only taps count; a drag (scrolling) doesn't.
-function Section({ id, active, onActivate, children }: {
-  id: string; active: boolean; onActivate: (id: string) => void; children: React.ReactNode;
+function Section({ id, active, onActivate, activateOnTouch = false, onLayout, children }: {
+  id: string; active: boolean; onActivate: (id: string) => void;
+  onLayout?: (e: any) => void;
+  // Light up as soon as a finger touches it (for the grade wheel, which you drag)
+  activateOnTouch?: boolean;
+  children: React.ReactNode;
 }) {
   const { colors } = useTheme();
   const startY = useRef(0);
   return (
     <View
-      onTouchStart={e => { startY.current = e.nativeEvent.pageY; }}
+      onLayout={onLayout}
+      onTouchStart={e => { startY.current = e.nativeEvent.pageY; if (activateOnTouch) onActivate(id); }}
       onTouchEnd={e => { if (Math.abs(e.nativeEvent.pageY - startY.current) < 10) onActivate(id); }}
       style={[styles.section, active && { borderColor: colors.accent, backgroundColor: colors.accent + '0F' }]}
     >
@@ -63,7 +69,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // Notes box position: its spot inside the Details section plus that
+  // section's spot in the form, so focusing Notes scrolls to the right place.
   const notesYRef = useRef(0);
+  const detailsYRef = useRef(0);
 
   // Form state
   const [environment, setEnvironment]       = useState<EnvironmentId>('indoor');
@@ -468,8 +477,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
-              <Text style={[styles.cancelText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>Cancel</Text>
+            {/* Round back (cancel) and check (save) buttons, like the app's other round buttons */}
+            <TouchableOpacity onPress={onClose} style={[styles.roundBtn, { backgroundColor: colors.bgCard }]} activeOpacity={0.7} accessibilityLabel="Cancel">
+              <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <View style={{ alignItems: 'center', flex: 1 }}>
               <Text style={[styles.headerTitle, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>
@@ -488,10 +498,16 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 </Text>
               )}
             </View>
-            <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={saving}>
-              <Text style={[styles.saveText, { color: colors.accent, fontFamily: FONTS.family.bold }]}>
-                {saving && mediaItems.some(m => !m.uri.startsWith('http')) ? 'Uploading...' : saving ? '...' : 'Save'}
-              </Text>
+            <TouchableOpacity onPress={handleSave} style={[styles.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} activeOpacity={0.7} accessibilityLabel="Save">
+              {saving
+                ? <ActivityIndicator size="small" color="#fff" />
+                : (
+                  // Same path as Ionicons' checkmark, but at the back arrow's
+                  // line weight (48) so the two buttons match
+                  <Svg width={24} height={24} viewBox="0 0 512 512">
+                    <Path d="M416 128L192 384l-96-96" fill="none" stroke="#fff" strokeWidth={48} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                )}
             </TouchableOpacity>
           </View>
 
@@ -653,13 +669,13 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
                 {!isTraining && (
                   <>
-                    <Section id="grade" active={activeSection === 'grade'} onActivate={setActiveSection}>
+                    <Section id="grade" active={activeSection === 'grade'} onActivate={setActiveSection} activateOnTouch>
                     <Text style={[styles.label, { color: colors.textMuted }]}>GRADE</Text>
                     <GradePicker
                       gradeSystem={gradeSystem}
                       selected={grade}
-                      onSystemChange={(sys) => { setGradeSystem(sys); }}
-                      onChange={setGrade}
+                      onSystemChange={(sys) => { setGradeSystem(sys); setActiveSection('grade'); }}
+                      onChange={(g) => { setGrade(g); setActiveSection('grade'); }}
                       isBoulder={climbType === 'boulder'}
                       allowCustom={!isProject && !editProjectMode}
                     />
@@ -711,7 +727,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 <Text style={[styles.label, { color: colors.textMuted }]}>STYLE</Text>
                 <View style={styles.row}>
                   {CLIMB_STYLES.map(s => (
-                    <Pill key={s.id} label={s.label} selected={selectedStyles.includes(s.id)} onPress={() => toggleStyle(s.id)} small />
+                    <Pill key={s.id} label={s.label} selected={selectedStyles.includes(s.id)} onPress={() => toggleStyle(s.id)} />
                   ))}
                 </View>
                 </Section>
@@ -739,7 +755,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                           { borderColor: selected ? colors.textPrimary : 'transparent' },
                         ]}
                       >
-                        <HoldColorDot colorId={c.id} size={28} />
+                        <HoldColorDot colorId={c.id} size={32} />
                       </TouchableOpacity>
                     );
                   })}
@@ -769,7 +785,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             )}
 
             {/* Details */}
-            <Section id="details" active={activeSection === 'details'} onActivate={setActiveSection}>
+            <Section id="details" active={activeSection === 'details'} onActivate={setActiveSection} onLayout={(e) => { detailsYRef.current = e.nativeEvent.layout.y; }}>
             <Text style={[styles.label, { color: colors.textMuted }]}>DETAILS (optional)</Text>
             {askLocation && <LocationPicker value={location} onChange={setLocation} />}
             <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
@@ -783,7 +799,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 numberOfLines={3}
                 onFocus={() => {
                   setTimeout(() => {
-                    scrollRef.current?.scrollTo({ y: notesYRef.current - 16, animated: true });
+                    scrollRef.current?.scrollTo({ y: detailsYRef.current + notesYRef.current - 16, animated: true });
                   }, 320);
                 }}
               />
@@ -849,10 +865,11 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1 },
-  headerBtn: { padding: SPACING.sm, minWidth: 60 },
+  roundBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   headerTitle: { fontSize: FONTS.sizes.lg },
-  cancelText: { fontSize: FONTS.sizes.md },
-  saveText: { fontSize: FONTS.sizes.md, textAlign: 'right' },
   scroll: { flex: 1 },
   scrollContent: { padding: SPACING.lg },
   // Fixed padding/border so highlighting a section doesn't shift anything
@@ -877,7 +894,7 @@ const styles = StyleSheet.create({
   mediaBtnText: { fontSize: FONTS.sizes.md },
   mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
   mediaAddTile: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  swatchWrap: { borderWidth: 3, borderRadius: 22, padding: 2, marginRight: SPACING.sm, marginBottom: SPACING.sm },
+  swatchWrap: { borderWidth: 3, borderRadius: 24, padding: 2, marginRight: SPACING.xs, marginBottom: SPACING.xs },
   pill: { borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
   setupSummaryPills: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.xs },
