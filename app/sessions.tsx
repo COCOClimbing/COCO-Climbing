@@ -123,6 +123,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const [selectedCalDate, setSelectedCalDate] = useState<string | undefined>();
   const [sessionTitle, setSessionTitle] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
+  // Which picker card (Location / Climbing with) has its sheet open, so it can be highlighted
+  const [openPickerCard, setOpenPickerCard] = useState<'location' | 'friends' | null>(null);
   const titleInputValue = useRef('');
   const [sessionNotes, setSessionNotes] = useState('');
   const [sessionFriends, setSessionFriends] = useState<{ id: string; name: string }[]>([]);
@@ -997,10 +999,11 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
 
           {/* Location */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }, openPickerCard === 'location' && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
             <View style={{ marginBottom: -SPACING.md }}>
               <LocationPicker
+                onOpenChange={open => setOpenPickerCard(open ? 'location' : null)}
                 value={activeLocation}
                 onChange={(loc) => {
                   setActiveLocation(loc);
@@ -1011,9 +1014,10 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
 
           {/* Climbing With */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }, openPickerCard === 'friends' && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
             <FriendPicker
+              onOpenChange={open => setOpenPickerCard(open ? 'friends' : null)}
               selected={activeFriends}
               onChange={(names) => {
                 setActiveFriends(names);
@@ -1130,7 +1134,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           scrollEventThrottle={16}
         >
           {/* Session header */}
-          <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: colors.border, borderWidth: 1 }]}>
+          <View style={[styles.detailHeader, { backgroundColor: colors.bgCard, borderColor: editingTitle ? colors.accent : colors.border, borderWidth: editingTitle ? 1.5 : 1 }]}>
             <View style={styles.detailHeaderTop}>
               <Text style={[styles.detailDay, { color: colors.textMuted }]}>{label.top} · {label.bottom}</Text>
             </View>
@@ -1236,10 +1240,11 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
 
           {/* Location */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }, openPickerCard === 'location' && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>LOCATION</Text>
             <View style={{ marginBottom: -SPACING.md }}>
               <LocationPicker
+                onOpenChange={open => setOpenPickerCard(open ? 'location' : null)}
                 value={sessionLocation}
                 onChange={(loc) => {
                   setSessionLocation(loc);
@@ -1250,9 +1255,10 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           </View>
 
           {/* Climbing With */}
-          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }, openPickerCard === 'friends' && [styles.metaCardFocused, { borderColor: colors.accent }]]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLIMBING WITH</Text>
             <FriendPicker
+              onOpenChange={open => setOpenPickerCard(open ? 'friends' : null)}
               selected={sessionFriends}
               onChange={(names) => {
                 setSessionFriends(names);

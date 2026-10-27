@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   View, Text, StyleSheet, ScrollView, Modal,
   TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image
@@ -38,6 +39,25 @@ interface Props {
 // Persists last-used outcome across modal opens within an app session
 let _lastUsedOutcome: OutcomeId = 'send';
 
+// One section of the form (label + its controls) in a rounded box that's
+// invisible until you tap something inside it, then highlighted so you can see
+// what you're editing. Only taps count; a drag (scrolling) doesn't.
+function Section({ id, active, onActivate, children }: {
+  id: string; active: boolean; onActivate: (id: string) => void; children: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  const startY = useRef(0);
+  return (
+    <View
+      onTouchStart={e => { startY.current = e.nativeEvent.pageY; }}
+      onTouchEnd={e => { if (Math.abs(e.nativeEvent.pageY - startY.current) < 10) onActivate(id); }}
+      style={[styles.section, active && { borderColor: colors.accent, backgroundColor: colors.accent + '0F' }]}
+    >
+      {children}
+    </View>
+  );
+}
+
 export default function LogClimbModal({ visible, onClose, onSaved, existingClimb, defaultSessionId, sessionDate, editProjectMode }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -49,6 +69,13 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const [environment, setEnvironment]       = useState<EnvironmentId>('indoor');
   const [isProject, setIsProject]           = useState(false);
   const [climbType, setClimbType]           = useState<ClimbTypeId>('boulder');
+  // Environment and Type usually stay the same between climbs, so once you've
+  // logged before they start folded to just the current pick; tap one to
+  // open that picker on its own.
+  const [envOpen, setEnvOpen]               = useState(true);
+  const [typeOpen, setTypeOpen]             = useState(true);
+  // Section the user last tapped into; its box is highlighted.
+  const [activeSection, setActiveSection]   = useState<string | null>(null);
   const [outcome, setOutcome]               = useState<OutcomeId>(_lastUsedOutcome);
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
   const [gradeSystem, setGradeSystem]       = useState<GradeSystem>('v-scale');
@@ -115,6 +142,27 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setGrade((await getLastGrade(type)) ?? (resolved === 'yds' ? '5.10a' : resolved === 'french' ? '6a' : resolved === 'custom' ? '' : 'VS'));
     }
   }
+
+  // Fold Environment + Type once they've been chosen for this session: when
+  // editing a climb, or when the session already has a climb logged. The
+  // first climb of a session (including a brand-new one) shows both pickers.
+  useEffect(() => {
+    if (!visible) return;
+    // Start the highlight where you'd go first: Environment on a session's
+    // first climb (pickers open), Grade once they're folded.
+    const fold = (open: boolean) => {
+      setEnvOpen(open); setTypeOpen(open);
+      setActiveSection(open ? 'env' : 'grade');
+    };
+    if (existingClimb) { fold(false); return; }
+    fold(true);
+    if (!defaultSessionId) return;
+    let cancelled = false;
+    getAllClimbs().then(all => {
+      if (!cancelled && all.some(c => c.sessionId === defaultSessionId)) fold(false);
+    });
+    return () => { cancelled = true; };
+  }, [visible, existingClimb, defaultSessionId]);
 
   // Load last climb type, grade system, grade, and outcome for new climbs
   useEffect(() => {
@@ -449,9 +497,50 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
 
           <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
+            {/* Folded Environment / Type: just the current pick; tapping a pill
+                opens that picker. While both are folded they share one row. */}
+            {!editProjectMode && (() => {
+              const typeInfo = CLIMB_TYPES.find(t => t.id === climbType);
+              const typeHidden = isProject && !!selectedProjectId;
+              const envLabel = ENVIRONMENTS.find(e => e.id === environment)?.label ?? 'Indoor';
+              const foldedPill = (label: string, color: string, onPress: () => void, key: string) => (
+                <TouchableOpacity key={key} onPress={onPress} activeOpacity={0.7}
+                  style={[styles.pill, styles.summaryPill, { borderColor: color, backgroundColor: color + '25' }]}>
+                  <View style={styles.summaryPillInner}>
+                    <Text style={[styles.pillText, { color, fontFamily: FONTS.family.medium }]}>{label}</Text>
+                    <Ionicons name="chevron-down" size={13} color={color} />
+                  </View>
+                </TouchableOpacity>
+              );
+              const envPills = [
+                foldedPill(envLabel, colors.accent, () => setEnvOpen(true), 'env'),
+                ...(isProject ? [foldedPill('Project', colors.accent, () => setEnvOpen(true), 'proj')] : []),
+              ];
+              const typePill = !typeHidden && typeInfo
+                ? foldedPill(typeInfo.label, typeInfo.color, () => setTypeOpen(true), 'type')
+                : null;
+              const showEnvFold = !envOpen;
+              // Type joins this row only while Environment is folded too;
+              // otherwise it folds in its own spot below.
+              const showTypeHere = !envOpen && !typeOpen && !!typePill;
+              if (!showEnvFold) return null;
+              return (
+                <>
+                  <Section id="env" active={activeSection === 'env'} onActivate={setActiveSection}>
+                  <View style={styles.setupSummaryPills}>
+                    {envPills}
+                    {showTypeHere && typePill}
+                  </View>
+                  </Section>
+                  <Divider />
+                </>
+              );
+            })()}
+
             {/* Environment + Project — hidden in editProjectMode */}
-            {!editProjectMode && (
+            {!editProjectMode && envOpen && (
               <>
+                <Section id="env" active={activeSection === 'env'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>ENVIRONMENT</Text>
                 <View style={styles.row}>
                   {ENVIRONMENTS.map(env => (
@@ -469,6 +558,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     }}
                   />
                 </View>
+                </Section>
                 <Divider />
               </>
             )}
@@ -476,6 +566,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Project picker — shown when Project is toggled on (not in editProjectMode) */}
             {!editProjectMode && isProject && (
               <>
+                <Section id="project" active={activeSection === 'project'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>PROJECT</Text>
                 {existingProjects.length > 0 && (
                   <View style={styles.row}>
@@ -498,6 +589,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                   value={newProjectName}
                   onChangeText={t => { setNewProjectName(t); setSelectedProjectId(undefined); }}
                 />
+                </Section>
                 <Divider />
               </>
             )}
@@ -505,6 +597,29 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Type + Grade — hidden when an existing project is selected */}
             {!(isProject && !!selectedProjectId) && (
               <>
+                {!typeOpen && envOpen && !editProjectMode && (() => {
+                  const typeInfo = CLIMB_TYPES.find(t => t.id === climbType);
+                  if (!typeInfo) return null;
+                  return (
+                    <>
+                      <Section id="type" active={activeSection === 'type'} onActivate={setActiveSection}>
+                      <View style={styles.setupSummaryPills}>
+                        <TouchableOpacity onPress={() => setTypeOpen(true)} activeOpacity={0.7}
+                          style={[styles.pill, styles.summaryPill, { borderColor: typeInfo.color, backgroundColor: typeInfo.color + '25' }]}>
+                          <View style={styles.summaryPillInner}>
+                            <Text style={[styles.pillText, { color: typeInfo.color, fontFamily: FONTS.family.medium }]}>{typeInfo.label}</Text>
+                            <Ionicons name="chevron-down" size={13} color={typeInfo.color} />
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                      </Section>
+                      <Divider />
+                    </>
+                  );
+                })()}
+                {(typeOpen || editProjectMode) && (
+                <>
+                <Section id="type" active={activeSection === 'type'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>TYPE</Text>
                 <View style={styles.row}>
                   {CLIMB_TYPES.map(ct => (
@@ -531,10 +646,14 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     </TouchableOpacity>
                   ))}
                 </View>
+                </Section>
                 <Divider />
+                </>
+                )}
 
                 {!isTraining && (
                   <>
+                    <Section id="grade" active={activeSection === 'grade'} onActivate={setActiveSection}>
                     <Text style={[styles.label, { color: colors.textMuted }]}>GRADE</Text>
                     <GradePicker
                       gradeSystem={gradeSystem}
@@ -544,6 +663,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                       isBoulder={climbType === 'boulder'}
                       allowCustom={!isProject && !editProjectMode}
                     />
+                    </Section>
                     <Divider />
                   </>
                 )}
@@ -553,6 +673,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Outcome — hidden for training only */}
             {!isTraining && (
               <>
+                <Section id="outcome" active={activeSection === 'outcome'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>OUTCOME</Text>
                 <View style={styles.row}>
                   {CLIMB_OUTCOMES
@@ -578,6 +699,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     </View>
                   </View>
                 )}
+                </Section>
                 <Divider />
               </>
             )}
@@ -585,12 +707,14 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Style — hidden for training */}
             {!isTraining && (
               <>
+                <Section id="style" active={activeSection === 'style'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>STYLE</Text>
                 <View style={styles.row}>
                   {CLIMB_STYLES.map(s => (
                     <Pill key={s.id} label={s.label} selected={selectedStyles.includes(s.id)} onPress={() => toggleStyle(s.id)} small />
                   ))}
                 </View>
+                </Section>
                 <Divider />
               </>
             )}
@@ -598,6 +722,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Hold color — indoor, non-training only */}
             {!isTraining && environment === 'indoor' && (
               <>
+                <Section id="hold" active={activeSection === 'hold'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>HOLD COLOR (optional)</Text>
                 <View style={styles.row}>
                   {HOLD_COLORS.map(c => {
@@ -619,6 +744,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     );
                   })}
                 </View>
+                </Section>
                 <Divider />
               </>
             )}
@@ -626,6 +752,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {/* Routine — only for hangboard/lift */}
             {isTraining && (
               <>
+                <Section id="routine" active={activeSection === 'routine'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>ROUTINE</Text>
                 <TextInput
                   style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
@@ -636,11 +763,13 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                   multiline
                   numberOfLines={4}
                 />
+                </Section>
                 <Divider />
               </>
             )}
 
             {/* Details */}
+            <Section id="details" active={activeSection === 'details'} onActivate={setActiveSection}>
             <Text style={[styles.label, { color: colors.textMuted }]}>DETAILS (optional)</Text>
             {askLocation && <LocationPicker value={location} onChange={setLocation} />}
             <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
@@ -668,8 +797,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               </>
             )}
 
+            </Section>
             {/* Media */}
             <Divider />
+            <Section id="media" active={activeSection === 'media'} onActivate={setActiveSection}>
             <Text style={[styles.label, { color: colors.textMuted }]}>MEDIA</Text>
             {mediaItems.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
@@ -706,6 +837,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               </TouchableOpacity>
             )}
 
+            </Section>
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
@@ -723,6 +855,16 @@ const styles = StyleSheet.create({
   saveText: { fontSize: FONTS.sizes.md, textAlign: 'right' },
   scroll: { flex: 1 },
   scrollContent: { padding: SPACING.lg },
+  // Fixed padding/border so highlighting a section doesn't shift anything
+  section: {
+    marginHorizontal: -SPACING.sm,
+    paddingHorizontal: SPACING.sm - 1,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 14,
+  },
   label: { fontSize: FONTS.sizes.xs, letterSpacing: 1.5, marginBottom: SPACING.md },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   attemptsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.md, borderRadius: 10, borderWidth: 1, padding: SPACING.md },
@@ -738,6 +880,9 @@ const styles = StyleSheet.create({
   swatchWrap: { borderWidth: 3, borderRadius: 22, padding: 2, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pill: { borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginBottom: SPACING.sm },
   pillText: { fontSize: FONTS.sizes.sm, letterSpacing: 0.3 },
+  setupSummaryPills: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.xs },
+  summaryPillInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  summaryPill: { marginBottom: SPACING.sm },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.md },
   // Starts at 80 and grows as you type more, rather than scrolling inside a fixed box
   inputMulti: { minHeight: 80, textAlignVertical: 'top' },

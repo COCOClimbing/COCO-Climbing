@@ -83,9 +83,11 @@ async function searchPlaces(query: string): Promise<SearchResult[]> {
 interface Props {
   value: string;
   onChange: (value: string) => void;
+  // Told when the picker sheet opens/closes (e.g. to highlight its card).
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function LocationPicker({ value, onChange }: Props) {
+export default function LocationPicker({ value, onChange, onOpenChange }: Props) {
   const { colors } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -98,6 +100,7 @@ export default function LocationPicker({ value, onChange }: Props) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const { translateY, close } = useSlideSheet(modalVisible, () => setModalVisible(false));
+  useEffect(() => { onOpenChange?.(modalVisible); }, [modalVisible]);
 
   useEffect(() => {
     if (modalVisible) {

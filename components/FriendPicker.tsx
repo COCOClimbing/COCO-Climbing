@@ -17,9 +17,11 @@ interface SelectedFriend { id: string; name: string; }
 interface Props {
   selected: SelectedFriend[];
   onChange: (friends: SelectedFriend[]) => void;
+  // Told when the picker sheet opens/closes (e.g. to highlight its card).
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function FriendPicker({ selected, onChange }: Props) {
+export default function FriendPicker({ selected, onChange, onOpenChange }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
@@ -29,6 +31,7 @@ export default function FriendPicker({ selected, onChange }: Props) {
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
   const { translateY, close } = useSlideSheet(modalVisible, () => setModalVisible(false));
+  useEffect(() => { onOpenChange?.(modalVisible); }, [modalVisible]);
 
   useEffect(() => {
     if (!user) return;
