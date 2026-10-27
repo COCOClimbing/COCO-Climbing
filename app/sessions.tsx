@@ -32,6 +32,7 @@ import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard, { prefetchSessionCards } from '../components/SessionCard';
+import { SessionStatsBlock } from '../components/SessionBreakdown';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
@@ -930,32 +931,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
             )}
 
 
-            <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
-              {training ? (
-                <View style={styles.todayStat}>
-                  <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[training]}</Text>
-                  <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>type</Text>
-                </View>
-              ) : projecting ? (
-                <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
-              ) : (
-                <>
-                  <View style={styles.todayStat}>
-                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
-                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
-                  </View>
-                  <View style={styles.todayStat}>
-                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{sends}</Text>
-                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>sends</Text>
-                  </View>
-                </>
-              )}
-              {hardest && (
-                <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
-                  <Text style={[styles.hardestText, { color: hardestTypeColor }]}>{hardest.grade}</Text>
-                </View>
-              )}
-            </View>
+            <SessionStatsBlock day={activeSession} />
           </View>
 
           {/* Climbs */}
@@ -1124,7 +1100,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   // ── Session Edit Modal ────────────────────────────────────────────────────────
 
   function SessionEditModalContent({ day }: { day: DaySession }) {
-    const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
+    const { hardest, projecting, gradedCount, training } = sessionStats(day);
     const label = formatSessionLabel(day);
     const hardestTypeColor = CLIMB_TYPES.find(t => t.id === hardest?.type)?.color ?? colors.accent;
     const displayClimbs = mergeClimbs(day.climbs);
@@ -1199,32 +1175,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
             )}
 
 
-            <View style={[styles.detailStatsRow, { borderTopColor: colors.border }]}>
-              {training ? (
-                <View style={styles.todayStat}>
-                  <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[training]}</Text>
-                  <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>type</Text>
-                </View>
-              ) : projecting ? (
-                <Text style={[styles.todayStatLbl, { color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }]}>Projecting</Text>
-              ) : (
-                <>
-                  <View style={styles.todayStat}>
-                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{gradedCount}</Text>
-                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>climbs</Text>
-                  </View>
-                  <View style={styles.todayStat}>
-                    <Text style={[styles.todayStatVal, { color: colors.textPrimary }]}>{sends}</Text>
-                    <Text style={[styles.todayStatLbl, { color: colors.textMuted }]}>sends</Text>
-                  </View>
-                </>
-              )}
-              {hardest && (
-                <View style={[styles.hardestBadge, { backgroundColor: hardestTypeColor + '25', borderColor: hardestTypeColor }]}>
-                  <Text style={[styles.hardestText, { color: hardestTypeColor }]}>{hardest.grade}</Text>
-                </View>
-              )}
-            </View>
+            <SessionStatsBlock day={day} />
           </View>
 
           {/* Climbs — first, so opening a past session shows its data before the edit panels */}

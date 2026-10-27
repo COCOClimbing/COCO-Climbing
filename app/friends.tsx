@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { PhotoGroup, useGroupedPhoto, preloadPhotos } from '../components/PhotoGroup';
 import ShareModal from '../components/ShareModal';
+import SessionBreakdown from '../components/SessionBreakdown';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
@@ -41,7 +42,7 @@ import LikesAvatarRow from '../components/LikesAvatarRow';
 import SessionCard from '../components/SessionCard';
 import ActivityCard from '../components/ActivityCard';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import {
   FriendProfile,
   FriendRequest,
@@ -1861,6 +1862,119 @@ export default function FriendsScreen() {
   }
 
   // Show friend detail sub-screen when a friend is selected
+  // Top of a post (who, when, where, title, notes, partners, stats). Shared by
+  // the feed card and the opened activity so the two always match.
+  function renderPostTop(entry: SessionSummary, inDetail: boolean) {
+    const isOutdoor = entry.environment === 'outdoor';
+    return (
+      <>
+    {/* ── Header: avatar + name + date + env + more menu ── */}
+    <View style={styles.cardHeader}>
+      <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 }} onPress={() => openFriendProfile(entry.friend, 'activity')} activeOpacity={0.75}>
+        <ProfileAvatar
+          name={entry.friend.name}
+          avatarUrl={entry.friend.id === user?.id ? (myAvatar ?? null) : (entry.friend.avatar_url ?? null)}
+          size={44}
+          colors={colors}
+        />
+        <View style={styles.cardHeaderInfo}>
+          <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
+          <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
+            {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
+          </Text>
+          {entry.location?.trim() ? (
+            <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
+              <Ionicons name="location-sharp" size={13} color={colors.textSecondary} />
+              <Text style={[styles.cardLocation, { color: colors.textSecondary }]} numberOfLines={1}>{entry.location.trim()}</Text>
+            </View>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+      {entry.friend.id !== user?.id && (
+        <TouchableOpacity
+          onPress={() => handleMoreMenu(entry)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {/* ── Activity title row ── */}
+    <View style={styles.cardTitleRow}>
+      <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+        {entry.title?.trim() || defaultSessionTitle(entry.sessionTime, entry.training)}
+      </Text>
+    </View>
+
+    {/* ── Session notes ── */}
+    {entry.notes?.trim() ? (
+      <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{entry.notes.trim()}</Text>
+    ) : null}
+
+    {/* ── Partners row ── */}
+    {entry.partners?.length ? (
+      <View style={styles.partnersRow}>
+        <Text style={[styles.partnersLabel, { color: colors.textMuted }]}>with </Text>
+        {entry.partners.map((p, i) => (
+          <TouchableOpacity
+            key={p.id}
+            style={styles.partnerChip}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (p.id === user?.id) return;
+              openFriendProfile({ id: p.id, name: p.name, username: '', avatar_url: p.avatar_url ?? null }, 'activity');
+            }}
+          >
+            <ProfileAvatar name={p.name} avatarUrl={p.avatar_url ?? null} size={20} colors={colors} />
+            <Text style={[styles.partnerName, { color: colors.accent }]}>
+              {p.id === user?.id ? 'You' : p.name}{i < entry.partners!.length - 1 ? ',' : ''}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    ) : null}
+
+    {/* ── Stats ── */}
+    <TouchableOpacity style={styles.cardStatsRow} onPress={inDetail ? undefined : () => handleToggleSession(entry)} disabled={inDetail} activeOpacity={0.75}>
+      <View style={styles.cardStat}>
+        <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
+          {entry.training ? TRAINING_KIND_LABEL[entry.training] : (CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
+        </Text>
+        <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
+      </View>
+      {/* Lift/hangboard-only sessions have no climbs to count; empty columns keep
+          Type in the same left-hand spot as on climbing cards */}
+      {entry.training && (
+        <>
+          <View style={styles.cardStat} />
+          <View style={styles.cardStat} />
+        </>
+      )}
+      {!entry.training && (
+        <>
+          <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.cardStat}>
+            <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
+            <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
+          </View>
+        </>
+      )}
+      {entry.hardestGrade ? (
+        <>
+          <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.cardStat}>
+            <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
+            <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
+          </View>
+        </>
+      ) : null}
+    </TouchableOpacity>
+      </>
+    );
+  }
+
   if (viewingFriend) {
     return (
       // Covers the app header; FriendDetailView handles the status bar itself.
@@ -1931,62 +2045,11 @@ export default function FriendsScreen() {
       const y = feedScrollY.current;
       if (y > 0) setTimeout(() => feedScrollRef.current?.scrollTo({ y, animated: false }), 50);
     };
-    const date = parseISO(entry.sessionDate);
     return (
       <DetailScreen onBack={closeDetail}>
         <ScrollView ref={sessionDetailScrollRef} contentContainerStyle={[styles.detailContent, { paddingTop: detailTopInset, paddingBottom: tabBarSpace }]}>
-          {/* Header */}
-          <View style={styles.detailHeader}>
-            <ProfileAvatar
-              name={entry.friend.name}
-              avatarUrl={entry.friend.id === user?.id ? (myAvatar ?? null) : (entry.friend.avatar_url ?? null)}
-              size={44}
-              colors={colors}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
-              <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-                {format(date, 'EEE, MMM d, yyyy')} · {defaultSessionTitle(entry.sessionTime, entry.training)}
-              </Text>
-              {entry.location?.trim() ? (
-                <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 2 }]}>
-                  <Ionicons name="location-sharp" size={13} color={colors.textSecondary} style={{ marginTop: 1 }} />
-                  <Text style={[styles.cardLocation, { color: colors.textSecondary }]}>{entry.location.trim()}</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-          {/* Stats */}
-          <View style={[styles.detailStatsRow, { borderColor: colors.border }]}>
-            {entry.training ? (
-              // Lift/hangboard-only sessions have no climbs or sends to count
-              <View style={styles.detailStat}>
-                <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{TRAINING_KIND_LABEL[entry.training]}</Text>
-                <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Type</Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.detailStat}>
-                  <Text style={[styles.detailStatNum, { color: colors.textPrimary }]}>{climbs.length ? climbs.reduce((s: number, c: any) => s + climbCount(c), 0) : entry.climbCount}</Text>
-                  <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Climbs</Text>
-                </View>
-                <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.detailStat}>
-                  <Text style={[styles.detailStatNum, { color: colors.accentGreen }]}>{climbs.filter((c: any) => (c.outcome === 'send' || c.outcome === 'flash') && c.type !== 'hangboard' && c.type !== 'lift').length || entry.sends}</Text>
-                  <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Sends</Text>
-                </View>
-              </>
-            )}
-            {entry.hardestGrade && (
-              <>
-                <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.detailStat}>
-                  <Text style={[styles.detailStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
-                  <Text style={[styles.detailStatLbl, { color: colors.textMuted }]}>Hardest</Text>
-                </View>
-              </>
-            )}
-          </View>
+          {renderPostTop(entry, true)}
+          <SessionBreakdown climbs={climbs} />
           {/* Photos */}
           {stripPhotos.length > 0 && (
             <ScrollView
@@ -2065,8 +2128,6 @@ export default function FriendsScreen() {
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</Text>
           {activityFeed.map((entry) => {
             const sessionKey = entry.sessionId ? `sid-${entry.sessionId}` : `fid-${entry.friend.id}|${entry.sessionDate}`;
-            const date = parseISO(entry.sessionDate);
-            const isOutdoor = entry.environment === 'outdoor';
 
             return (
               <View
@@ -2075,109 +2136,7 @@ export default function FriendsScreen() {
                 onLayout={e => { cardOffsets.current[sessionKey] = e.nativeEvent.layout.y; }}
               >
 
-                {/* ── Header: avatar + name + date + env + more menu ── */}
-                <View style={styles.cardHeader}>
-                  <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 }} onPress={() => openFriendProfile(entry.friend, 'activity')} activeOpacity={0.75}>
-                    <ProfileAvatar
-                      name={entry.friend.name}
-                      avatarUrl={entry.friend.id === user?.id ? (myAvatar ?? null) : (entry.friend.avatar_url ?? null)}
-                      size={44}
-                      colors={colors}
-                    />
-                    <View style={styles.cardHeaderInfo}>
-                      <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
-                      <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-                        {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
-                      </Text>
-                      {entry.location?.trim() ? (
-                        <View style={[styles.cardLocationRow, { paddingBottom: 0, paddingTop: 4 }]}>
-                          <Ionicons name="location-sharp" size={13} color={colors.textSecondary} />
-                          <Text style={[styles.cardLocation, { color: colors.textSecondary }]} numberOfLines={1}>{entry.location.trim()}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                  {entry.friend.id !== user?.id && (
-                    <TouchableOpacity
-                      onPress={() => handleMoreMenu(entry)}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* ── Activity title row ── */}
-                <View style={styles.cardTitleRow}>
-                  <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                    {entry.title?.trim() || defaultSessionTitle(entry.sessionTime, entry.training)}
-                  </Text>
-                </View>
-
-                {/* ── Session notes ── */}
-                {entry.notes?.trim() ? (
-                  <Text style={[styles.cardNotes, { color: colors.textPrimary }]}>{entry.notes.trim()}</Text>
-                ) : null}
-
-                {/* ── Partners row ── */}
-                {entry.partners?.length ? (
-                  <View style={styles.partnersRow}>
-                    <Text style={[styles.partnersLabel, { color: colors.textMuted }]}>with </Text>
-                    {entry.partners.map((p, i) => (
-                      <TouchableOpacity
-                        key={p.id}
-                        style={styles.partnerChip}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          if (p.id === user?.id) return;
-                          openFriendProfile({ id: p.id, name: p.name, username: '', avatar_url: p.avatar_url ?? null }, 'activity');
-                        }}
-                      >
-                        <ProfileAvatar name={p.name} avatarUrl={p.avatar_url ?? null} size={20} colors={colors} />
-                        <Text style={[styles.partnerName, { color: colors.accent }]}>
-                          {p.id === user?.id ? 'You' : p.name}{i < entry.partners!.length - 1 ? ',' : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : null}
-
-                {/* ── Stats ── */}
-                <TouchableOpacity style={styles.cardStatsRow} onPress={() => handleToggleSession(entry)} activeOpacity={0.75}>
-                  <View style={styles.cardStat}>
-                    <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
-                      {entry.training ? TRAINING_KIND_LABEL[entry.training] : (CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
-                    </Text>
-                    <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
-                  </View>
-                  {/* Lift/hangboard-only sessions have no climbs to count; empty columns keep
-                      Type in the same left-hand spot as on climbing cards */}
-                  {entry.training && (
-                    <>
-                      <View style={styles.cardStat} />
-                      <View style={styles.cardStat} />
-                    </>
-                  )}
-                  {!entry.training && (
-                    <>
-                      <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-                      <View style={styles.cardStat}>
-                        <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
-                        <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
-                      </View>
-                    </>
-                  )}
-                  {entry.hardestGrade ? (
-                    <>
-                      <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
-                      <View style={styles.cardStat}>
-                        <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
-                        <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
-                      </View>
-                    </>
-                  ) : null}
-                </TouchableOpacity>
+                {renderPostTop(entry, false)}
 
                 {/* ── Photo strip ── */}
                 {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (
@@ -2708,11 +2667,6 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, marginTop: 2 },
   commentShowMore: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.medium, paddingVertical: 2 },
   detailContent: { padding: SPACING.lg, gap: SPACING.md },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
-  detailStatsRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: SPACING.lg, marginBottom: SPACING.sm },
-  detailStat: { flex: 1, alignItems: 'center' },
-  detailStatNum: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.family.heavy, marginBottom: 2 },
-  detailStatLbl: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.regular, textTransform: 'uppercase', letterSpacing: 0.5 },
   photoStrip: {
     marginTop: SPACING.md,
     marginHorizontal: -SPACING.xl,
