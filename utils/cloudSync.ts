@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 import { getAllClimbs, getAllSessions, getAllNamedProjects, bulkSaveClimbs, bulkSaveSessions, bulkSaveNamedProjects, NamedProject, triggerClimbsRefresh, triggerFeedRefresh, getDeletedClimbIds, getDeletedSessionIds, getPendingDeletes, removePendingDelete } from './storage';
-import { uploadMedia, listMediaKeys, deleteMedia } from './mediaUpload';
+import { uploadMedia, listMediaKeys, deleteMedia, shrinkPhotoForUpload } from './mediaUpload';
 
 const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
 const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
@@ -306,7 +306,7 @@ async function uploadClimbMedia(climb: Climb, userId: string): Promise<void> {
     try {
       const ext = type === 'video' ? 'mp4' : 'jpg';
       const path = `${userId}/${climb.id}_${i}.${ext}`;
-      uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
+      uploaded.set(uri, await uploadMedia(await shrinkPhotoForUpload(uri, type), path, session.access_token));
     } catch {
       // Keep the local uri; reuploadMissingMedia retries on a later launch
     }
@@ -369,7 +369,7 @@ export async function syncSessionToCloud(sessionArg: Session, userId: string): P
         try {
           const ext = type === 'video' ? 'mp4' : 'jpg';
           const path = `${userId}/session_${session.id}_${i}.${ext}`;
-          uploaded.set(uri, await uploadMedia(uri, path, authSession.access_token));
+          uploaded.set(uri, await uploadMedia(await shrinkPhotoForUpload(uri, type), path, authSession.access_token));
         } catch { /* keep the local uri for the next attempt */ }
       }
       if (uploaded.size > 0) {
@@ -584,7 +584,7 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/${climb.id}_${i}.${ext}`;
-        patch.uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
+        patch.uploaded.set(uri, await uploadMedia(await shrinkPhotoForUpload(uri, type), path, session.access_token));
       } catch {
         // keep the local uri for the next attempt
       }
@@ -639,7 +639,7 @@ export async function reuploadMissingMedia(userId: string): Promise<void> {
       try {
         const ext = type === 'video' ? 'mp4' : 'jpg';
         const path = `${userId}/session_${s.id}_${i}.${ext}`;
-        patch.uploaded.set(uri, await uploadMedia(uri, path, session.access_token));
+        patch.uploaded.set(uri, await uploadMedia(await shrinkPhotoForUpload(uri, type), path, session.access_token));
       } catch { /* keep the local uri for the next attempt */ }
     }
 

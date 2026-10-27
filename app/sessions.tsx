@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent, Animated, Easing, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as CompressorImage } from 'react-native-compressor';
@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
+import { useOnTabReturn } from '../utils/HeaderScroll';
 import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
 import { useAuth } from '../utils/AuthContext';
 import {
@@ -30,12 +31,14 @@ import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { uploadMedia } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
-import SessionCard from '../components/SessionCard';
+import SessionCard, { prefetchSessionCards } from '../components/SessionCard';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
 let _cachedDays: DaySession[] = [];
+// How many cards at the top of the list load complete before it's shown.
+const PREFETCH_CARDS = 8;
 
 // Multiline input that sizes itself to its text. iOS's own multiline growth (and the
 // height onContentSizeChange reports) is unreliable on device: inputs either stayed one
@@ -97,6 +100,16 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     }
   }, [navPendingSessionId, days]);
   const [days, setDays] = useState<DaySession[]>(_cachedDays);
+  // The list stays hidden (spinner) until the first load has the top cards'
+  // photos and likes/comments ready, then eases up all at once like the
+  // Activity feed.
+  const [listReady, setListReady] = useState(false);
+  const listReadyRef = useRef(false);
+  const listEntrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!listReady) return;
+    Animated.timing(listEntrance, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [listReady]);
   const [activeSessionExpanded, setActiveSessionExpanded] = useState(false);
   const [selectedDay, setSelectedDay] = useState<DaySession | null>(null);
   const [logModalVisible, setLogModalVisible] = useState(false);
@@ -227,8 +240,15 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
       }))
       .sort((a, b) => b.date.localeCompare(a.date));
 
+    // First load only (later reloads, e.g. after a save, show right away).
+    // Only the top cards are on screen at first; the rest load their own
+    // details as you scroll, so there's no need to wait on all of them.
+    if (!listReadyRef.current) await prefetchSessionCards(result.slice(0, PREFETCH_CARDS));
+    listReadyRef.current = true;
+
     _cachedDays = result;
     setDays(result);
+    setListReady(true);
 
     // Handle cross-tab deep-link (e.g. stats → this session) when the sessions
     // screen wasn't mounted yet and days was empty when the effect first fired
@@ -259,6 +279,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   }, []); // stable — selectedDay accessed via ref
 
   useEffect(() => { load(); }, []);
+  // The tab stays mounted while you're elsewhere; refresh when you come back.
+  useOnTabReturn(load);
 
 
   // Register load() so BottomTabBar can trigger a refresh after saving via FAB
@@ -1376,6 +1398,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
         ) : (
           <>
 
+            {!listReady ? (
+              <View style={styles.listLoading}>
+                <ActivityIndicator color={colors.accent} />
+              </View>
+            ) : (
+            <Animated.View style={{ flex: 1, opacity: listEntrance, transform: [{ translateY: listEntrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
             <PhotoClipContext.Provider value={sessionsScrollRef}>
             <ScrollView
               ref={sessionsScrollRef}
@@ -1402,6 +1430,8 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
               ))}
             </ScrollView>
             </PhotoClipContext.Provider>
+            </Animated.View>
+            )}
           </>
         )}
       </View>
@@ -1455,6 +1485,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
 }
 
 const styles = StyleSheet.create({
+  listLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1 },
   list: { padding: SPACING.xl },
 

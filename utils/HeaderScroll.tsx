@@ -55,6 +55,27 @@ export function HeaderScrollProvider({ children }: { children: React.ReactNode }
   );
 }
 
+// Tabs stay mounted in the background (so an open session survives a tab
+// switch). TabActiveContext is false for a hidden tab, so its header hooks
+// stand down and don't affect the tab that's showing.
+export const TabActiveContext = createContext(true);
+
+export function useTabActive() {
+  return useContext(TabActiveContext);
+}
+
+// Runs `fn` each time the tab comes back into view (not on first mount).
+export function useOnTabReturn(fn: () => void) {
+  const active = useContext(TabActiveContext);
+  const wasActive = useRef(active);
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+  useEffect(() => {
+    if (active && !wasActive.current) fnRef.current();
+    wasActive.current = active;
+  }, [active]);
+}
+
 export function useHeaderScrollContext() {
   return useContext(HeaderScrollContext);
 }
@@ -66,6 +87,8 @@ export function useHeaderScrollContext() {
 // and call `onScroll` from its onScroll handler.
 export function useHeaderScroll(enabled = true) {
   const { scrollY, headerHeight, register } = useContext(HeaderScrollContext);
+  const tabActive = useContext(TabActiveContext);
+  enabled = enabled && tabActive;
 
   useEffect(() => {
     if (!enabled) return;
@@ -82,6 +105,8 @@ export function useHeaderScroll(enabled = true) {
 // Hide the app header while `active` (see headerHidden above).
 export function useHideHeader(active = true) {
   const { registerHidden } = useContext(HeaderScrollContext);
+  const tabActive = useContext(TabActiveContext);
+  active = active && tabActive;
   useEffect(() => {
     if (!active) return;
     return registerHidden();

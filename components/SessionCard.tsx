@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert, Animated,
 } from 'react-native';
+import { PhotoGroup, useGroupedPhoto, preloadPhotos } from './PhotoGroup';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
 import { DaySession, sessionStats, sessionTimeOfDay, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
@@ -22,17 +23,53 @@ import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 
 const PHOTO_HEIGHT = 220;
 
+// Filled by prefetchSessionCards() so a list can wait for its cards' photo
+// sizes and likes/comments, then show every card complete at once (like the
+// Activity feed) instead of each piece popping in on its own.
+const photoWidthCache: Record<string, number> = {};
+type CardSocial = { likes: SessionLike[]; comments: SessionComment[]; commentLikes: Record<string, string[]>; at: number };
+const socialCache: Record<string, CardSocial> = {};
+// A card mounting this soon after a prefetch uses it instead of refetching.
+const SOCIAL_FRESH_MS = 15000;
+
+function sessionMediaUris(day: DaySession): string[] {
+  const climbUris = day.climbs.flatMap(c => c.mediaUris && c.mediaUris.length > 0 ? c.mediaUris : c.mediaUri ? [c.mediaUri] : []);
+  return [...(day.mediaUris ?? []), ...climbUris];
+}
+
+// Loads photo sizes and likes/comments for these cards. Gives up after
+// `timeoutMs` (e.g. offline) so the list never waits forever; anything not
+// ready by then loads inside the card as before.
+export async function prefetchSessionCards(days: DaySession[], timeoutMs = 5000): Promise<void> {
+  const uris = [...new Set(days.flatMap(sessionMediaUris))].filter(u => photoWidthCache[u] === undefined);
+  const now = Date.now();
+  const needSocial = days.filter(d => !socialCache[d.sessionId] || now - socialCache[d.sessionId].at > SOCIAL_FRESH_MS);
+  const work = Promise.all([
+    // Downloads the photos too (not just their sizes) so they're cached and
+    // show up with the card rather than filling in one by one afterward.
+    preloadPhotos(uris, PHOTO_HEIGHT).then(widths => { Object.assign(photoWidthCache, widths); }),
+    ...needSocial.map(async d => {
+      try {
+        const [likes, comments] = await Promise.all([getSessionLikes(d.sessionId), getSessionComments(d.sessionId)]);
+        const commentLikes = comments.length > 0 ? await getCommentLikes(comments.map(c => c.id)).catch(() => ({})) : {};
+        socialCache[d.sessionId] = { likes, comments, commentLikes, at: Date.now() };
+      } catch {}
+    }),
+  ]);
+  await Promise.race([work, new Promise<void>(resolve => setTimeout(resolve, timeoutMs))]);
+}
+
 const NATURAL_PHOTO_MAX_RETRIES = 3;
 
 function NaturalPhoto({ uri, onPress, viewRef }: { uri: string; onPress: () => void; viewRef?: (el: View | null) => void }) {
-  const [imgWidth, setImgWidth] = useState<number | null>(null);
+  const [imgWidth, setImgWidth] = useState<number | null>(photoWidthCache[uri] ?? null);
   const [retryCount, setRetryCount] = useState(0);
   const [failed, setFailed] = useState(false);
 
   // Reset fully whenever the photo itself changes, so one photo's failure
   // can never hide a different, unrelated one rendered by a reused instance.
   useEffect(() => {
-    setImgWidth(null);
+    setImgWidth(photoWidthCache[uri] ?? null);
     setRetryCount(0);
     setFailed(false);
   }, [uri]);
@@ -43,10 +80,14 @@ function NaturalPhoto({ uri, onPress, viewRef }: { uri: string; onPress: () => v
   // session even though a later attempt at the same URL would've worked.
   // Retry a few times with backoff before actually giving up.
   useEffect(() => {
+    if (retryCount === 0 && photoWidthCache[uri] !== undefined) return; // size already known
     let cancelled = false;
     Image.getSize(
       uri,
-      (w, h) => { if (!cancelled) setImgWidth(Math.round(PHOTO_HEIGHT * w / h)); },
+      (w, h) => {
+        photoWidthCache[uri] = Math.round(PHOTO_HEIGHT * w / h);
+        if (!cancelled) setImgWidth(photoWidthCache[uri]);
+      },
       () => {
         if (cancelled) return;
         if (retryCount < NATURAL_PHOTO_MAX_RETRIES) {
@@ -59,15 +100,19 @@ function NaturalPhoto({ uri, onPress, viewRef }: { uri: string; onPress: () => v
     return () => { cancelled = true; };
   }, [uri, retryCount]);
 
+  const { opacity, onDone } = useGroupedPhoto(uri);
+  useEffect(() => { if (failed) onDone(); }, [failed]);
+
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+      <Animated.View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
         <Image
           key={`${uri}-${retryCount}`}
           source={{ uri }}
           style={{ width: imgWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
+          onLoad={onDone}
           onError={() => {
             if (retryCount < NATURAL_PHOTO_MAX_RETRIES) {
               setTimeout(() => setRetryCount(c => c + 1), 600);
@@ -76,7 +121,7 @@ function NaturalPhoto({ uri, onPress, viewRef }: { uri: string; onPress: () => v
             }
           }}
         />
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 }
@@ -116,14 +161,23 @@ export default function SessionCard({
   const typeSource = hardest ?? day.climbs.find(c => !isTrainingClimb(c));
   const climbTypeLabel = training ? TRAINING_KIND_LABEL[training] : (CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—');
 
-  const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
-  const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
-  const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
+  const cached = socialCache[day.sessionId];
+  const [sessionLikes, setSessionLikes] = useState<SessionLike[]>(cached?.likes ?? []);
+  const [sessionComments, setSessionComments] = useState<SessionComment[]>(cached?.comments ?? []);
+  const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>(cached?.commentLikes ?? {});
   // Full comment thread page; the card shows only the first few comments.
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const [discussionFocus, setDiscussionFocus] = useState(false);
 
   useEffect(() => {
+    const c = socialCache[day.sessionId];
+    if (c && Date.now() - c.at < SOCIAL_FRESH_MS) {
+      // Just prefetched by the list; use that instead of fetching again.
+      setSessionLikes(c.likes);
+      setSessionComments(c.comments);
+      setCommentLikesMap(c.commentLikes);
+      return;
+    }
     Promise.all([
       getSessionLikes(day.sessionId),
       getSessionComments(day.sessionId),
@@ -329,6 +383,7 @@ export default function SessionCard({
           style={styles.photoStrip}
           contentContainerStyle={styles.photoStripContent}
         >
+          <PhotoGroup uris={allMedia.map(m => m.uri)}>
           {allMedia.map((item, idx) => (
             <NaturalPhoto
               key={idx}
@@ -337,6 +392,7 @@ export default function SessionCard({
               onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); }}
             />
           ))}
+          </PhotoGroup>
         </ScrollView>
       )}
 

@@ -22,7 +22,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../utils/ThemeContext';
 import { NavigationProvider, useNav } from '../utils/NavigationContext';
 import { AuthProvider, useAuth } from '../utils/AuthContext';
-import { HeaderScrollProvider, useHeaderScrollContext } from '../utils/HeaderScroll';
+import { HeaderScrollProvider, useHeaderScrollContext, TabActiveContext } from '../utils/HeaderScroll';
 import AppHeader from '../components/AppHeader';
 import BottomTabBar from '../components/BottomTabBar';
 import ResetPasswordScreen from './reset-password';
@@ -67,6 +67,13 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const { user, loading, isPasswordRecovery } = useAuth();
   const { floating, headerHeight, headerHidden } = useHeaderScrollContext();
   useNotificationTapRouting();
+
+  // The Sessions tab stays mounted (hidden) after its first visit, so a
+  // session you've opened is still open when you come back to the tab.
+  const [sessionsMounted, setSessionsMounted] = useState(false);
+  useEffect(() => {
+    if (screen === 'sessions') setSessionsMounted(true);
+  }, [screen]);
 
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
@@ -185,7 +192,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const renderScreen = () => {
     switch (screen) {
       case 'log':      return <LogScreen />;
-      case 'sessions': return <SessionsHub />;
+      case 'sessions': return null; // kept mounted below
       case 'stats':    return <StatsScreen />;
       case 'settings': return <SettingsScreen />;
       case 'friends':  return <FriendsScreen />;
@@ -205,6 +212,13 @@ function AppShell({ onReady }: { onReady: () => void }) {
               header; the rest start below it. */}
           <View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating || headerHidden ? 0 : headerHeight }]}>
             {screen !== 'friends' && renderScreen()}
+            {(screen === 'sessions' || sessionsMounted) && (
+              <View style={screen === 'sessions' ? styles.body : styles.hidden}>
+                <TabActiveContext.Provider value={screen === 'sessions'}>
+                  <SessionsHub />
+                </TabActiveContext.Provider>
+              </View>
+            )}
             <FriendsScreen />
           </View>
           {!headerHidden && <AppHeader />}
@@ -300,6 +314,7 @@ function RootLayout() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1 },
+  hidden: { display: 'none' },
   errorFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: '#FFFFFF' },
   errorTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 8, textAlign: 'center' },
   errorBody: { fontSize: 15, color: '#666666', marginBottom: 24, textAlign: 'center', lineHeight: 21 },

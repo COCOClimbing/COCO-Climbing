@@ -5,6 +5,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { getAllClimbs, saveClimb, deleteClimb, getAllNamedProjects, deleteNamedProject, getAllSessions, NamedProject, setProjectsRefreshCallback } from '../utils/storage';
 import { EmptyState, GradeBadge } from '../components/UI';
+import { useOnTabReturn } from '../utils/HeaderScroll';
 import SwipeableProjectCard from '../components/SwipeableProjectCard';
 import AddProjectModal from '../components/AddProjectModal';
 import LogClimbModal from '../components/LogClimbModal';
@@ -96,6 +97,7 @@ export default function ProjectsScreen() {
   }, []);
 
   useEffect(() => { load(); }, []);
+  useOnTabReturn(load);
 
   useEffect(() => {
     const refresh = () => { load(); setProjectsRefreshKey(k => k + 1); };

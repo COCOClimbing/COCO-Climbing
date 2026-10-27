@@ -1,4 +1,19 @@
+import { Image as CompressorImage } from 'react-native-compressor';
+
 const WORKER_URL = 'https://coco-media.jacksonwalti.workers.dev';
+
+// Shrinks a photo to the same size the log-climb and session screens upload
+// (1080px, 60% quality). Full-size phone photos are several MB and load
+// seconds behind the rest of a post. Videos, and anything that fails to
+// compress, go up unchanged.
+export async function shrinkPhotoForUpload(uri: string, type: 'photo' | 'video'): Promise<string> {
+  if (type === 'video') return uri;
+  try {
+    return await CompressorImage.compress(uri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+  } catch {
+    return uri;
+  }
+}
 
 export async function uploadMedia(
   uri: string,

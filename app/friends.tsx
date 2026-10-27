@@ -19,6 +19,7 @@ import {
   Keyboard,
   Pressable,
 } from 'react-native';
+import { PhotoGroup, useGroupedPhoto, preloadPhotos } from '../components/PhotoGroup';
 import ShareModal from '../components/ShareModal';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
@@ -105,6 +106,8 @@ type FriendWithActivity = FriendProfile & {
 // ─── FriendDetailView ─────────────────────────────────────────────────────────
 
 const PHOTO_HEIGHT = 220;
+// Posts at the top of the feed whose photos download before it's shown.
+const PRELOAD_POSTS = 5;
 
 function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
@@ -119,17 +122,21 @@ function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; in
     );
   }, [uri, initialWidth]);
 
+  const { opacity, onDone } = useGroupedPhoto(uri);
+  useEffect(() => { if (failed) onDone(); }, [failed]);
+
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+      <Animated.View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
         <Image
           source={{ uri }}
           style={{ width: imgWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
+          onLoad={onDone}
           onError={() => setFailed(true)}
         />
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 }
@@ -1312,14 +1319,24 @@ export default function FriendsScreen() {
         seen.add(k);
         return true;
       });
-      // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size immediately
-      const allUris = [...new Set(deduped.flatMap(e => e.sessionPhotos ?? []))];
+      // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size
+      // immediately. The first few posts' photos are downloaded too, so they
+      // appear with the feed instead of one by one; the rest just get sizes
+      // and download in the background.
+      const topUris = [...new Set(deduped.slice(0, PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))];
+      const restUris = [...new Set(deduped.slice(PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))].filter(u => !topUris.includes(u));
       const widthCache: Record<string, number> = {};
-      // Likes and comments load alongside the photo sizes, so each post shows
+      restUris.forEach(uri => { Image.prefetch(uri).catch(() => {}); });
+      // Likes and comments load alongside the photos, so each post shows
       // up complete instead of its buttons and counts filling in afterward.
-      const [, social] = await Promise.all([
+      const [, , social] = await Promise.all([
+        // Capped so a slow connection can't hold the whole feed back.
+        Promise.race([
+          preloadPhotos(topUris, PHOTO_HEIGHT).then(w => { Object.assign(widthCache, w); }),
+          new Promise<void>(resolve => setTimeout(resolve, 5000)),
+        ]),
         Promise.all(
-          allUris.map(uri => new Promise<void>(resolve => {
+          restUris.map(uri => new Promise<void>(resolve => {
             Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
           }))
         ),
@@ -1978,9 +1995,11 @@ export default function FriendsScreen() {
               style={styles.photoStrip}
               contentContainerStyle={styles.photoStripContent}
             >
+              <PhotoGroup uris={stripPhotos}>
               {stripPhotos.map((uri, i) => (
                 <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(stripPhotos); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
+              </PhotoGroup>
             </ScrollView>
           )}
           {/* Climbs */}
@@ -2168,9 +2187,11 @@ export default function FriendsScreen() {
                     style={styles.photoStrip}
                     contentContainerStyle={styles.photoStripContent}
                   >
+                    <PhotoGroup uris={entry.sessionPhotos}>
                     {entry.sessionPhotos.map((uri, i) => (
                       <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
+                    </PhotoGroup>
                   </ScrollView>
                 )}
 
