@@ -2199,7 +2199,7 @@ export default function FriendsScreen() {
                 <TouchableOpacity
                   onPress={() => handleOpenSession(entry)}
                   activeOpacity={0.7}
-                  style={[styles.cardExpandBtn, { borderColor: colors.border }]}
+                  style={[styles.cardExpandBtn, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
                 >
                   <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
                     {entry.training === 'lift' ? 'View lift' : entry.training === 'hangboard' ? 'View hang' : entry.training === 'both' ? 'View lift + hang' : 'View climbs'}
@@ -2731,6 +2731,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     marginBottom: SPACING.md,
+    // Soft lift off the card (needs the solid backgroundColor set inline)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 1,
   },
   cardActions: {
     flexDirection: 'row',

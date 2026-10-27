@@ -372,7 +372,7 @@ export default function ActivityCard({
       <TouchableOpacity
         onPress={handleToggleClimbs}
         activeOpacity={0.7}
-        style={[styles.cardExpandBtn, { borderColor: colors.border }]}
+        style={[styles.cardExpandBtn, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
       >
         <Text style={[styles.cardExpandTxt, { color: colors.textPrimary }]}>
           {climbsExpanded ? 'Hide climbs' : 'View climbs'}
@@ -522,6 +522,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     marginBottom: SPACING.md,
+    // Soft lift off the card (needs the solid backgroundColor set inline)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 1,
   },
   cardExpandTxt: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   cardNoClimbs: { fontSize: FONTS.sizes.sm, textAlign: 'center', paddingVertical: SPACING.md },
