@@ -101,8 +101,8 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Friends state
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
 
-  // Location and friends live on the session: only ask for them while the session doesn't
-  // have any. Once they're set, they're edited from the session itself.
+  // Location and friends live on the session: only ask for them on the session's
+  // first climb (if not already set). After that they're edited from the session.
   const [askLocation, setAskLocation]       = useState(true);
   const [askFriends, setAskFriends]         = useState(true);
 
@@ -119,16 +119,19 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       });
       // Load friends + location from the session
       if (defaultSessionId) {
-        getAllSessions().then(sessions => {
+        Promise.all([getAllSessions(), getAllClimbs()]).then(([sessions, allClimbs]) => {
           const session = sessions.find(s => s.id === defaultSessionId);
+          // Only the session's first climb asks; after that they're edited
+          // from the session screen, filled in or not.
+          const firstClimb = !allClimbs.some(c => c.sessionId === defaultSessionId);
           const raw = session?.friends ?? [];
           // Normalize legacy string[] format
           const normalized = raw.map((f: any) =>
             typeof f === 'string' ? { id: f, name: f } : f
           );
           setFriends(normalized);
-          setAskLocation(!existingClimb && !session?.location);
-          setAskFriends(!existingClimb && normalized.length === 0);
+          setAskLocation(!existingClimb && firstClimb && !session?.location);
+          setAskFriends(!existingClimb && firstClimb && normalized.length === 0);
         });
       } else {
         setFriends([]);
@@ -739,7 +742,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
             {!isTraining && environment === 'indoor' && (
               <>
                 <Section id="hold" active={activeSection === 'hold'} onActivate={setActiveSection}>
-                <Text style={[styles.label, { color: colors.textMuted }]}>HOLD COLOR (optional)</Text>
+                <Text style={[styles.label, { color: colors.textMuted }]}>HOLD COLOR</Text>
                 <View style={styles.row}>
                   {HOLD_COLORS.map(c => {
                     const selected = holdColor === c.id;
@@ -784,14 +787,15 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               </>
             )}
 
-            {/* Details */}
-            <Section id="details" active={activeSection === 'details'} onActivate={setActiveSection} onLayout={(e) => { detailsYRef.current = e.nativeEvent.layout.y; }}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>DETAILS (optional)</Text>
-            {askLocation && <LocationPicker value={location} onChange={setLocation} />}
+            {/* Notes, Location and Climbing with: separate sections in the same
+                order as an open session. Location and friends live on the session,
+                so they only show on its first climb. */}
+            <Section id="notes" active={activeSection === 'notes'} onActivate={setActiveSection} onLayout={(e) => { detailsYRef.current = e.nativeEvent.layout.y; }}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>NOTES</Text>
             <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
               <TextInput
                 style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
-                placeholder="Notes..."
+                placeholder="How'd this climb go?"
                 placeholderTextColor={colors.textMuted}
                 value={notes}
                 onChangeText={setNotes}
@@ -804,16 +808,31 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 }}
               />
             </View>
+            </Section>
 
-            {/* Tag friends */}
-            {askFriends && (
+            {askLocation && (
               <>
-                <Text style={[styles.label, { color: colors.textMuted, marginTop: SPACING.sm }]}>WITH (optional)</Text>
-                <FriendPicker selected={friends} onChange={setFriends} />
+                <Divider />
+                <Section id="location" active={activeSection === 'location'} onActivate={setActiveSection}>
+                <Text style={[styles.label, { color: colors.textMuted }]}>LOCATION</Text>
+                {/* The picker brings its own bottom gap; trim it like the session screen does */}
+                <View style={{ marginBottom: -SPACING.sm }}>
+                  <LocationPicker value={location} onChange={setLocation} onOpenChange={open => { if (open) setActiveSection('location'); }} />
+                </View>
+                </Section>
               </>
             )}
 
-            </Section>
+            {askFriends && (
+              <>
+                <Divider />
+                <Section id="friends" active={activeSection === 'friends'} onActivate={setActiveSection}>
+                <Text style={[styles.label, { color: colors.textMuted }]}>CLIMBING WITH</Text>
+                <FriendPicker selected={friends} onChange={setFriends} onOpenChange={open => { if (open) setActiveSection('friends'); }} />
+                </Section>
+              </>
+            )}
+
             {/* Media */}
             <Divider />
             <Section id="media" active={activeSection === 'media'} onActivate={setActiveSection}>
