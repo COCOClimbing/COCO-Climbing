@@ -69,14 +69,15 @@ export function Card({ children, style }: { children: React.ReactNode; style?: a
 
 // ─── Grade Badge ─────────────────────────────────────────────────────────────
 
-export function GradeBadge({ grade, outcome }: { grade: string; outcome: string }) {
+// colorOverride: use a fixed color instead of the outcome's (e.g. the grey Lift badge)
+export function GradeBadge({ grade, outcome, colorOverride }: { grade: string; outcome: string; colorOverride?: string }) {
   const { colors } = useTheme();
-  const color =
-    outcome === 'flash' ? colors.accentGold :
+  const color = colorOverride ??
+    (outcome === 'flash' ? colors.accentGold :
     outcome === 'send' ? colors.accentGreen :
     outcome === 'hang' ? '#9B5DE5' :
     outcome === 'project' ? colors.accent :
-    colors.accentBlue;
+    colors.accentBlue);
 
   return (
     <View style={[styles.gradeBadge, { backgroundColor: color + '20', borderColor: color }]}>

@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
-
+import { GradeBadge } from './UI';
 interface Props {
   climb: Climb;
   // Shows an Edit button (own entries). There's no tap-through otherwise: this
@@ -26,6 +26,7 @@ export default function TrainingEntry({ climb, onEdit, extraMedia }: Props) {
     try { return format(parseISO(climb.date), 'h:mm a'); } catch { return ''; }
   })();
   const routine = climb.routine?.trim();
+  const notes = climb.notes?.trim();
   const ownUris = climb.mediaUris && climb.mediaUris.length > 0
     ? climb.mediaUris
     : climb.mediaUri ? [climb.mediaUri] : [];
@@ -40,7 +41,8 @@ export default function TrainingEntry({ climb, onEdit, extraMedia }: Props) {
   return (
     <View style={styles.entry}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{label}</Text>
+        {/* Badge in the type's color (lift grey, hangboard green), same format as a V-grade */}
+        <GradeBadge grade={label} outcome="" colorOverride={CLIMB_TYPES.find(t => t.id === climb.type)?.color} />
         {time ? <Text style={[styles.time, { color: colors.textMuted }]}>{time}</Text> : null}
         <View style={{ flex: 1 }} />
         {onEdit && (
@@ -54,23 +56,27 @@ export default function TrainingEntry({ climb, onEdit, extraMedia }: Props) {
         )}
       </View>
 
-      {routine ? (
+      {/* Routine and notes together in one box */}
+      {routine || notes ? (
         <View style={box}>
-          <Text style={sectionLabel}>ROUTINE</Text>
-          <Text style={[styles.body, { color: colors.textPrimary }]}>{routine}</Text>
-        </View>
-      ) : null}
-
-      {climb.notes ? (
-        <View style={box}>
-          <Text style={sectionLabel}>NOTES</Text>
-          <Text style={[styles.body, { color: colors.textPrimary }]}>{climb.notes}</Text>
+          {routine ? (
+            <>
+              <Text style={sectionLabel}>ROUTINE</Text>
+              <Text style={[styles.body, { color: colors.textPrimary }]}>{routine}</Text>
+            </>
+          ) : null}
+          {notes ? (
+            <>
+              <Text style={[sectionLabel, routine ? { marginTop: SPACING.lg } : null]}>NOTES</Text>
+              <Text style={[styles.body, { color: colors.textPrimary }]}>{notes}</Text>
+            </>
+          ) : null}
         </View>
       ) : null}
 
       <MediaBox uris={uris} types={types} />
 
-      {!routine && !climb.notes && uris.length === 0 ? (
+      {!routine && !notes && uris.length === 0 ? (
         <Text style={[styles.empty, { color: colors.textMuted }]}>No routine logged</Text>
       ) : null}
     </View>

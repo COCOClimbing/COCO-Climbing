@@ -782,14 +782,30 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                   multiline
                   numberOfLines={4}
                 />
+                {/* Lift/hangboard: notes share the routine's box */}
+                {isTraining && (
+                  <>
+                    <Text style={[styles.label, { color: colors.textMuted, marginTop: SPACING.md }]}>NOTES</Text>
+                    <TextInput
+                      style={[styles.input, styles.inputMulti, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
+                      placeholder="How'd it go?"
+                      placeholderTextColor={colors.textMuted}
+                      value={notes}
+                      onChangeText={setNotes}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </>
+                )}
                 </Section>
-                <Divider />
+                {!isTraining && <Divider />}
               </>
             )}
 
             {/* Notes, Location and Climbing with: separate sections in the same
                 order as an open session. Location and friends live on the session,
-                so they only show on its first climb. */}
+                so they only show on its first climb. Lift/hangboard notes sit in the routine box. */}
+            {!isTraining && (
             <Section id="notes" active={activeSection === 'notes'} onActivate={setActiveSection} onLayout={(e) => { detailsYRef.current = e.nativeEvent.layout.y; }}>
             <Text style={[styles.label, { color: colors.textMuted }]}>NOTES</Text>
             <View onLayout={(e) => { notesYRef.current = e.nativeEvent.layout.y; }}>
@@ -809,6 +825,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               />
             </View>
             </Section>
+            )}
 
             {askLocation && (
               <>

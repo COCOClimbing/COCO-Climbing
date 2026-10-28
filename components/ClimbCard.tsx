@@ -51,13 +51,15 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
           </View>
         )}
         {!isTraining && <OutcomeBadge outcome={climb.outcome} />}
+        {/* Lift/hangboard get a badge in their type color in the grade's spot, instead of a type line */}
+        {isTraining && <GradeBadge grade={typeInfo?.label ?? ''} outcome="" colorOverride={typeInfo?.color} />}
       </View>
       <View style={styles.midRow}>
-        <Text style={[styles.typeLine, { color: colors.textSecondary }]}>
-          {climb.type === 'hangboard' || climb.type === 'lift'
-            ? (typeInfo?.label ?? '')
-            : `${typeInfo?.label ?? ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
-        </Text>
+        {!isTraining && (
+          <Text style={[styles.typeLine, { color: colors.textSecondary }]}>
+            {`${typeInfo?.label ?? ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
+          </Text>
+        )}
         {(climb.projectName || climb.routeName) && (
           <Text style={[styles.routeName, { color: colors.textPrimary }]} numberOfLines={1}>{climb.projectName || climb.routeName}</Text>
         )}
@@ -89,8 +91,8 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
         <View>
           {/* Training cards label both blocks (ROUTINE above) so they read apart */}
           {isTraining && <Text style={[styles.routineLabel, { color: colors.textMuted }]}>NOTES</Text>}
-          <Text style={[styles.notes, { color: colors.textSecondary }]} numberOfLines={compact ? 2 : undefined}>
-            {climb.notes}
+          <Text style={[styles.notes, { color: colors.textPrimary }]} numberOfLines={compact ? 2 : undefined}>
+            {climb.notes.trim()}
           </Text>
         </View>
       ) : null}
