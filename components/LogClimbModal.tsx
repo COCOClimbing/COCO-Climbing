@@ -114,8 +114,15 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Load named projects
   useEffect(() => {
     if (visible) {
-      getAllNamedProjects().then(projects => {
-        setExistingProjects(projects.map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type })));
+      Promise.all([getAllNamedProjects(), getAllClimbs()]).then(([projects, allClimbs]) => {
+        // Sent projects (any send/flash on them, same rule as the Projects tab) are done,
+        // so they're not offered again — except the one the climb being edited belongs to
+        const sentIds = new Set(
+          allClimbs.filter(c => c.projectId && (c.outcome === 'send' || c.outcome === 'flash')).map(c => c.projectId!)
+        );
+        setExistingProjects(projects
+          .filter(p => !sentIds.has(p.id) || p.id === existingClimb?.projectId)
+          .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type })));
       });
       // Load friends + location from the session
       if (defaultSessionId) {
@@ -315,6 +322,31 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }
 
   const isTraining = climbType === 'hangboard' || climbType === 'lift';
+
+  const currentProjectName = selectedProjectId
+    ? existingProjects.find(p => p.id === selectedProjectId)?.name
+    : newProjectName.trim() || undefined;
+
+  // "Project" switch while editing: ask for a name, then mark the climb as a new
+  // project (created on save). Cancel or a blank name leaves it off.
+  // Project button while editing: opens the name card (styled like the end-session
+  // prompt). Saving marks the climb as a new project, created when the climb is saved.
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const promptNameValue = useRef('');
+  function askProjectName() {
+    promptNameValue.current = routeName || '';
+    setNamePromptOpen(true);
+  }
+  function saveProjectName() {
+    const trimmed = promptNameValue.current.trim();
+    if (!trimmed) return;
+    setNamePromptOpen(false);
+    setSelectedProjectId(undefined);
+    setNewProjectName(trimmed);
+    setIsProject(true);
+    // Projects are logged as attempts (same rule as the Project pill)
+    if (outcome === 'send' || outcome === 'flash') setOutcome('attempt');
+  }
 
   async function uploadMedia(localUri: string, climbId: string): Promise<string> {
     const path = `${user!.id}/${climbId}.jpg`;
@@ -718,6 +750,31 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     </View>
                   </View>
                 )}
+                {/* Editing a climb: turn it into a project (asks for a name) */}
+                {existingClimb && !editProjectMode && (
+                  isProject ? (
+                    <View style={[styles.attemptsRow, { backgroundColor: colors.accent + '12', borderColor: colors.accent }]}>
+                      <View style={{ flex: 1, marginRight: SPACING.md, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="flag" size={14} color={colors.accent} />
+                        <Text style={{ color: colors.textPrimary, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md, flexShrink: 1 }} numberOfLines={1}>
+                          {currentProjectName || 'Project'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setIsProject(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={{ color: colors.textMuted, fontFamily: FONTS.family.medium, fontSize: FONTS.sizes.sm }}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={askProjectName}
+                      style={[styles.projectBtn, { borderColor: colors.accent, backgroundColor: colors.accent + '12' }]}
+                    >
+                      <Ionicons name="flag" size={15} color={colors.accent} />
+                      <Text style={[styles.projectBtnText, { color: colors.accent }]}>Make it a Project</Text>
+                    </TouchableOpacity>
+                  )
+                )}
                 </Section>
                 <Divider />
               </>
@@ -894,6 +951,38 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Project name card — same look as the end-session "Before you wrap up" card */}
+      {namePromptOpen && (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.namePromptBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNamePromptOpen(false)} />
+          <View style={[styles.namePromptCard, { backgroundColor: colors.bgCard }]}>
+            <Text style={[styles.namePromptHeading, { color: colors.textPrimary }]}>Name your project</Text>
+            <Text style={[styles.namePromptSub, { color: colors.textMuted }]}>Give this climb a name to track it as a project.</Text>
+            <View style={[styles.namePromptBox, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.textMuted, marginBottom: 0 }]}>PROJECT NAME</Text>
+              <TextInput
+                style={[styles.namePromptInput, { color: colors.textPrimary }]}
+                defaultValue={promptNameValue.current}
+                onChangeText={t => { promptNameValue.current = t; }}
+                placeholder="e.g. The blue V5 in the cave"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={saveProjectName}
+              />
+            </View>
+            <View style={styles.namePromptActions}>
+              <TouchableOpacity style={[styles.namePromptSecondary, { borderColor: colors.border }]} onPress={() => setNamePromptOpen(false)} activeOpacity={0.7}>
+                <Text style={[styles.namePromptSecondaryText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.namePromptPrimary, { backgroundColor: colors.accent }]} onPress={saveProjectName} activeOpacity={0.8}>
+                <Text style={styles.namePromptPrimaryText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 }
@@ -920,6 +1009,20 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: FONTS.sizes.xs, letterSpacing: 1.5, marginBottom: SPACING.md },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
+  projectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: SPACING.md, borderRadius: 10, borderWidth: 1, paddingVertical: SPACING.md },
+  projectBtnText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
+  // Project name card (matches the end-session prompt in app/sessions.tsx)
+  namePromptBackdrop: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', padding: SPACING.lg, backgroundColor: 'rgba(0,0,0,0.45)' },
+  namePromptCard: { borderRadius: 16, padding: SPACING.lg, gap: SPACING.md },
+  namePromptHeading: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold },
+  namePromptSub: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, marginTop: -SPACING.sm },
+  namePromptBox: { borderRadius: 12, borderWidth: 1, padding: SPACING.lg, gap: SPACING.sm },
+  namePromptInput: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.semibold, padding: 0, margin: 0 },
+  namePromptActions: { flexDirection: 'row', gap: SPACING.sm },
+  namePromptSecondary: { flex: 1, borderRadius: 8, borderWidth: 1, paddingVertical: SPACING.md, alignItems: 'center' },
+  namePromptSecondaryText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  namePromptPrimary: { flex: 1, borderRadius: 8, paddingVertical: SPACING.md, alignItems: 'center' },
+  namePromptPrimaryText: { color: '#fff', fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
   attemptsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.md, borderRadius: 10, borderWidth: 1, padding: SPACING.md },
   attemptsLabel: { fontSize: FONTS.sizes.md },
   attemptsStepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
