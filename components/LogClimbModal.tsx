@@ -787,19 +787,29 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                       <Text style={[styles.projectBtnText, { color: colors.accent }]}>Name this board</Text>
                     </TouchableOpacity>
                   )}
-                  <TextInput
-                    style={[styles.input, { marginTop: SPACING.md, backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
-                    placeholder="Problem name (optional)"
-                    placeholderTextColor={colors.textMuted}
-                    value={routeName}
-                    onChangeText={setRouteName}
-                    returnKeyType="done"
-                  />
                   </>
                 )}
                 </Section>
                 <Divider />
                 </>
+                )}
+
+                {/* Board problem name: always shown (even with Type folded), since it changes every climb */}
+                {climbType === 'board' && !editProjectMode && (
+                  <>
+                    <Section id="problem" active={activeSection === 'problem'} onActivate={setActiveSection}>
+                    <Text style={[styles.label, { color: colors.textMuted }]}>PROBLEM NAME</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
+                      placeholder="Optional, e.g. Physical Graffiti"
+                      placeholderTextColor={colors.textMuted}
+                      value={routeName}
+                      onChangeText={setRouteName}
+                      returnKeyType="done"
+                    />
+                    </Section>
+                    <Divider />
+                  </>
                 )}
 
                 {!isTraining && (
