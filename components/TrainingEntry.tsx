@@ -5,6 +5,7 @@ import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { GradeBadge } from './UI';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 interface Props {
   climb: Climb;
   // Shows an Edit button (own entries). There's no tap-through otherwise: this
@@ -99,7 +100,7 @@ export function MediaBox({ uris, types }: { uris: string[]; types?: ('photo' | '
   return (
     <View style={[styles.box, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MEDIA</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm }}>
+      <TabSwipeGuard><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm }}>
         {uris.map((uri, i) => (
           <TouchableOpacity
             key={i}
@@ -110,7 +111,7 @@ export function MediaBox({ uris, types }: { uris: string[]; types?: ('photo' | '
             <Image ref={register(uri)} source={{ uri }} style={styles.media} resizeMode="cover" />
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </ScrollView></TabSwipeGuard>
       {viewerIndex !== null && (
         <PhotoViewer uris={photos} initialIndex={viewerIndex} origins={origins} clipTo={clip} onClose={() => setViewerIndex(null)} />
       )}

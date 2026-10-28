@@ -26,6 +26,8 @@ export default function SwipeableProjectCard({ children, onDelete, onSend, sendL
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      // Keep the swipe once it starts, so the page's tab swipe can't take it over
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         (translateX as any).extractOffset();
       },

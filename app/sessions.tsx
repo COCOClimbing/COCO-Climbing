@@ -29,6 +29,7 @@ import SwipeToDelete from '../components/SwipeToDelete';
 import MiniCalendar from '../components/MiniCalendar';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 import { uploadMedia } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard, { prefetchSessionCards } from '../components/SessionCard';
@@ -1075,7 +1076,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
             {allActiveMedia.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+              <TabSwipeGuard><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
                 {allActiveMedia.map((item, idx) => (
                   <TouchableOpacity
                     key={idx}
@@ -1095,7 +1096,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                 >
                   <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
                 </TouchableOpacity>
-              </ScrollView>
+              </ScrollView></TabSwipeGuard>
             ) : (
               <TouchableOpacity
                 style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}
@@ -1308,7 +1309,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MEDIA</Text>
             {allMedia.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
+              <TabSwipeGuard><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.sm }}>
                 {allMedia.map((item, idx) => (
                   <TouchableOpacity
                     key={idx}
@@ -1328,7 +1329,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                 >
                   <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
                 </TouchableOpacity>
-              </ScrollView>
+              </ScrollView></TabSwipeGuard>
             ) : (
               <TouchableOpacity
                 style={[styles.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}

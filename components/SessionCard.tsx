@@ -20,6 +20,7 @@ import {
 } from '../utils/friendsApi';
 import { sendCommentLikeNotification } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 
 const PHOTO_HEIGHT = 220;
 
@@ -377,9 +378,9 @@ export default function SessionCard({
 
       {/* Photos */}
       {!condensed && hasMedia && (
-        <ScrollView
+        <TabSwipeGuard><ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false} 
           style={styles.photoStrip}
           contentContainerStyle={styles.photoStripContent}
         >
@@ -393,7 +394,7 @@ export default function SessionCard({
             />
           ))}
           </PhotoGroup>
-        </ScrollView>
+        </ScrollView></TabSwipeGuard>
       )}
 
       {/* View climbs — opens the session, like the feed's button */}

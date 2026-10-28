@@ -47,6 +47,8 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
       onStartShouldSetPanResponderCapture: () => !disabled && currentX.current !== 0,
       onMoveShouldSetPanResponder: (_, g) =>
         !disabled && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      // Keep the swipe once it starts, so a page's tab swipe can't take it over
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         onSwipeStartRef.current?.();
         translateX.setOffset(currentX.current);

@@ -90,7 +90,7 @@ import StatusBarFade from '../components/StatusBarFade';
 import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
 import FloatingBackButton from '../components/FloatingBackButton';
 import { useEdgeSwipeBack } from '../utils/useEdgeSwipeBack';
-import { useTabSwipe } from '../utils/useTabSwipe';
+import { useTabSwipe, TabSwipeGuard } from '../utils/useTabSwipe';
 import PushScreen from '../components/PushScreen';
 import DiscussionScreen from '../components/DiscussionScreen';
 
@@ -2059,7 +2059,7 @@ export default function FriendsScreen() {
           <SessionBreakdown climbs={climbs} />
           {/* Photos */}
           {stripPhotos.length > 0 && (
-            <ScrollView
+            <TabSwipeGuard><ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.photoStrip}
@@ -2070,7 +2070,7 @@ export default function FriendsScreen() {
                 <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(stripPhotos); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
               </PhotoGroup>
-            </ScrollView>
+            </ScrollView></TabSwipeGuard>
           )}
           {/* Climbs */}
           {climbs.length === 0
@@ -2147,7 +2147,7 @@ export default function FriendsScreen() {
 
                 {/* ── Photo strip ── */}
                 {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (
-                  <ScrollView
+                  <TabSwipeGuard><ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     style={styles.photoStrip}
@@ -2158,7 +2158,7 @@ export default function FriendsScreen() {
                       <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
                     </PhotoGroup>
-                  </ScrollView>
+                  </ScrollView></TabSwipeGuard>
                 )}
 
                 {/* ── View climbs button ── */}

@@ -22,6 +22,7 @@ import {
 import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
 import { reportContent } from '../utils/moderationApi';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 
 const PHOTO_HEIGHT = 220;
 
@@ -350,7 +351,7 @@ export default function ActivityCard({
 
       {/* Photos */}
       {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (
-        <ScrollView
+        <TabSwipeGuard><ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.photoStrip}
@@ -365,7 +366,7 @@ export default function ActivityCard({
               onPress={() => { setViewerUris(entry.sessionPhotos!); setViewerIndex(i); }}
             />
           ))}
-        </ScrollView>
+        </ScrollView></TabSwipeGuard>
       )}
 
       {/* Climbs — collapsed by default, fetched on demand */}
