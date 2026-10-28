@@ -74,6 +74,7 @@ function mapToClimb(c: any): Climb {
     environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
     routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes,
     routine: c.routine ?? undefined,
+    boardName: c.board_name ?? undefined, boardAngle: c.board_angle ?? undefined,
     attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
     mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
     mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),

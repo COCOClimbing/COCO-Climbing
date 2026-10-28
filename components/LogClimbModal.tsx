@@ -12,6 +12,7 @@ import {
   Climb, ClimbTypeId, OutcomeId, StyleId, EnvironmentId, HoldColorId
 } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
+import { boardLabel } from '../utils/sessionHelpers';
 import {
   saveClimb, createNewSession, generateId, getTodayISO,
   saveLastClimbType, getLastClimbType, getAllNamedProjects, getAllClimbs, saveNamedProject,
@@ -89,7 +90,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
   const [gradeSystem, setGradeSystem]       = useState<GradeSystem>('v-scale');
   const [grade, setGrade]                   = useState('V3');
-  const [routeName, setRouteName]           = useState('');
+  const [routeName, setRouteName]           = useState(''); // Board climbs: the problem's name
+  const [boardName, setBoardName]           = useState('');
+  const [boardAngle, setBoardAngle]         = useState(''); // degrees, as typed
   const [location, setLocation]             = useState('');
   const [notes, setNotes]                   = useState('');
   const [attempts, setAttempts]             = useState('1');
@@ -124,6 +127,21 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
           .filter(p => !sentIds.has(p.id) || p.id === existingClimb?.projectId)
           .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type })));
       });
+      // Board + angle used earlier in this session (latest Board climb with a board name)
+      const boardSessionId = existingClimb?.sessionId || defaultSessionId;
+      setSessionBoard(null);
+      if (boardSessionId) {
+        getAllClimbs().then(all => {
+          // (older Board climbs kept the board in routeName)
+          const latest = all
+            .filter(c => c.sessionId === boardSessionId && c.type === 'board' && (c.boardName || c.routeName) && c.id !== existingClimb?.id)
+            .sort((a, b) => b.date.localeCompare(a.date))[0];
+          setSessionBoard(latest ? {
+            name: latest.boardName || latest.routeName!,
+            angle: latest.boardAngle != null ? String(latest.boardAngle) : '',
+          } : null);
+        });
+      }
       // Load friends + location from the session
       if (defaultSessionId) {
         Promise.all([getAllSessions(), getAllClimbs()]).then(([sessions, allClimbs]) => {
@@ -149,8 +167,8 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }, [visible, defaultSessionId, existingClimb]);
 
   async function restoreLastGrade(type: ClimbTypeId) {
-    if (type === 'boulder') {
-      const sys = await getLastGradeSystem('boulder');
+    if (type === 'boulder' || type === 'board') {
+      const sys = await getLastGradeSystem(type);
       const resolved = sys && ['v-scale', 'font', 'custom'].includes(sys) ? sys : 'v-scale';
       setGradeSystem(resolved as GradeSystem);
       setGrade((await getLastGrade(type)) ?? (resolved === 'font' ? '6a' : resolved === 'custom' ? '' : 'V3'));
@@ -210,7 +228,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // and re-infer the system from it), so drop back to a standard grade if Project is picked.
   useEffect(() => {
     if (isProject && gradeSystem === 'custom') {
-      const boulder = climbType === 'boulder';
+      const boulder = climbType === 'boulder' || climbType === 'board';
       setGradeSystem(boulder ? 'v-scale' : 'yds');
       setGrade(boulder ? 'V3' : '5.10a');
     }
@@ -227,7 +245,11 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setHoldColor(existingClimb.holdColor);
       setGradeSystem(existingClimb.gradeSystem);
       setGrade(existingClimb.grade);
-      setRouteName(existingClimb.routeName || '');
+      // Board climbs from before boardName existed kept the board in routeName
+      const legacyBoard = existingClimb.type === 'board' && !existingClimb.boardName && !!existingClimb.routeName;
+      setRouteName(legacyBoard ? '' : (existingClimb.routeName || ''));
+      setBoardName(legacyBoard ? existingClimb.routeName! : (existingClimb.boardName || ''));
+      setBoardAngle(existingClimb.boardAngle != null ? String(existingClimb.boardAngle) : '');
       setLocation(existingClimb.location || '');
       setNotes(existingClimb.notes || '');
       setRoutine(existingClimb.routine || '');
@@ -259,6 +281,8 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     setGradeSystem('v-scale');
     setGrade('V3');
     setRouteName('');
+    setBoardName('');
+    setBoardAngle('');
     setLocation('');
     setNotes('');
     setAttempts('1');
@@ -322,6 +346,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }
 
   const isTraining = climbType === 'hangboard' || climbType === 'lift';
+  // Folded Type pill: "Board · Kilter" once the board is named
+  const typeLabel = (CLIMB_TYPES.find(t => t.id === climbType)?.label ?? '')
+    + (climbType === 'board' && boardName.trim() ? ` · ${boardLabel(boardName, boardAngle)}` : '');
 
   const currentProjectName = selectedProjectId
     ? existingProjects.find(p => p.id === selectedProjectId)?.name
@@ -331,8 +358,47 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // project (created on save). Cancel or a blank name leaves it off.
   // Project button while editing: opens the name card (styled like the end-session
   // prompt). Saving marks the climb as a new project, created when the climb is saved.
-  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  // Which name the card is asking for (a project, or the board for Board climbs); null = closed
+  const [namePrompt, setNamePrompt] = useState<'project' | 'board' | null>(null);
+  const namePromptOpen = namePrompt !== null;
+  const setNamePromptOpen = (open: boolean) => setNamePrompt(open ? 'project' : null);
   const promptNameValue = useRef('');
+  // Board + angle from this session's latest Board climb, so new Board climbs reuse them
+  const [sessionBoard, setSessionBoard] = useState<{ name: string; angle: string } | null>(null);
+  const promptAngleValue = useRef('');
+  function askBoardName() {
+    promptNameValue.current = boardName || sessionBoard?.name || '';
+    promptAngleValue.current = boardAngle || sessionBoard?.angle || '';
+    setNamePrompt('board');
+  }
+  function saveBoardName() {
+    const name = promptNameValue.current.trim();
+    if (!name) return;
+    const angle = promptAngleValue.current.replace(/[^0-9]/g, '');
+    setNamePrompt(null);
+    setBoardName(name);
+    setBoardAngle(angle);
+    setSessionBoard({ name, angle });
+  }
+  // New climb that opens on Board (last type used): fill in the session's board
+  useEffect(() => {
+    if (!existingClimb && climbType === 'board' && !boardName && sessionBoard) {
+      setBoardName(sessionBoard.name); setBoardAngle(sessionBoard.angle);
+    }
+  }, [climbType, sessionBoard]);
+
+  function pickClimbType(id: ClimbTypeId) {
+    const wasBoard = climbType === 'board';
+    setClimbType(id);
+    if (id === 'board' && !wasBoard) {
+      // Same board as earlier in the session unless changed; otherwise ask
+      setRouteName('');
+      if (sessionBoard) { setBoardName(sessionBoard.name); setBoardAngle(sessionBoard.angle); }
+      else askBoardName();
+    } else if (id !== 'board' && wasBoard) {
+      setRouteName(''); setBoardName(''); setBoardAngle('');
+    }
+  }
   function askProjectName() {
     promptNameValue.current = routeName || '';
     setNamePromptOpen(true);
@@ -460,7 +526,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         environment,
         grade: isTraining ? '' : grade.trim(),
         gradeSystem: isTraining ? 'v-scale' : gradeSystem,
-        routeName: routeName || undefined,
+        routeName: routeName.trim() || undefined,
+        boardName: climbType === 'board' && boardName.trim() ? boardName.trim() : undefined,
+        boardAngle: climbType === 'board' && boardAngle && !isNaN(parseInt(boardAngle)) ? parseInt(boardAngle) : undefined,
         // Location is stored on the session, not the climb. Editing an older climb
         // that still carries its own location leaves it untouched.
         location: existingClimb?.location,
@@ -568,7 +636,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 ...(isProject ? [foldedPill('Project', colors.accent, () => setEnvOpen(true), 'proj')] : []),
               ];
               const typePill = !typeHidden && typeInfo
-                ? foldedPill(typeInfo.label, typeInfo.color, () => setTypeOpen(true), 'type')
+                ? foldedPill(typeLabel, typeInfo.color, () => setTypeOpen(true), 'type')
                 : null;
               const showEnvFold = !envOpen;
               // Type joins this row only while Environment is folded too;
@@ -658,7 +726,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                         <TouchableOpacity onPress={() => setTypeOpen(true)} activeOpacity={0.7}
                           style={[styles.pill, styles.summaryPill, { borderColor: typeInfo.color, backgroundColor: typeInfo.color + '25' }]}>
                           <View style={styles.summaryPillInner}>
-                            <Text style={[styles.pillText, { color: typeInfo.color, fontFamily: FONTS.family.medium }]}>{typeInfo.label}</Text>
+                            <Text style={[styles.pillText, { color: typeInfo.color, fontFamily: FONTS.family.medium }]}>{typeLabel}</Text>
                             <Ionicons name="chevron-down" size={13} color={typeInfo.color} />
                           </View>
                         </TouchableOpacity>
@@ -677,7 +745,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     <TouchableOpacity
                       key={ct.id}
                       onPress={() => {
-                        setClimbType(ct.id);
+                        pickClimbType(ct.id);
                         if (!['top_rope', 'sport', 'trad'].includes(ct.id) && outcome === 'hang') {
                           setOutcome('send');
                         }
@@ -697,6 +765,38 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     </TouchableOpacity>
                   ))}
                 </View>
+                {/* Board: which board (kept for the session unless changed) + this problem's name */}
+                {climbType === 'board' && !editProjectMode && (
+                  <>
+                  {boardName.trim() ? (
+                    <View style={[styles.attemptsRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                      <Text style={{ color: colors.textMuted, fontFamily: FONTS.family.regular, fontSize: FONTS.sizes.sm, marginRight: SPACING.sm }}>Board</Text>
+                      <Text style={{ flex: 1, marginRight: SPACING.md, color: colors.textPrimary, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.md }} numberOfLines={1}>
+                        {boardLabel(boardName, boardAngle)}
+                      </Text>
+                      <TouchableOpacity onPress={askBoardName} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={{ color: colors.accent, fontFamily: FONTS.family.semibold, fontSize: FONTS.sizes.sm }}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={askBoardName}
+                      style={[styles.projectBtn, { borderColor: colors.accent, backgroundColor: colors.accent + '12' }]}
+                    >
+                      <Text style={[styles.projectBtnText, { color: colors.accent }]}>Name this board</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TextInput
+                    style={[styles.input, { marginTop: SPACING.md, backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
+                    placeholder="Problem name (optional)"
+                    placeholderTextColor={colors.textMuted}
+                    value={routeName}
+                    onChangeText={setRouteName}
+                    returnKeyType="done"
+                  />
+                  </>
+                )}
                 </Section>
                 <Divider />
                 </>
@@ -711,7 +811,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                       selected={grade}
                       onSystemChange={(sys) => { setGradeSystem(sys); setActiveSection('grade'); }}
                       onChange={(g) => { setGrade(g); setActiveSection('grade'); }}
-                      isBoulder={climbType === 'boulder'}
+                      isBoulder={climbType === 'boulder' || climbType === 'board'}
                       allowCustom={!isProject && !editProjectMode}
                     />
                     </Section>
@@ -957,26 +1057,45 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.namePromptBackdrop}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNamePromptOpen(false)} />
           <View style={[styles.namePromptCard, { backgroundColor: colors.bgCard }]}>
-            <Text style={[styles.namePromptHeading, { color: colors.textPrimary }]}>Name your project</Text>
-            <Text style={[styles.namePromptSub, { color: colors.textMuted }]}>Give this climb a name to track it as a project.</Text>
+            <Text style={[styles.namePromptHeading, { color: colors.textPrimary }]}>{namePrompt === 'board' ? 'Which board?' : 'Name your project'}</Text>
+            <Text style={[styles.namePromptSub, { color: colors.textMuted }]}>
+              {namePrompt === 'board' ? "Used for every Board climb this session, unless you change it." : 'Give this climb a name to track it as a project.'}
+            </Text>
             <View style={[styles.namePromptBox, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.textMuted, marginBottom: 0 }]}>PROJECT NAME</Text>
+              <Text style={[styles.label, { color: colors.textMuted, marginBottom: 0 }]}>{namePrompt === 'board' ? 'BOARD NAME' : 'PROJECT NAME'}</Text>
               <TextInput
                 style={[styles.namePromptInput, { color: colors.textPrimary }]}
                 defaultValue={promptNameValue.current}
                 onChangeText={t => { promptNameValue.current = t; }}
-                placeholder="e.g. The blue V5 in the cave"
+                placeholder={namePrompt === 'board' ? 'e.g. Kilter, Moon, Tension' : 'e.g. The blue V5 in the cave'}
                 placeholderTextColor={colors.textMuted}
                 autoFocus
                 returnKeyType="done"
-                onSubmitEditing={saveProjectName}
+                onSubmitEditing={namePrompt === 'board' ? saveBoardName : saveProjectName}
               />
             </View>
+            {namePrompt === 'board' && (
+              <View style={[styles.namePromptBox, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                <Text style={[styles.label, { color: colors.textMuted, marginBottom: 0 }]}>ANGLE (OPTIONAL)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TextInput
+                    style={[styles.namePromptInput, { color: colors.textPrimary, minWidth: 40 }]}
+                    defaultValue={promptAngleValue.current}
+                    onChangeText={t => { promptAngleValue.current = t; }}
+                    placeholder="40"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                  <Text style={[styles.namePromptInput, { color: colors.textMuted }]}>°</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.namePromptActions}>
               <TouchableOpacity style={[styles.namePromptSecondary, { borderColor: colors.border }]} onPress={() => setNamePromptOpen(false)} activeOpacity={0.7}>
                 <Text style={[styles.namePromptSecondaryText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.namePromptPrimary, { backgroundColor: colors.accent }]} onPress={saveProjectName} activeOpacity={0.8}>
+              <TouchableOpacity style={[styles.namePromptPrimary, { backgroundColor: colors.accent }]} onPress={namePrompt === 'board' ? saveBoardName : saveProjectName} activeOpacity={0.8}>
                 <Text style={styles.namePromptPrimaryText}>Save</Text>
               </TouchableOpacity>
             </View>

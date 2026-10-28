@@ -483,6 +483,9 @@ function climbToRow(c: Climb, userId: string) {
     // Only sent when set, so climbs without a hold color keep syncing even
     // if the hold_color column hasn't been added to the database yet.
     ...(c.holdColor ? { hold_color: c.holdColor } : {}),
+    // Board fields: same rule, so only Board climbs need supabase_board_fields.sql
+    ...(c.boardName ? { board_name: c.boardName } : {}),
+    ...(c.boardAngle != null ? { board_angle: c.boardAngle } : {}),
     location: c.location ?? null,
     notes: c.notes ?? null,
     // Always sent so clearing a routine also clears it in the cloud. Requires
@@ -541,6 +544,8 @@ export function rowToClimb(row: any): Climb {
     gradeSystem: row.grade_system,
     routeName: row.route_name ?? undefined,
     holdColor: row.hold_color ?? undefined,
+    boardName: row.board_name ?? undefined,
+    boardAngle: row.board_angle ?? undefined,
     location: row.location ?? undefined,
     notes: row.notes ?? undefined,
     routine: row.routine ?? undefined,

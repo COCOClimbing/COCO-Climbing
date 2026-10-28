@@ -400,12 +400,13 @@ function FriendDetailView({
     { id: 'top_rope', label: 'Top Rope' },
     { id: 'sport', label: 'Sport' },
     { id: 'trad', label: 'Trad' },
+    { id: 'board', label: 'Board' },
   ];
   const allSends = climbs.filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isTrainingClimb(c));
   const hardestByType = GRADED_TYPES.map(({ id, label }) => {
     const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (typeSends.length === 0) return { label, grade: null };
-    const sys = id === 'boulder' ? 'v-scale' : 'yds';
+    const sys = id === 'boulder' || id === 'board' ? 'v-scale' : 'yds';
     const best = [...typeSends].sort((a, b) => {
       const da = getGradeDifficulty(a.grade, a.grade_system);
       const db = getGradeDifficulty(b.grade, b.grade_system);
@@ -1585,6 +1586,8 @@ export default function FriendsScreen() {
             gradeSystem: c.grade_system,
             routeName: c.route_name,
             holdColor: c.hold_color,
+            boardName: c.board_name ?? undefined,
+            boardAngle: c.board_angle ?? undefined,
             location: c.location,
             notes: c.notes,
             routine: c.routine ?? undefined,
@@ -1627,6 +1630,7 @@ export default function FriendsScreen() {
               type: c.type, outcome: c.outcome, styles: c.styles ?? [],
               environment: c.environment, grade: c.grade, gradeSystem: c.grade_system,
               routeName: c.route_name, holdColor: c.hold_color, location: c.location, notes: c.notes, routine: c.routine ?? undefined,
+              boardName: c.board_name ?? undefined, boardAngle: c.board_angle ?? undefined,
               attempts: c.attempts, mediaUri: c.media_uri, mediaType: c.media_type,
               mediaUris: c.media_uris ?? (c.media_uri ? [c.media_uri] : undefined),
               mediaTypes: c.media_types ?? (c.media_type ? [c.media_type] : undefined),

@@ -133,12 +133,13 @@ export default function AccountScreen() {
       { id: 'top_rope', label: 'Top Rope' },
       { id: 'sport',    label: 'Sport' },
       { id: 'trad',     label: 'Trad' },
+      { id: 'board',    label: 'Board' },
     ] as const;
 
     const hardestByType: HardestByType[] = GRADED_TYPES.map(({ id, label }) => {
       const typeSends = sends.filter(c => c.type === id && !isCustomGrade(c.gradeSystem));
       if (typeSends.length === 0) return { label, grade: null, gradeSystem: null };
-      const preferredSys = id === 'boulder' ? boulderSys : ropeSys;
+      const preferredSys = id === 'boulder' || id === 'board' ? boulderSys : ropeSys;
       const best = typeSends
         .map(c => ({ converted: convertGrade(c.grade, c.gradeSystem, preferredSys) }))
         .sort((a, b) => {

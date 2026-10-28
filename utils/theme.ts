@@ -292,6 +292,7 @@ export const CLIMB_TYPES = [
   { id: 'sport',     label: 'Sport',      icon: 'S',  color: '#3D6CE8' }, // blue
   { id: 'trad',      label: 'Trad',       icon: 'T',  color: '#D7263D' }, // red
   { id: 'auto_belay',label: 'Auto Belay', icon: 'AB', color: '#8B4FE0' }, // violet
+  { id: 'board',     label: 'Board',      icon: 'BD', color: '#C9A227' }, // mustard (V grades, like boulder)
   { id: 'hangboard', label: 'Hangboard',  icon: 'HB', color: '#6BAA1F' }, // green
   { id: 'lift',      label: 'Lift',       icon: 'LF', color: '#8D99AE' }, // grey
 ] as const;
@@ -469,6 +470,8 @@ export interface Climb {
   projectId?: string;    // links this climb to a named project
   projectName?: string;  // display name of the project
   holdColor?: HoldColorId;  // gym hold color of the route (indoor climbs only)
+  boardName?: string;       // board climbs: which board (e.g. Kilter); the problem's name is routeName
+  boardAngle?: number;      // board climbs: board angle in degrees
 }
 
 export interface Session {

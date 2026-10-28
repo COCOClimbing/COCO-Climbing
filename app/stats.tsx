@@ -30,7 +30,7 @@ function gradeNum(c: Climb): number {
 const ROPE_TYPES = ['top_rope', 'sport', 'trad', 'auto_belay'];
 
 function hardestSend(climbs: Climb[], system: string): Climb | undefined {
-  const types = system === 'v-scale' ? ['boulder'] : system === 'font' ? ['boulder'] : ROPE_TYPES;
+  const types = system === 'v-scale' || system === 'font' ? ['boulder', 'board'] : ROPE_TYPES;
   return [...climbs]
     .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && c.gradeSystem === system && types.includes(c.type))
     .sort((a, b) => getGradeDifficulty(b.grade, b.gradeSystem) - getGradeDifficulty(a.grade, a.gradeSystem))[0];
@@ -446,12 +446,15 @@ export default function StatsScreen() {
             { id: 'sport',      label: 'Sport'      },
             { id: 'trad',       label: 'Trad'       },
             { id: 'auto_belay', label: 'Auto Belay' },
+            { id: 'board',      label: 'Board'      },
           ].map(t => ({ ...t, count: typeCounts[t.id] || 0 }))
            .sort((a, b) => b.count - a.count);
 
           const gridW = CARD_INNER_W;
           const BIG_SIZE = (gridW - SPACING.sm) / 2;
-          const SMALL_SIZE = (gridW - SPACING.sm * 2) / 3;
+          // Second row fits the rest of the types (4 since Board was added)
+          const smallCount = TYPES.length - 2;
+          const SMALL_SIZE = (gridW - SPACING.sm * (smallCount - 1)) / smallCount;
 
           function Square({ id, label, size }: { id: string; label: string; size: number }) {
             const best = [...sends].filter(c => c.type === id).sort((a, b) => getGradeDifficulty(b.grade, b.gradeSystem) - getGradeDifficulty(a.grade, a.gradeSystem))[0];
@@ -482,9 +485,7 @@ export default function StatsScreen() {
                 <Square id={TYPES[1].id} label={TYPES[1].label} size={BIG_SIZE} />
               </View>
               <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
-                <Square id={TYPES[2].id} label={TYPES[2].label} size={SMALL_SIZE} />
-                <Square id={TYPES[3].id} label={TYPES[3].label} size={SMALL_SIZE} />
-                <Square id={TYPES[4].id} label={TYPES[4].label} size={SMALL_SIZE} />
+                {TYPES.slice(2).map(t => <Square key={t.id} id={t.id} label={t.label} size={SMALL_SIZE} />)}
               </View>
             </View>
           );

@@ -5,6 +5,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
 import TrainingEntry from './TrainingEntry';
+import { boardLabel } from '../utils/sessionHelpers';
 import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
@@ -69,7 +70,7 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
       <View style={styles.midRow}>
         {!isTraining && (
           <Text style={[styles.typeLine, { color: colors.textSecondary }]}>
-            {`${typeInfo?.label ?? ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
+            {`${typeInfo?.label ?? ''}${climb.type === 'board' && climb.boardName ? ` · ${boardLabel(climb.boardName, climb.boardAngle)}` : ''}   ${climb.environment === 'outdoor' ? 'Outdoor' : 'Indoor'}`}
           </Text>
         )}
         {(climb.projectName || climb.routeName) && (

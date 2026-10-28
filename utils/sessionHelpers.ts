@@ -104,3 +104,9 @@ export function formatSessionLabel(s: DaySession): { top: string; bottom: string
     bottom: format(date, 'MMM d, yyyy'),
   };
 }
+
+// "Kilter 40°", or just "Kilter" with no angle
+export function boardLabel(name?: string, angle?: string | number) {
+  const a = angle != null && String(angle).trim() !== '' ? ` ${String(angle).trim()}°` : '';
+  return `${(name ?? '').trim()}${a}`;
+}

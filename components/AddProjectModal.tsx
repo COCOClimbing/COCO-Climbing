@@ -132,7 +132,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
                 <Pill key={ct.id} label={ct.label} selected={climbType === ct.id}
                   onPress={() => {
                     setClimbType(ct.id);
-                    if (ct.id === 'boulder') {
+                    if (ct.id === 'boulder' || ct.id === 'board') {
                       if (gradeSystem !== 'v-scale' && gradeSystem !== 'font') {
                         setGradeSystem('v-scale'); setGrade('V3');
                       }
@@ -154,7 +154,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               selected={grade}
               onSystemChange={(sys) => { setGradeSystem(sys as any); }}
               onChange={setGrade}
-              isBoulder={climbType === 'boulder'}
+              isBoulder={climbType === 'boulder' || climbType === 'board'}
               allowCustom={false}
             />
             <Divider />
