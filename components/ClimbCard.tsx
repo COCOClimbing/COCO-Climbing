@@ -5,6 +5,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
 import TrainingEntry from './TrainingEntry';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
   climb: Climb;
@@ -50,7 +51,18 @@ export default function ClimbCard({ climb, onPress, compact, onIncrementAttempts
             {climb.holdColor ? <HoldColorDot colorId={climb.holdColor} /> : null}
           </View>
         )}
-        {!isTraining && <OutcomeBadge outcome={climb.outcome} />}
+        {!isTraining && (
+          <View style={styles.badgeGroup}>
+            {/* Marks an attempt/send on one of the climber's own projects */}
+            {(climb.projectId || climb.projectName) && (
+              <View style={[styles.projectPill, { backgroundColor: colors.accent + '20' }]}>
+                <Ionicons name="flag" size={11} color={colors.accent} />
+                <Text style={[styles.projectPillText, { color: colors.accent }]}>Project</Text>
+              </View>
+            )}
+            <OutcomeBadge outcome={climb.outcome} />
+          </View>
+        )}
         {/* Lift/hangboard get a badge in their type color in the grade's spot, instead of a type line */}
         {isTraining && <GradeBadge grade={typeInfo?.label ?? ''} outcome="" colorOverride={typeInfo?.color} />}
       </View>
@@ -126,6 +138,10 @@ const styles = StyleSheet.create({
   cardCompact: { padding: SPACING.md, marginBottom: SPACING.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACING.sm },
   gradeGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  badgeGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Same size as OutcomeBadge so the two sit as a pair
+  projectPill: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 6, paddingHorizontal: SPACING.sm, paddingVertical: 3 },
+  projectPillText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.family.semibold, letterSpacing: 0.5 },
   midRow: { marginBottom: SPACING.sm },
   typeLine: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.medium, marginBottom: 3 },
   routeName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
