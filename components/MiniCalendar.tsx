@@ -64,19 +64,19 @@ function MonthGrid({ month, activeDates, dateTypeColors, selectedDate, onPressDa
                 <View
                   key={i}
                   pointerEvents="none"
-                  style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor: c }}
+                  style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2.25, borderColor: c }}
                 />
               );
             })}
             <View style={[
               styles.dayCircle,
-              hasClimbs && !today && { borderWidth: 1.5, borderColor: mainColor },
-              isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 1.5, borderColor: colors.accent },
+              hasClimbs && !today && { borderWidth: 2.25, borderColor: mainColor },
+              isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 2.25, borderColor: colors.accent },
               today && { backgroundColor: colors.accent },
             ]}>
               <Text style={[styles.dayNum, {
                 color: today ? '#000' : hasClimbs ? mainColor : isSelected ? colors.accent : colors.textPrimary,
-                fontFamily: isSelected || hasClimbs || today ? FONTS.family.bold : FONTS.family.regular,
+                fontFamily: FONTS.family.bold,
                 fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
               }]}>
                 {format(day, 'd')}
