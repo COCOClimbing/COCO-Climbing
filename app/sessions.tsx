@@ -393,7 +393,15 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   }
 
   // End Session: if the title or notes are blank, ask for them first (Skip ends as-is)
-  function requestEndSession() {
+  async function requestEndSession() {
+    // Nothing logged (no climbs, hangs or lifts): discard the session instead of posting it
+    if (activeSessionId && activeSession && activeSession.climbs.length === 0) {
+      Keyboard.dismiss();
+      setActiveSessionExpanded(false);
+      await deleteSession(activeSessionId);
+      await load();
+      return;
+    }
     // Take any text still being typed, not just what's been saved
     const title = (activeEditingTitle ? activeTitleInputValue.current : activeTitle).trim();
     const notes = (activeEditingNotes ? activeNotesInputValue.current : activeNotes).trim();
