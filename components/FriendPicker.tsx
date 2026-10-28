@@ -42,8 +42,12 @@ export default function FriendPicker({ selected, onChange, onOpenChange }: Props
       .finally(() => setLoading(false));
   }, [user?.id]);
 
+  // Changes in the sheet are a draft until the checkmark saves them; back cancels
+  const [draft, setDraft] = useState<{ id: string; name: string }[]>(selected);
+
   useEffect(() => {
     if (modalVisible) {
+      setDraft(selected);
       setQuery('');
       setTimeout(() => inputRef.current?.focus(), 100);
     }
@@ -51,13 +55,22 @@ export default function FriendPicker({ selected, onChange, onOpenChange }: Props
 
   const q = query.trim().toLowerCase();
   const suggestions = following.filter(f =>
-    !selected.some(s => s.id === f.id) &&
+    !draft.some(s => s.id === f.id) &&
     (q === '' || f.name?.toLowerCase().includes(q) || f.username?.toLowerCase().includes(q))
   );
 
   function handleSelect(f: FriendProfile) {
-    onChange([...selected, { id: f.id, name: f.name }]);
+    setDraft(d => [...d, { id: f.id, name: f.name }]);
     setQuery('');
+  }
+
+  function handleDraftRemove(id: string) {
+    setDraft(d => d.filter(s => s.id !== id));
+  }
+
+  function handleSave() {
+    onChange(draft);
+    close();
   }
 
   function handleRemove(id: string) {
@@ -122,16 +135,19 @@ export default function FriendPicker({ selected, onChange, onOpenChange }: Props
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Climbing With
             </Text>
-            {/* Empty slot balances the back button so the title stays centred */}
-            <View style={styles.headerBtn} />
+            <View style={[styles.headerBtn, styles.headerBtnRight]}>
+              <GHTouchableOpacity onPress={handleSave} style={[styles.backBtn, { backgroundColor: colors.accent }]} accessibilityLabel="Save">
+                <Ionicons name="checkmark" size={24} color="#fff" />
+              </GHTouchableOpacity>
+            </View>
           </View>
 
-          {selected.length > 0 && (
+          {draft.length > 0 && (
             <View style={[styles.chips, styles.modalChips]}>
-              {selected.map(s => (
+              {draft.map(s => (
                 <GHTouchableOpacity
                   key={s.id}
-                  onPress={() => handleRemove(s.id)}
+                  onPress={() => handleDraftRemove(s.id)}
                   style={[styles.chip, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
                   activeOpacity={0.7}
                 >
@@ -264,6 +280,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { minWidth: 60 },
+  headerBtnRight: { alignItems: 'flex-end' },
   // Same look as the app's round back button (FloatingBackButton), but a gesture-handler
   // touchable so it works inside this sheet like its other buttons
   backBtn: {

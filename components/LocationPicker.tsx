@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
-  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated,
+  FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Keyboard,
 } from 'react-native';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -174,10 +174,11 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
     close();
   }
 
+  // Picking a result only fills the box; the checkmark saves it
   function handleSelect(name: string) {
-    saveRecentLocation(name);
-    onChange(name);
-    close();
+    setSearchText(name);
+    setSearchResults([]);
+    Keyboard.dismiss();
   }
 
   function handleClear() {
@@ -235,16 +236,19 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <View style={styles.headerBtn}>
-              {/* Back keeps whatever was typed (there's no Done button) */}
-              <GHTouchableOpacity onPress={() => handleConfirm(searchText)} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
+              {/* Back cancels; the checkmark saves */}
+              <GHTouchableOpacity onPress={close} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
                 <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
               </GHTouchableOpacity>
             </View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Location
             </Text>
-            {/* Empty slot balances the back button so the title stays centred */}
-            <View style={styles.headerBtn} />
+            <View style={[styles.headerBtn, styles.headerBtnRight]}>
+              <GHTouchableOpacity onPress={() => handleConfirm(searchText)} style={[styles.backBtn, { backgroundColor: colors.accent }]} accessibilityLabel="Save">
+                <Ionicons name="checkmark" size={24} color="#fff" />
+              </GHTouchableOpacity>
+            </View>
           </View>
 
           {/* Search input */}
@@ -272,7 +276,7 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
                 value={searchText}
                 onChangeText={setSearchText}
                 returnKeyType="done"
-                onSubmitEditing={() => handleConfirm(searchText)}
+                onSubmitEditing={() => Keyboard.dismiss()}
                 autoCorrect={false}
               />
             </View>
@@ -416,6 +420,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerBtn: { minWidth: 60 },
+  headerBtnRight: { alignItems: 'flex-end' },
   // Same look as the app's round back button (FloatingBackButton), but a gesture-handler
   // touchable so it works inside this sheet like its other buttons
   backBtn: {
