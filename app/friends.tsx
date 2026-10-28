@@ -90,6 +90,7 @@ import StatusBarFade from '../components/StatusBarFade';
 import DetailScreen, { useDetailTopInset } from '../components/DetailScreen';
 import FloatingBackButton from '../components/FloatingBackButton';
 import { useEdgeSwipeBack } from '../utils/useEdgeSwipeBack';
+import { useTabSwipe } from '../utils/useTabSwipe';
 import PushScreen from '../components/PushScreen';
 import DiscussionScreen from '../components/DiscussionScreen';
 
@@ -220,6 +221,7 @@ function FriendDetailView({
   const [preferredRope, setPreferredRope] = useState('yds');
   const [bio, setBio] = useState<string | null>(friend.bio ?? null);
   const [profileTab, setProfileTab] = useState<FriendTab>('progress');
+  const tabSwipe = useTabSwipe<FriendTab>(FRIEND_TABS.map(t => t.id), profileTab, setProfileTab);
   const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
 
   // Gallery photos load the first time the tab is opened (they need the
@@ -447,6 +449,8 @@ function FriendDetailView({
   return (
     <View {...edgeSwipe} style={[detailStyles.container, { backgroundColor: colors.bg }]}>
 
+      {/* Swipe sideways to move between Progress / Sessions / Gallery */}
+      <View style={{ flex: 1 }} {...tabSwipe.panHandlers}>
       <PhotoClipContext.Provider value={scrollRef}>
       <ScrollView
         ref={scrollRef}
@@ -575,6 +579,7 @@ function FriendDetailView({
 
           <UnderlineTabs<FriendTab> tabs={FRIEND_TABS} value={profileTab} onChange={setProfileTab} />
 
+          <Animated.View style={tabSwipe.slideStyle}>
           {profileTab === 'gallery' ? (
             <View style={{ marginTop: 2 }}>
               <PhotoGallery
@@ -676,10 +681,12 @@ function FriendDetailView({
             )}
           </View>
           )}
+          </Animated.View>
           </>
         )}
       </ScrollView>
       </PhotoClipContext.Provider>
+      </View>
 
       {/* The profile scrolls up under the status bar, like the main tabs. */}
       <StatusBarFade />

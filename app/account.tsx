@@ -11,6 +11,7 @@ import {
   Modal,
   Switch,
   Share,
+  Animated,
 } from 'react-native';
 import GradeChart from '../components/GradeChart';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,6 +30,7 @@ import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
+import { useTabSwipe } from '../utils/useTabSwipe';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
 import PushScreen from '../components/PushScreen';
@@ -49,6 +51,7 @@ export default function AccountScreen() {
 
   const [friendCounts, setFriendCounts] = useState<{ followers: number; following: number } | null>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('progress');
+  const tabSwipe = useTabSwipe<ProfileTab>(PROFILE_TABS.map(t => t.id), profileTab, setProfileTab);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
   const [followListModal, setFollowListModal] = useState<'following' | 'followers' | null>(null);
@@ -317,6 +320,8 @@ export default function AccountScreen() {
   }
 
   return (
+    // Swipe sideways to move between Progress / Gallery
+    <View style={{ flex: 1 }} {...tabSwipe.panHandlers}>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
       contentContainerStyle={[styles.scroll, { paddingTop: topInset, paddingBottom: tabBarSpace }]}
@@ -392,13 +397,15 @@ export default function AccountScreen() {
       {/* Last 30 days, then a Progress / Gallery toggle */}
       {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="month" />}
       <UnderlineTabs<ProfileTab> tabs={PROFILE_TABS} value={profileTab} onChange={setProfileTab} />
+      <Animated.View style={tabSwipe.slideStyle}>
       {profileTab === 'progress' ? (
-        climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="progress" />
-      ) : (
-        <View style={styles.gallery}>
-          <PhotoGallery uris={galleryUris ?? []} loading={galleryUris === null} emptyText="Photos you add to sessions and climbs show up here." />
-        </View>
-      )}
+          climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="progress" />
+        ) : (
+          <View style={styles.gallery}>
+            <PhotoGallery uris={galleryUris ?? []} loading={galleryUris === null} emptyText="Photos you add to sessions and climbs show up here." />
+          </View>
+        )}
+      </Animated.View>
 
       {/* Avatar preview / confirm modal */}
       <Modal
@@ -676,6 +683,7 @@ export default function AccountScreen() {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Animated } from 'react-native';
 import { useNav } from '../utils/NavigationContext';
 import { useHeaderScrollContext } from '../utils/HeaderScroll';
 import { useTheme } from '../utils/ThemeContext';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
+import { useTabSwipe } from '../utils/useTabSwipe';
 import ProjectsScreen from './projects';
 
 type View_ = 'sessions' | 'projects' | 'calendar';
@@ -22,6 +23,9 @@ export default function SessionsHub() {
   const { headerHidden } = useHeaderScrollContext();
   const { colors } = useTheme();
   const [view, setView] = useState<View_>('sessions');
+  // Swipe sideways to move between Sessions / Projects / Calendar (off while a
+  // session's detail view is open, which hides the tabs)
+  const tabSwipe = useTabSwipe<View_>(VIEWS.map(v => v.id), view, setView, !headerHidden);
 
   // Jumping to a specific session (e.g. from Stats) must land on the sessions view.
   useEffect(() => {
@@ -29,7 +33,7 @@ export default function SessionsHub() {
   }, [pendingSessionId]);
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} {...tabSwipe.panHandlers}>
       {/* Hidden while a session's detail view fills the screen. */}
       {/* Soft shadow (matching the header's round buttons) so the list
           scrolls visibly underneath the pinned toggle. */}
@@ -38,13 +42,13 @@ export default function SessionsHub() {
           <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />
         </View>
       )}
-      <View style={styles.root}>
+      <Animated.View style={[styles.root, tabSwipe.slideStyle]}>
         {/* Sessions and Calendar are one SessionsScreen instance, so switching
             between them keeps its loaded data. */}
         {view === 'projects'
           ? <ProjectsScreen />
           : <SessionsScreen calendarMode={view === 'calendar'} onShowList={() => setView('sessions')} />}
-      </View>
+      </Animated.View>
     </View>
   );
 }
