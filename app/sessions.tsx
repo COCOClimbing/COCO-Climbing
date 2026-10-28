@@ -156,6 +156,10 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const [activeNotes, setActiveNotes] = useState('');
   const [activeEditingNotes, setActiveEditingNotes] = useState(false);
   const activeNotesInputValue = useRef('');
+  // "Add a title / notes?" prompt shown on End Session when either is blank
+  const [endPrompt, setEndPrompt] = useState<{ title: string; notes: string } | null>(null);
+  const endPromptTitle = useRef('');
+  const endPromptNotes = useRef('');
   const [activeFriends, setActiveFriends] = useState<{ id: string; name: string }[]>([]);
   const [activeLocation, setActiveLocation] = useState('');
   const [activeMediaItems, setActiveMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
@@ -374,6 +378,47 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     triggerFeedRefresh();
     if (user) syncSessionToCloud(updatedSession, user.id).catch(() => {});
     setDays(prev => prev.map(d => d.sessionId === sessionId ? { ...d, title: newTitle || undefined, notes, friends, location: location || undefined, mediaUris: mediaUris ?? [], mediaTypes: mediaTypes ?? [] } : d));
+  }
+
+  // Ends the active session as it stands; once ended it shows in the activity feed
+  async function finishActiveSession() {
+    setActiveSessionExpanded(false);
+    if (activeSessionId) {
+      await endSession(activeSessionId);
+      const sessions = await getAllSessions();
+      const ended = sessions.find(s => s.id === activeSessionId);
+      if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
+    }
+    await load();
+  }
+
+  // End Session: if the title or notes are blank, ask for them first (Skip ends as-is)
+  function requestEndSession() {
+    // Take any text still being typed, not just what's been saved
+    const title = (activeEditingTitle ? activeTitleInputValue.current : activeTitle).trim();
+    const notes = (activeEditingNotes ? activeNotesInputValue.current : activeNotes).trim();
+    Keyboard.dismiss();
+    if (title && notes) { finishActiveSession(); return; }
+    endPromptTitle.current = title;
+    endPromptNotes.current = notes;
+    setEndPrompt({ title, notes });
+  }
+
+  async function saveAndEndFromPrompt() {
+    const title = endPromptTitle.current.trim();
+    const notes = endPromptNotes.current.trim();
+    setEndPrompt(null);
+    if (activeSession) {
+      setActiveTitle(title);
+      setActiveNotes(notes);
+      await handleSaveActiveSessionMeta(activeSession.sessionId, notes, activeFriends, activeLocation, activeMediaItems, title);
+    }
+    await finishActiveSession();
+  }
+
+  function skipFromPrompt() {
+    setEndPrompt(null);
+    finishActiveSession();
   }
 
   async function handlePickActiveSessionMedia(sessionId: string, currentMediaItems: { uri: string; type: 'photo' | 'video' }[], setMediaItems: (items: { uri: string; type: 'photo' | 'video' }[]) => void, notes: string, friends: { id: string; name: string }[], location: string) {
@@ -840,15 +885,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           <View style={[styles.detailActions, { marginTop: SPACING.md }]}>
             <TouchableOpacity
               style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
-              onPress={async () => {
-                if (activeSessionId) {
-                  await endSession(activeSessionId);
-                  const sessions = await import('../utils/storage').then(m => m.getAllSessions());
-                  const ended = sessions.find(s => s.id === activeSessionId);
-                  if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
-                }
-                await load();
-              }}
+              onPress={requestEndSession}
               activeOpacity={0.8}
             >
               <Text style={styles.logClimbBtnText}>End Session</Text>
@@ -1066,16 +1103,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
           <View style={styles.detailActions}>
             <TouchableOpacity
               style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]}
-              onPress={async () => {
-                setActiveSessionExpanded(false);
-                if (activeSessionId) {
-                  await endSession(activeSessionId);
-                  const sessions = await import('../utils/storage').then(m => m.getAllSessions());
-                  const ended = sessions.find(s => s.id === activeSessionId);
-                  if (ended && user) syncSessionToCloud(ended, user.id).catch(() => {});
-                }
-                await load();
-              }}
+              onPress={requestEndSession}
               activeOpacity={0.8}
             >
               <Text style={styles.logClimbBtnText}>End Session</Text>
@@ -1425,6 +1453,55 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
         selectedDate={changeDateSession?.date}
         mode="pick"
       />
+      <Modal visible={!!endPrompt} transparent animationType="fade" onRequestClose={() => setEndPrompt(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.endPromptBackdrop}>
+          {/* Tapping outside the card cancels without ending */}
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setEndPrompt(null)} />
+          {endPrompt && (
+            <View style={[styles.endPromptCard, { backgroundColor: colors.bgCard }]}>
+              <Text style={[styles.endPromptHeading, { color: colors.textPrimary }]}>Before you wrap up</Text>
+              <Text style={[styles.endPromptSub, { color: colors.textMuted }]}>Add a title and notes for the feed?</Text>
+
+              <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>TITLE</Text>
+                <AutoGrowTextInput
+                  style={[styles.endPromptTitleInput, { color: colors.textPrimary }]}
+                  defaultValue={endPrompt.title}
+                  onChangeText={t => { endPromptTitle.current = t; }}
+                  placeholder={activeSession ? sessionTimeOfDay(activeSession) : 'Add a Title'}
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus={!endPrompt.title}
+                  returnKeyType="next"
+                  submitBehavior="blurAndSubmit"
+                />
+              </View>
+
+              <View style={[styles.metaCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>NOTES</Text>
+                <AutoGrowTextInput
+                  style={[styles.sessionNote, styles.sessionNoteInput, { color: colors.textPrimary, maxHeight: 160 }]}
+                  defaultValue={endPrompt.notes}
+                  onChangeText={t => { endPromptNotes.current = t; }}
+                  placeholder="How'd the session go?"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus={!!endPrompt.title && !endPrompt.notes}
+                  returnKeyType="done"
+                  submitBehavior="blurAndSubmit"
+                />
+              </View>
+
+              <View style={styles.detailActions}>
+                <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border, flex: 1 }]} onPress={skipFromPrompt} activeOpacity={0.7}>
+                  <Text style={[styles.secondaryBtnText, { color: colors.textSecondary }]}>Skip</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.logClimbBtn, { backgroundColor: colors.accent, flex: 1 }]} onPress={saveAndEndFromPrompt} activeOpacity={0.8}>
+                  <Text style={styles.logClimbBtnText}>Save & End</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </Modal>
       <ShareModal
         visible={!!shareDay}
         data={shareDay ? {
@@ -1533,4 +1610,11 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.semibold,
     letterSpacing: 1.2,
   },
+
+  // End-session prompt
+  endPromptBackdrop: { flex: 1, justifyContent: 'center', padding: SPACING.lg, backgroundColor: 'rgba(0,0,0,0.45)' },
+  endPromptCard: { borderRadius: 16, padding: SPACING.lg, gap: SPACING.md },
+  endPromptHeading: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.bold },
+  endPromptSub: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, marginTop: -SPACING.sm },
+  endPromptTitleInput: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.semibold, padding: 0, margin: 0 },
 });
