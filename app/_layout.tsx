@@ -35,6 +35,9 @@ import LoginScreen from './login';
 import AccountScreen from './account';
 import FriendsScreen from './friends';
 import WelcomeScreen, { hasSeenWelcome } from './welcome';
+
+// Turn back on once the four welcome slides are redesigned.
+const SHOW_WELCOME_SLIDES = false;
 import OnboardingScreen, { getOnboardingPrefs } from './onboarding';
 import { getCloudProfile } from '../utils/cloudSync';
 import { restoreActiveSession } from '../utils/storage';
@@ -85,8 +88,10 @@ function AppShell({ onReady }: { onReady: () => void }) {
     return () => clearTimeout(t);
   }, []);
 
-  // Load welcome flag once on mount
+  // Load welcome flag once on mount. While the welcome slides are being
+  // redesigned, treat them as seen so new users go straight to login.
   useEffect(() => {
+    if (!SHOW_WELCOME_SLIDES) { setWelcomeSeen(true); return; }
     hasSeenWelcome().then(seen => setWelcomeSeen(seen));
   }, []);
 
