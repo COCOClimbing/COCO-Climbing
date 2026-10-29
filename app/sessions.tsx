@@ -78,7 +78,7 @@ function AutoGrowTextInput({ style, containerStyle, onChangeText, defaultValue, 
 export default function SessionsScreen({ calendarMode = false, onShowList }: { calendarMode?: boolean; onShowList?: () => void } = {}) {
   const { colors } = useTheme();
   const { user, avatarUrl, localAvatarUri } = useAuth();
-  const { tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, viewFriendProfile } = useNav();
+  const { screen, tabResetCount, pendingSessionId: navPendingSessionId, clearPendingSessionId, viewFriendProfile } = useNav();
   const tabBarSpace = useTabBarSpace();
   const detailTopInset = useDetailTopInset();
 
@@ -92,6 +92,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   useEffect(() => {
     if (tabResetCount['sessions']) { setSelectedDay(null); setActiveSessionExpanded(false); }
   }, [tabResetCount['sessions']]);
+
+  // Leaving the tab closes a past session (like tapping back), so coming back
+  // shows the list. An open active session stays open.
+  useEffect(() => {
+    if (screen !== 'sessions') setSelectedDay(null);
+  }, [screen]);
 
   useEffect(() => {
     if (!navPendingSessionId) return;
