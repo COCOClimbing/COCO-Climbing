@@ -30,6 +30,22 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
   const onSwipeEndRef = useRef(onSwipeEnd);
   useEffect(() => { onSwipeStartRef.current = onSwipeStart; }, [onSwipeStart]);
   useEffect(() => { onSwipeEndRef.current = onSwipeEnd; }, [onSwipeEnd]);
+  // The PanResponder is built once, so it reads these refs to see current props
+  // (e.g. a climb marked sent loses its right-swipe action).
+  const hasRightRef = useRef(!!rightAction);
+  hasRightRef.current = !!rightAction;
+  const disabledRef = useRef(!!disabled);
+  disabledRef.current = !!disabled;
+
+  useEffect(() => {
+    // Right action removed (e.g. climb marked sent): force the card closed.
+    // Unmounting the right button can cut a running close animation short and
+    // leave the card drawn open, so restart it even if currentX already says 0.
+    if (!rightAction && currentX.current >= 0) {
+      translateX.stopAnimation();
+      snapClosed();
+    }
+  }, [!!rightAction]);
 
   useEffect(() => {
     if (disabled) {
@@ -44,9 +60,9 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
     PanResponder.create({
       // Capture phase — runs before navigation gesture handlers. When the card
       // is open, grab the touch here so rightward swipe-to-close wins.
-      onStartShouldSetPanResponderCapture: () => !disabled && currentX.current !== 0,
+      onStartShouldSetPanResponderCapture: () => !disabledRef.current && currentX.current !== 0,
       onMoveShouldSetPanResponder: (_, g) =>
-        !disabled && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        !disabledRef.current && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
       // Keep the swipe once it starts, so a page's tab swipe can't take it over
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
@@ -57,13 +73,13 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
       onPanResponderMove: (_, g) => {
         // Clamp the TOTAL position (offset + delta), not just the delta.
         // Without this, swiping right on a partially-revealed card does nothing.
-        const max = rightAction ? REVEAL : 0;
+        const max = hasRightRef.current ? REVEAL : 0;
         const clamped = Math.min(max, Math.max(-REVEAL, currentX.current + g.dx));
         translateX.setValue(clamped - currentX.current);
       },
       onPanResponderRelease: (_, g) => {
         translateX.flattenOffset();
-        const max = rightAction ? REVEAL : 0;
+        const max = hasRightRef.current ? REVEAL : 0;
         const total = Math.min(max, Math.max(-REVEAL, currentX.current + g.dx));
         onSwipeEndRef.current?.();
         if (total < -(REVEAL / 2)) {
@@ -71,7 +87,7 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
           Animated.spring(translateX, {
             toValue: -REVEAL, useNativeDriver: true, bounciness: 0, speed: 20,
           }).start();
-        } else if (rightAction && total > REVEAL / 2) {
+        } else if (hasRightRef.current && total > REVEAL / 2) {
           currentX.current = REVEAL;
           Animated.spring(translateX, {
             toValue: REVEAL, useNativeDriver: true, bounciness: 0, speed: 20,
@@ -83,11 +99,11 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
     })
   ).current;
 
-  function snapClosed() {
+  function snapClosed(onDone?: () => void) {
     currentX.current = 0;
     Animated.spring(translateX, {
       toValue: 0, useNativeDriver: true, bounciness: 0, speed: 20,
-    }).start();
+    }).start(() => onDone?.());
   }
 
   const btnOpacity = translateX.interpolate({
@@ -134,7 +150,7 @@ export default function SwipeToDelete({ children, onDelete, disabled, heightOffs
         }]}>
           <TouchableOpacity
             style={styles.btnInner}
-            onPress={() => { snapClosed(); setTimeout(rightAction.onPress, 150); }}
+            onPress={() => { const run = rightAction.onPress; snapClosed(run); }}
             activeOpacity={0.8}
           >
             <Text style={[styles.btnTxt, { fontFamily: FONTS.family.semibold }]}>{rightAction.label}</Text>
