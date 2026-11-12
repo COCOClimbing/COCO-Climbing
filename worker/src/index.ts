@@ -21,6 +21,10 @@ async function getUserId(auth: string, env: Env): Promise<string | null> {
   }
 }
 
+// Compressed 60s clips are ~10-20 MB; this leaves room while staying well
+// under Cloudflare's 100 MB request limit.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -56,8 +60,14 @@ export default {
       const file = formData.get('file') as File | null;
       if (!file) return new Response('Missing file', { status: 400 });
 
+      // Videos must be served as video/mp4 or iOS won't play them; anything
+      // else keeps the old image/jpeg default.
+      if (file.size > MAX_UPLOAD_BYTES) {
+        return new Response('File too large', { status: 413 });
+      }
+      const contentType = /\.mp4$/i.test(path) ? 'video/mp4' : 'image/jpeg';
       await env.BUCKET.put(path, file.stream(), {
-        httpMetadata: { contentType: 'image/jpeg' },
+        httpMetadata: { contentType },
       });
 
       return Response.json({ url: `${env.R2_PUBLIC_BASE_URL}/${path}` });
