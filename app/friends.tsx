@@ -442,7 +442,7 @@ function FriendDetailView({
     return { label, grade: convertGrade(best.grade, best.grade_system, sys) };
   });
 
-  // Avg grade sent per session (last 30 sessions), as on your own profile:
+  // Avg grade sent per session (every session; the chart picks the range), as on your own profile:
   // only sends in the grade system they use most, so averages are comparable.
   const sysCounts: Record<string, number> = {};
   allSends.filter(c => c.grade_system && !isCustomGrade(c.grade_system)).forEach(c => { sysCounts[c.grade_system] = (sysCounts[c.grade_system] || 0) + 1; });
@@ -455,12 +455,12 @@ function FriendDetailView({
     if (!prev || d < prev) sessionDates.set(c.session_id, d);
   });
   const sessionPoints = [...sessionDates.entries()]
-    .sort((a, b) => b[1].localeCompare(a[1])).slice(0, 30).reverse()
+    .sort((a, b) => a[1].localeCompare(b[1]))
     .map(([sessionId, date]) => {
       const sessionSends = allSends.filter(c => c.session_id === sessionId && c.grade_system === dominantSys);
       if (sessionSends.length === 0) return null;
       const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
-      return { date: date.slice(5, 10), avg };
+      return { date: date.slice(0, 10), avg };
     })
     .filter(Boolean) as { date: string; avg: number }[];
 

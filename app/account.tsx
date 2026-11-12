@@ -159,12 +159,13 @@ export default function AccountScreen() {
     sends.filter(c => !isCustomGrade(c.gradeSystem)).forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
     const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
 
-    const recentSessions = [...sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30).reverse();
+    // Every session, oldest first; the chart's range toggle picks the window
+    const recentSessions = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
     const sessionPoints = recentSessions.map(s => {
       const sessionSends = sends.filter(c => c.sessionId === s.id && c.gradeSystem === dominantSys);
       if (sessionSends.length === 0) return null;
       const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
-      return { date: s.date.slice(5, 10), avg };
+      return { date: s.date.slice(0, 10), avg };
     }).filter(Boolean) as { date: string; avg: number }[];
 
     setClimbStats({

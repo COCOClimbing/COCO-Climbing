@@ -13,6 +13,7 @@ import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
 import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
+import ChartRangeToggle, { ChartRange, DEFAULT_CHART_RANGE, filterByRange, rangeDateLabel } from '../components/ChartRangeToggle';
 import { parseISO, differenceInDays } from 'date-fns';
 
 const W = Dimensions.get('window').width;
@@ -134,6 +135,7 @@ export default function StatsScreen() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartRange, setChartRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
 
   // Only the first load shows the spinner; later refreshes (e.g. cloud sync
   // finishing after launch) update the stats in place.
@@ -317,16 +319,13 @@ export default function StatsScreen() {
       climbsBySession[key].climbs.push(c);
     });
     // One point per session; several sessions can share a date, so key by session
-    const chartPoints = Object.entries(climbsBySession)
+    // Every session; the range toggle picks the window below
+    const allChartPoints = Object.entries(climbsBySession)
       .sort(([, a], [, b]) => a.date.localeCompare(b.date))
       .map(([key, { date, climbs: sc }]) => {
         const avg = sc.reduce((sum, c) => sum + gradeNum(c), 0) / sc.length;
         return { key, date, val: avg };
       });
-    const chartVals = chartPoints.map(p => p.val);
-    const minVal = Math.min(...chartVals);
-    const maxVal = Math.max(...chartVals);
-    const valRange = maxVal - minVal || 1;
 
     return {
       sends, flashes, projects, sendRate, flashRate,
@@ -335,7 +334,7 @@ export default function StatsScreen() {
       topStyles, typeCounts, topTypes, maxTypeCount,
       longestStreak, favLocation,
       avgPerSession, biggestSession, mostActiveMonth,
-      outdoorSends, dominantSys, chartPoints, minVal, valRange,
+      outdoorSends, dominantSys, allChartPoints,
     };
   }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
@@ -364,8 +363,14 @@ export default function StatsScreen() {
     topStyles, typeCounts, topTypes, maxTypeCount,
     longestStreak, favLocation,
     avgPerSession, biggestSession, mostActiveMonth,
-    outdoorSends, dominantSys, chartPoints, minVal, valRange,
+    outdoorSends, dominantSys, allChartPoints,
   } = computed;
+
+  const chartPoints = filterByRange(allChartPoints, chartRange);
+  const chartVals = chartPoints.map(p => p.val);
+  const minVal = Math.min(...chartVals);
+  const maxVal = Math.max(...chartVals);
+  const valRange = maxVal - minVal || 1;
 
   const innerW = CHART_W - PAD.left - PAD.right;
   const innerH = CHART_H - PAD.top - PAD.bottom;
@@ -531,11 +536,19 @@ export default function StatsScreen() {
         })}
 
         {/* Progress chart */}
-        {chartPoints.length >= 2 && (
+        {allChartPoints.length >= 2 && (
           <View style={{ marginTop: SPACING.lg }}>
             <Text style={[ss.chartCaption, { color: colors.textMuted }]}>
               Avg Grade Attempted Per Session
             </Text>
+            <ChartRangeToggle value={chartRange} onChange={setChartRange} colors={colors} />
+            {chartPoints.length < 2 ? (
+              <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: colors.textMuted, fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular }}>
+                  Not enough sessions in this range
+                </Text>
+              </View>
+            ) : (
             <Svg width={CHART_W} height={CHART_H}>
               {[0, 0.5, 1].map(t => {
                 const val = minVal + t * valRange;
@@ -556,16 +569,18 @@ export default function StatsScreen() {
               />
               {chartPoints.map((p, i) => (
                 <React.Fragment key={p.key}>
-                  <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />
+                  {/* Dots get crowded over long ranges; drop them past ~40 sessions */}
+                  {chartPoints.length <= 40 && <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />}
                   {(i === 0 || i === chartPoints.length - 1) && (
                     // Right-align the last date so it doesn't run off the chart's narrow right edge
                     <SvgText x={cx(i)} y={CHART_H - 2} fontSize={8} fill={colors.textMuted} textAnchor={i === chartPoints.length - 1 ? 'end' : 'middle'} fontFamily={FONTS.family.regular}>
-                      {p.date.slice(5)}
+                      {rangeDateLabel(p.date, chartRange)}
                     </SvgText>
                   )}
                 </React.Fragment>
               ))}
             </Svg>
+            )}
           </View>
         )}
         </StatCard>
