@@ -78,6 +78,7 @@ import {
   getFriendSessionSummaries,
   getProfileById,
   getOpenSessionIds,
+  finishedSessions,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -250,8 +251,8 @@ function FriendDetailView({
   async function loadClimbs() {
     setLoadingClimbs(true);
     try {
-      const [all, open] = await Promise.all([getFriendAllClimbs(friend.id), getOpenSessionIds(friend.id)]);
-      setOpenSessionIds(open);
+      const all = await getFriendAllClimbs(friend.id);
+      setOpenSessionIds(await getOpenSessionIds(friend.id, all));
       setClimbs(all);
     } catch { setClimbs([]); }
     setLoadingClimbs(false);
@@ -314,9 +315,11 @@ function FriendDetailView({
     }
   }
 
-  // Dates of climbs the Sessions list can show (not in an unfinished session)
-  const listableClimbDates = climbs
-    .filter(c => !c.session_id || !openSessionIds.has(c.session_id))
+  // Climbs in a session still in progress don't count anywhere on the profile
+  // (stats, chart, Sessions list) until it's closed or idle for 1.5 hours.
+  const countedClimbs = climbs.filter(c => !c.session_id || !openSessionIds.has(c.session_id));
+  // Dates of climbs the Sessions list can show
+  const listableClimbDates = countedClimbs
     .map(c => (c.date ?? '').slice(0, 10))
     .filter(Boolean);
   function cutoffFor(days: number) {
@@ -408,10 +411,7 @@ function FriendDetailView({
   const now = new Date();
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const monthStart = thirtyDaysAgo.toISOString().slice(0, 10);
-  // Climbs in a session that hasn't been ended yet don't count until it's closed
-  const monthClimbs = climbs.filter(c =>
-    normDate(c.date) >= monthStart && !isTrainingClimb(c) && !(c.session_id && openSessionIds.has(c.session_id))
-  );
+  const monthClimbs = countedClimbs.filter(c => normDate(c.date) >= monthStart && !isTrainingClimb(c));
   const monthSends = monthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
 
   const BOULDER_SYSTEMS = new Set(['v-scale', 'font']);
@@ -429,7 +429,7 @@ function FriendDetailView({
     { id: 'trad', label: 'Trad' },
     { id: 'board', label: 'Board' },
   ];
-  const allSends = climbs.filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isTrainingClimb(c));
+  const allSends = countedClimbs.filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isTrainingClimb(c));
   const hardestByType = GRADED_TYPES.map(({ id, label }) => {
     const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (typeSends.length === 0) return { label, grade: null };
@@ -448,7 +448,7 @@ function FriendDetailView({
   allSends.filter(c => c.grade_system && !isCustomGrade(c.grade_system)).forEach(c => { sysCounts[c.grade_system] = (sysCounts[c.grade_system] || 0) + 1; });
   const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
   const sessionDates = new Map<string, string>();
-  climbs.forEach(c => {
+  countedClimbs.forEach(c => {
     if (!c.session_id) return;
     const d = normDate(c.date);
     const prev = sessionDates.get(c.session_id);
@@ -644,7 +644,7 @@ function FriendDetailView({
             <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>TOTALS</Text>
             <View style={detailStyles.hardestRow}>
               {[
-                { label: 'Climbs', value: String(climbs.reduce((s: number, c: any) => s + climbCount(c), 0)) },
+                { label: 'Climbs', value: String(countedClimbs.reduce((s: number, c: any) => s + climbCount(c), 0)) },
                 { label: 'Sends', value: String(allSends.length) },
               ].map(item => (
                 <View key={item.label} style={detailStyles.hardestItem}>
@@ -1192,8 +1192,10 @@ export default function FriendsScreen() {
         if (!climbsByFriend.has(c.user_id)) climbsByFriend.set(c.user_id, []);
         climbsByFriend.get(c.user_id)!.push(c);
       });
+      // Finished sessions only: ended, or idle 1.5h since the last climb
+      const friendsSessionsDone = finishedSessions(friendsSessionsRaw, friendsClimbsRaw);
       const sessionsByFriend = new Map<string, any[]>();
-      friendsSessionsRaw.forEach((s: any) => {
+      friendsSessionsDone.forEach((s: any) => {
         if (!sessionsByFriend.has(s.user_id)) sessionsByFriend.set(s.user_id, []);
         sessionsByFriend.get(s.user_id)!.push(s);
       });
@@ -1204,7 +1206,7 @@ export default function FriendsScreen() {
       validTagged.forEach(({ session: s }) => {
         (s.friends ?? []).forEach((f: any) => allPartnerIds.add(f.id));
       });
-      friendsSessionsRaw.forEach((s: any) => {
+      friendsSessionsDone.forEach((s: any) => {
         (s.friends ?? []).forEach((f: any) => allPartnerIds.add(f.id));
       });
       let partnerProfileMap = new Map<string, any>();
@@ -1288,8 +1290,8 @@ export default function FriendsScreen() {
             friendSessions.filter((s: any) => s.started_at).map((s: any) => [s.id, s.started_at])
           );
 
-          // friendSessions only contains sessions with ended_at set. Climbs whose
-          // session_id isn't in that set belong to a session still in progress —
+          // friendSessions only contains finished sessions (ended, or idle 1.5h).
+          // Climbs whose session_id isn't in that set belong to a session still in progress —
           // exclude them so open sessions don't leak into the activity feed.
           const endedSessionIds = new Set(friendSessions.map((s: any) => s.id));
           const eligibleClimbs = climbs.filter((c: any) => !c.session_id || endedSessionIds.has(c.session_id));

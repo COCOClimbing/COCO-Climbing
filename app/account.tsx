@@ -28,7 +28,7 @@ import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../u
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
-import { getAllClimbs, getAllSessions, getActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
+import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
@@ -114,15 +114,18 @@ export default function AccountScreen() {
     setPreferredBoulder(boulderSys);
     setPreferredRope(ropeSys);
 
-    const [climbs, sessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+    // The session still in progress doesn't count anywhere on the profile until
+    // it's ended. getValidActiveSessionId also auto-ends one idle for 1.5 hours.
+    const activeId = await getValidActiveSessionId();
+    const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+    const climbs = activeId ? allClimbs.filter(c => c.sessionId !== activeId) : allClimbs;
+    const sessions = activeId ? allSessions.filter(s => s.id !== activeId) : allSessions;
     const now = new Date();
     const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const monthAgo = thirtyDaysAgo.toISOString().slice(0, 10);
 
     // Sessions count any entry, but climb/send totals leave out hangboard and lift.
-    // The session still in progress doesn't count until it's ended.
-    const activeId = getActiveSessionId();
-    const thisMonthEntries = climbs.filter(c => c.date.slice(0, 10) >= monthAgo && (!activeId || c.sessionId !== activeId));
+    const thisMonthEntries = climbs.filter(c => c.date.slice(0, 10) >= monthAgo);
     const thisMonthClimbs = thisMonthEntries.filter(c => !isTrainingClimb(c));
     const thisMonthSends = thisMonthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
     const thisMonthSessionIds = new Set(thisMonthEntries.map(c => c.sessionId));

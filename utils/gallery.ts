@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { getAllSessions, getAllClimbs } from './storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { isDeadMediaUrl } from './cloudSync';
+import { finishedSessions } from './friendsApi';
 
 // Photos for a profile's Gallery tab: every session photo plus every climb
 // photo, newest session first. Videos are left out.
@@ -46,11 +47,11 @@ export async function getMyGalleryPhotos(): Promise<string[]> {
 export async function getFriendGalleryPhotos(friendId: string, climbs: any[]): Promise<string[]> {
   const { data } = await supabase
     .from('sessions')
-    .select('id, date, started_at, media_uris, media_types')
+    .select('id, date, started_at, ended_at, media_uris, media_types')
     .eq('user_id', friendId)
-    .not('ended_at', 'is', null)
     .order('date', { ascending: false });
-  const sessions = data ?? [];
+  // Finished sessions only: ended, or idle 1.5h since the last climb
+  const sessions = finishedSessions(data ?? [], climbs);
   const climbsBySession = new Map<string, any[]>();
   for (const c of climbs) {
     if (!c.session_id) continue;

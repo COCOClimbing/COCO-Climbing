@@ -68,10 +68,11 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
   const normDate = (d: string) => (d ?? '').slice(0, 10);
   const summaries: SessionSummary[] = [];
 
-  const [climbs, friendSessions] = await Promise.all([
+  const [climbs, recentSessions] = await Promise.all([
     getFriendRecentClimbs(friend.id, daysBack),
     getFriendRecentSessions(friend.id, daysBack),
   ]);
+  const friendSessions = finishedSessions(recentSessions, climbs);
 
   const sessionMediaMap = new Map<string, string[]>(
     friendSessions.map((s: any) => [s.id, (s.media_uris ?? []).filter((u: string) => u.startsWith('http'))])
@@ -303,15 +304,50 @@ export async function getFriendRecentClimbs(friendId: string, daysBack: number):
   return data ?? [];
 }
 
-// Ids of a user's sessions that haven't been ended yet. Their climbs stay out
-// of profile stats until the session is closed, matching the Sessions list.
-export async function getOpenSessionIds(userId: string): Promise<Set<string>> {
+// Sessions auto-end 1.5 hours after the last climb. The owner's phone only
+// applies that the next time the app opens, so viewers apply it themselves:
+// a session counts as finished once it's ended, or once it's been idle that long.
+export const SESSION_IDLE_MS = 1.5 * 60 * 60 * 1000;
+
+export function lastClimbAtBySession(climbs: any[]): Map<string, string> {
+  const last = new Map<string, string>();
+  for (const c of climbs) {
+    if (!c.session_id || !c.date) continue;
+    const prev = last.get(c.session_id);
+    if (!prev || c.date > prev) last.set(c.session_id, c.date);
+  }
+  return last;
+}
+
+export function isSessionFinished(
+  session: { ended_at?: string | null; started_at?: string | null },
+  lastClimbAt?: string | null,
+): boolean {
+  if (session.ended_at) return true;
+  const t = lastClimbAt ?? session.started_at;
+  if (!t) return false;
+  const ms = new Date(t).getTime();
+  return !Number.isNaN(ms) && Date.now() - ms > SESSION_IDLE_MS;
+}
+
+// Keep only finished sessions; `climbs` must include each session's climbs
+export function finishedSessions<T extends { id: string; ended_at?: string | null; started_at?: string | null }>(
+  sessions: T[], climbs: any[],
+): T[] {
+  const last = lastClimbAtBySession(climbs);
+  return sessions.filter(s => isSessionFinished(s, last.get(s.id)));
+}
+
+// Ids of a user's sessions still in progress (not ended and not idle 1.5h).
+// Their climbs stay out of profile stats until the session is closed.
+export async function getOpenSessionIds(userId: string, climbs: any[]): Promise<Set<string>> {
   const { data } = await supabase
     .from('sessions')
-    .select('id')
+    .select('id, started_at, ended_at')
     .eq('user_id', userId)
     .is('ended_at', null);
-  return new Set((data ?? []).map((s: any) => s.id));
+  const last = lastClimbAtBySession(climbs);
+  return new Set((data ?? []).filter((s: any) => !isSessionFinished(s, last.get(s.id))).map((s: any) => s.id));
 }
 
 // Get a friend's recent sessions from the last `daysBack` days (for media)
@@ -322,10 +358,10 @@ export async function getFriendRecentSessions(friendId: string, daysBack: number
 
   const { data } = await supabase
     .from('sessions')
-    .select('id, date, started_at, media_uris, media_types, friends, notes, title, location')
+    .select('id, date, started_at, ended_at, media_uris, media_types, friends, notes, title, location')
     .eq('user_id', friendId)
-    .gte('date', cutoff)
-    .not('ended_at', 'is', null);
+    .gte('date', cutoff);
+  // Callers keep finished ones with finishedSessions()
   return data ?? [];
 }
 
@@ -358,10 +394,10 @@ export async function getFriendsRecentSessionsBatch(friendIds: string[], daysBac
 
   const { data } = await supabase
     .from('sessions')
-    .select('id, date, started_at, media_uris, media_types, friends, notes, title, location, user_id')
+    .select('id, date, started_at, ended_at, media_uris, media_types, friends, notes, title, location, user_id')
     .in('user_id', friendIds)
-    .gte('date', cutoff)
-    .not('ended_at', 'is', null);
+    .gte('date', cutoff);
+  // Callers keep finished ones with finishedSessions()
   return data ?? [];
 }
 
@@ -371,14 +407,21 @@ export async function getTaggedSessions(userId: string, daysBack: number): Promi
   daysAgo.setDate(daysAgo.getDate() - daysBack);
   const cutoff = daysAgo.toISOString().split('T')[0];
 
-  const { data: sessions } = await supabase
+  const { data: allTagged } = await supabase
     .from('sessions')
     .select('*')
     .gte('date', cutoff)
-    .not('ended_at', 'is', null)
     .contains('friends', [{ id: userId }]);
 
-  if (!sessions || sessions.length === 0) return [];
+  if (!allTagged || allTagged.length === 0) return [];
+
+  // Finished = ended, or idle 1.5h since its last climb
+  const openIds = allTagged.filter((s: any) => !s.ended_at).map((s: any) => s.id);
+  const { data: openClimbs } = openIds.length > 0
+    ? await supabase.from('climbs').select('session_id, date').in('session_id', openIds)
+    : { data: [] as any[] };
+  const sessions = finishedSessions(allTagged, openClimbs ?? []);
+  if (sessions.length === 0) return [];
 
   const ownerIds = [...new Set(sessions.map((s: any) => s.user_id))];
   const { data: profiles } = await supabase
