@@ -303,6 +303,17 @@ export async function getFriendRecentClimbs(friendId: string, daysBack: number):
   return data ?? [];
 }
 
+// Ids of a user's sessions that haven't been ended yet. Their climbs stay out
+// of profile stats until the session is closed, matching the Sessions list.
+export async function getOpenSessionIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .is('ended_at', null);
+  return new Set((data ?? []).map((s: any) => s.id));
+}
+
 // Get a friend's recent sessions from the last `daysBack` days (for media)
 export async function getFriendRecentSessions(friendId: string, daysBack: number): Promise<any[]> {
   const daysAgo = new Date();

@@ -28,7 +28,7 @@ import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../u
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
-import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
+import { getAllClimbs, getAllSessions, getActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
@@ -120,7 +120,9 @@ export default function AccountScreen() {
     const monthAgo = thirtyDaysAgo.toISOString().slice(0, 10);
 
     // Sessions count any entry, but climb/send totals leave out hangboard and lift.
-    const thisMonthEntries = climbs.filter(c => c.date.slice(0, 10) >= monthAgo);
+    // The session still in progress doesn't count until it's ended.
+    const activeId = getActiveSessionId();
+    const thisMonthEntries = climbs.filter(c => c.date.slice(0, 10) >= monthAgo && (!activeId || c.sessionId !== activeId));
     const thisMonthClimbs = thisMonthEntries.filter(c => !isTrainingClimb(c));
     const thisMonthSends = thisMonthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash');
     const thisMonthSessionIds = new Set(thisMonthEntries.map(c => c.sessionId));

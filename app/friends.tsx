@@ -77,6 +77,7 @@ import {
   SessionSummary,
   getFriendSessionSummaries,
   getProfileById,
+  getOpenSessionIds,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import { supabase } from '../utils/supabase';
@@ -210,9 +211,11 @@ function FriendDetailView({
   const [ownDays, setOwnDays] = useState<DaySession[]>([]);
   const [friendSessions, setFriendSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
-  const [sessionsDaysLoaded, setSessionsDaysLoaded] = useState(14);
+  // Starts at 30 days so the list covers everything in "Last 30 days"
+  const [sessionsDaysLoaded, setSessionsDaysLoaded] = useState(30);
   const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
-  const [sessionsCaughtUp, setSessionsCaughtUp] = useState(false);
+  // Sessions not ended yet — their climbs stay out of the stats and the list
+  const [openSessionIds, setOpenSessionIds] = useState<Set<string>>(new Set());
   const canTriggerLoadMoreSessionsRef = useRef(true);
   const loadingMoreSessionsRef = useRef(false);
   const [shareDay, setShareDay] = useState<DaySession | null>(null);
@@ -246,7 +249,11 @@ function FriendDetailView({
 
   async function loadClimbs() {
     setLoadingClimbs(true);
-    try { setClimbs(await getFriendAllClimbs(friend.id)); } catch { setClimbs([]); }
+    try {
+      const [all, open] = await Promise.all([getFriendAllClimbs(friend.id), getOpenSessionIds(friend.id)]);
+      setOpenSessionIds(open);
+      setClimbs(all);
+    } catch { setClimbs([]); }
     setLoadingClimbs(false);
   }
 
@@ -307,16 +314,33 @@ function FriendDetailView({
     }
   }
 
+  // Dates of climbs the Sessions list can show (not in an unfinished session)
+  const listableClimbDates = climbs
+    .filter(c => !c.session_id || !openSessionIds.has(c.session_id))
+    .map(c => (c.date ?? '').slice(0, 10))
+    .filter(Boolean);
+  function cutoffFor(days: number) {
+    const d = new Date(); d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  }
+  // Caught up only once the loaded range reaches back past every climb
+  const sessionsCaughtUp = !loadingClimbs && !listableClimbDates.some(d => d < cutoffFor(sessionsDaysLoaded));
+
   async function loadMoreSessions() {
-    if (loadingMoreSessionsRef.current || !canTriggerLoadMoreSessionsRef.current) return;
+    if (sessionsCaughtUp || loadingMoreSessionsRef.current || !canTriggerLoadMoreSessionsRef.current) return;
     loadingMoreSessionsRef.current = true;
     canTriggerLoadMoreSessionsRef.current = false;
     setLoadingMoreSessions(true);
-    const prevCount = isSelf ? ownDays.length : friendSessions.length;
-    const next = sessionsDaysLoaded + 7;
+    // Jump far enough back to reach the next older climb, so gaps of more
+    // than a week don't end the list early.
+    const cutoff = cutoffFor(sessionsDaysLoaded);
+    const nextOlder = listableClimbDates.filter(d => d < cutoff).sort().pop();
+    const daysToNext = nextOlder
+      ? Math.ceil((Date.now() - new Date(nextOlder + 'T00:00:00').getTime()) / 86400000) + 1
+      : 0;
+    const next = Math.max(sessionsDaysLoaded + 7, daysToNext);
     setSessionsDaysLoaded(next);
-    const newCount = await loadSessions(next, false);
-    setSessionsCaughtUp(newCount <= prevCount);
+    await loadSessions(next, false);
     setLoadingMoreSessions(false);
     loadingMoreSessionsRef.current = false;
   }
@@ -384,7 +408,10 @@ function FriendDetailView({
   const now = new Date();
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const monthStart = thirtyDaysAgo.toISOString().slice(0, 10);
-  const monthClimbs = climbs.filter(c => normDate(c.date) >= monthStart && !isTrainingClimb(c));
+  // Climbs in a session that hasn't been ended yet don't count until it's closed
+  const monthClimbs = climbs.filter(c =>
+    normDate(c.date) >= monthStart && !isTrainingClimb(c) && !(c.session_id && openSessionIds.has(c.session_id))
+  );
   const monthSends = monthClimbs.filter(c => c.outcome === 'send' || c.outcome === 'flash').length;
 
   const BOULDER_SYSTEMS = new Set(['v-scale', 'font']);
