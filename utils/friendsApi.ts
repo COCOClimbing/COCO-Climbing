@@ -3,7 +3,7 @@ import { Image } from 'react-native';
 import { isDeadMediaUrl } from './cloudSync';
 import { getGradeDifficulty } from './theme';
 import { isCustomGrade } from './gradeUtils';
-import { trainingKind, TrainingKind, climbCount } from './sessionHelpers';
+import { trainingKind, TrainingKind, climbCount, sessionStartTime } from './sessionHelpers';
 
 export interface FriendProfile {
   id: string;
@@ -127,7 +127,7 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
     const friendSessionId = sessionClimbs[0]?.session_id ?? undefined;
     const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
     const environment = sessionClimbs[0]?.environment ?? 'indoor';
-    const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
+    const firstClimbTime = sessionStartTime(friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined, sessionClimbs);
     // Lift/hangboard-only sessions have no graded climbs, so show their training type instead.
     const climbType = hardestClimb?.type ?? (sessionClimbs.length > 0 && sessionClimbs.every((c: any) => c.type === 'hangboard' || c.type === 'lift') ? sessionClimbs[0].type : undefined);
     const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));

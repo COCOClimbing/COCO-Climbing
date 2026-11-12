@@ -70,6 +70,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
         title: s.title ?? null,
         friends: s.friends ?? null,
         ...(uris.length > 0 ? { media_uris: uris, media_types: types } : {}),
+        started_at: s.startedAt ?? null,
         ended_at: s.endedAt ?? null,
       };
     });
@@ -408,6 +409,7 @@ export async function syncSessionToCloud(sessionArg: Session, userId: string): P
       : explicitlyNoMedia
       ? { media_uris: null, media_types: null }
       : {}),
+    started_at: session.startedAt ?? null,
     ended_at: session.endedAt ?? null,
   }, { onConflict: 'id' });
 

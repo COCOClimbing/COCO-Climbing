@@ -5,7 +5,7 @@ import {
 import { PhotoGroup, useGroupedPhoto, preloadPhotos } from './PhotoGroup';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
-import { DaySession, sessionStats, sessionTimeOfDay, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
+import { DaySession, sessionStats, sessionTimeOfDay, sessionStartTime, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
 import { format } from 'date-fns';
 import Avatar from './Avatar';
@@ -152,7 +152,7 @@ export default function SessionCard({
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
   // Header matches the Activity feed: "Yesterday at 3:29 PM · Indoor".
-  const sessionTime = day.startedAt || day.lastClimbAt || day.climbs[0]?.date;
+  const sessionTime = sessionStartTime(day.startedAt, day.climbs);
   const timeLabel = sessionTime && !isNaN(new Date(sessionTime).getTime()) ? ` at ${format(new Date(sessionTime), 'h:mm a')}` : '';
   const climbEnvs = [...new Set(day.climbs.map(c => c.environment).filter(Boolean))];
   const isOutdoor = climbEnvs.length === 1 && climbEnvs[0] === 'outdoor';

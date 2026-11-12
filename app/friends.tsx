@@ -34,7 +34,7 @@ import GradeChart from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
-import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL, defaultSessionTitle, climbCount } from '../utils/sessionHelpers';
+import { DaySession, isTrainingClimb, trainingKind, TRAINING_KIND_LABEL, defaultSessionTitle, climbCount, sessionStartTime } from '../utils/sessionHelpers';
 import ClimbCard from '../components/ClimbCard';
 import ClimbDetailModal from '../components/ClimbDetailModal';
 import SwipeableComment from '../components/SwipeableComment';
@@ -1161,7 +1161,7 @@ export default function FriendsScreen() {
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: s.startedAt || s.lastClimbAt || sessionClimbs[0]?.date, climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: sessionStartTime(s.startedAt, sessionClimbs), climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
@@ -1245,7 +1245,7 @@ export default function FriendsScreen() {
         summaries.push({
           friend: profile,
           sessionDate: normDate(s.date),
-          sessionTime: s.started_at ?? climbs[0]?.date ?? undefined,
+          sessionTime: sessionStartTime(s.started_at, climbs),
           climbCount: climbs.reduce((sum: number, c: any) => sum + climbCount(c), 0),
           sends,
           flashes,
@@ -1329,7 +1329,7 @@ export default function FriendsScreen() {
             // in non-UTC timezones.
             const sessionDate = (friendSessionId ? sessionDateMap.get(friendSessionId) : undefined) ?? normDate(sessionClimbs[0].date);
             const environment = sessionClimbs[0]?.environment ?? 'indoor';
-            const firstClimbTime = (friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined) ?? sessionClimbs[0]?.date ?? undefined;
+            const firstClimbTime = sessionStartTime(friendSessionId ? sessionStartedAtMap.get(friendSessionId) : undefined, sessionClimbs);
             // Lift/hangboard-only sessions have no graded climbs, so show their training type instead.
             const climbType = hardestClimb?.type ?? (sessionClimbs.length > 0 && sessionClimbs.every((c: any) => c.type === 'hangboard' || c.type === 'lift') ? sessionClimbs[0].type : undefined);
             const climbPhotos = sessionClimbs.flatMap((c: any) => c.media_uris ?? (c.media_uri ? [c.media_uri] : [])).filter((u: string) => u.startsWith('http') && !isDeadMediaUrl(u));

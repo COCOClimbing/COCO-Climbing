@@ -86,8 +86,24 @@ export function defaultSessionTitle(isoTime: string | undefined, training?: Trai
   return `Evening ${activity}`;
 }
 
+// Time of a session's first climb — the fallback start time for sessions
+// that don't have startedAt (older ones, and every session on the server
+// until the app started uploading it).
+export function earliestClimbDate(climbs: { date?: string | null }[]): string | undefined {
+  let first: string | undefined;
+  for (const c of climbs) {
+    if (c.date && (!first || c.date < first)) first = c.date;
+  }
+  return first;
+}
+
+// When a session started, for the time shown on its card
+export function sessionStartTime(startedAt: string | null | undefined, climbs: { date?: string | null }[]): string | undefined {
+  return startedAt || earliestClimbDate(climbs);
+}
+
 export function sessionTimeOfDay(day: DaySession): string {
-  return defaultSessionTitle(day.startedAt || day.lastClimbAt || day.climbs[0]?.date, trainingKind(day.climbs));
+  return defaultSessionTitle(sessionStartTime(day.startedAt, day.climbs), trainingKind(day.climbs));
 }
 
 export function formatSessionLabel(s: DaySession): { top: string; bottom: string } {
