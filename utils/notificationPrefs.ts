@@ -35,5 +35,13 @@ export async function getNotificationPrefs(userId: string): Promise<Notification
 
 export async function saveNotificationPrefs(userId: string, prefs: NotificationPrefs): Promise<void> {
   await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(prefs)).catch(() => {});
-  await supabase.from('profiles').update({ notification_prefs: prefs }).eq('id', userId).catch(() => {});
+  // The query builder has no .catch(); calling one threw before the update was
+  // ever sent, so preferences only saved on the phone and the server (which
+  // decides who gets pushes) never saw them. Await it and check the error.
+  try {
+    const { error } = await supabase.from('profiles').update({ notification_prefs: prefs }).eq('id', userId);
+    if (error) console.warn('[notificationPrefs] save failed:', error.message);
+  } catch (e) {
+    console.warn('[notificationPrefs] save failed:', e);
+  }
 }

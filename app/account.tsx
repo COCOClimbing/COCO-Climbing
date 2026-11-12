@@ -439,7 +439,8 @@ export default function AccountScreen() {
                 <Text style={[styles.avatarModalBtnText, { color: colors.textSecondary }]}>Choose Different</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={handleConfirmAvatar}
+                // Not onPress={handleConfirmAvatar}: that passes the tap event in as the photo uri
+                onPress={() => handleConfirmAvatar()}
                 style={[styles.avatarModalBtn, styles.avatarModalBtnPrimary, { backgroundColor: colors.accent }]}
                 activeOpacity={0.7}
                 disabled={uploadingAvatar}

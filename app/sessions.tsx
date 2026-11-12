@@ -99,6 +99,10 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     if (screen !== 'sessions') setSelectedDay(null);
   }, [screen]);
 
+  const [days, setDays] = useState<DaySession[]>(_cachedDays);
+  // Open a session someone navigated to (e.g. from a notification) once it's in
+  // the list. Declared after `days` — above it, `days` was undefined in the deps,
+  // so this never re-ran when the sessions finished loading.
   useEffect(() => {
     if (!navPendingSessionId) return;
     const target = days.find(d => d.sessionId === navPendingSessionId);
@@ -107,7 +111,6 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
       clearPendingSessionId();
     }
   }, [navPendingSessionId, days]);
-  const [days, setDays] = useState<DaySession[]>(_cachedDays);
   // The list stays hidden (spinner) until the first load has the top cards'
   // photos and likes/comments ready, then eases up all at once like the
   // Activity feed.
