@@ -537,8 +537,8 @@ export default function StatsScreen() {
 
         {/* Progress chart */}
         {allChartPoints.length >= 2 && (
-          <View style={{ marginTop: SPACING.lg }}>
-            <Text style={[ss.chartCaption, { color: colors.textMuted }]}>
+          <View style={{ marginTop: 10 }}>
+            <Text style={[ss.chartCaption, { color: colors.textPrimary }]}>
               Avg Grade Attempted Per Session
             </Text>
             <ChartRangeToggle value={chartRange} onChange={setChartRange} colors={colors} />
@@ -759,7 +759,7 @@ const ss = StyleSheet.create({
   impLabel: { fontSize: FONTS.sizes.sm, flex: 1 },
   impColHead: { fontSize: FONTS.sizes.xs, width: 72, textAlign: 'center' },
   impCell: { fontSize: FONTS.sizes.md, width: 72, textAlign: 'center' },
-  chartCaption: { fontSize: FONTS.sizes.xs, marginBottom: SPACING.sm },
+  chartCaption: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold, marginBottom: SPACING.md },
 
   // Styles
   styleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
