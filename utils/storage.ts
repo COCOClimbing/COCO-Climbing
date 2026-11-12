@@ -161,7 +161,8 @@ export async function restoreActiveSession(): Promise<void> {
   await getValidActiveSessionId(); // validates and clears _activeSessionId + storage if expired
 }
 
-export async function endSession(id: string): Promise<void> {
+// endedAt defaults to now; the idle auto-end passes the last climb's time instead.
+export async function endSession(id: string, endedAt?: string): Promise<void> {
   // Null immediately so any renders during the async work see no active session
   if (_activeSessionId === id) setActiveSessionId(null);
 
@@ -177,14 +178,16 @@ export async function endSession(id: string): Promise<void> {
     location = climbs.find(c => c.sessionId === id && c.location)?.location;
   }
 
-  sessions[idx] = { ...session, endedAt: new Date().toISOString(), location };
+  sessions[idx] = { ...session, endedAt: endedAt ?? new Date().toISOString(), location };
   await AsyncStorage.setItem(KEYS.SESSIONS, JSON.stringify(sessions));
 }
 
-const THREE_HOURS_MS = 1.5 * 60 * 60 * 1000;
+// Matches SESSION_IDLE_MS in friendsApi and the server's end_idle_sessions job
+const SESSION_IDLE_MS = 1.5 * 60 * 60 * 1000;
 
-// Returns the active session ID if it's still valid (within 3 hours of last climb,
-// or session has no climbs yet and was started within 3 hours). Auto-expires otherwise.
+// Returns the active session ID if it's still valid (within 1.5 hours of last climb,
+// or session has no climbs yet and was started within 1.5 hours). Auto-expires otherwise,
+// ending it at the time of its last activity.
 export async function getValidActiveSessionId(): Promise<string | null> {
   const id = _activeSessionId;
   if (!id) return null;
@@ -200,8 +203,8 @@ export async function getValidActiveSessionId(): Promise<string | null> {
   const checkTime = session.lastClimbAt ?? session.startedAt;
   if (checkTime) {
     const elapsed = Date.now() - new Date(checkTime).getTime();
-    if (elapsed > THREE_HOURS_MS) {
-      await endSession(id);
+    if (elapsed > SESSION_IDLE_MS) {
+      await endSession(id, new Date(checkTime).toISOString());
       if (_cloudUserId) {
         const updated = await getAllSessions();
         const ended = updated.find(s => s.id === id);

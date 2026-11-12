@@ -194,9 +194,29 @@ Deno.serve(async (req) => {
     // reason to notify — see verifyRecipientsAllowed for the per-type rules.
     // sessionId is re-bound to whatever the check determined should actually
     // be used (server-derived for comment_like, passed through otherwise).
-    const { ids, sessionId } = await verifyRecipientsAllowed(adminClient, type, effectiveSenderId, requestedIds, requestedSessionId, commentId)
+    const verified = await verifyRecipientsAllowed(adminClient, type, effectiveSenderId, requestedIds, requestedSessionId, commentId)
+    const { sessionId } = verified
+    let ids = verified.ids
     if (!ids.length) {
       return new Response(JSON.stringify({ sent: false, reason: 'not_authorized' }), { headers: corsHeaders })
+    }
+
+    // A tag is only ever announced once per person per session. The server's
+    // end_idle_sessions job may already have sent it (if the owner's phone
+    // ended the session late), so skip anyone with an existing row. Reported
+    // as sent so the app records them as done and stops retrying.
+    if (type === 'session_tag' && sessionId) {
+      const { data: existing } = await adminClient
+        .from('notifications')
+        .select('recipient_id')
+        .eq('type', 'session_tag')
+        .eq('session_id', sessionId)
+        .in('recipient_id', ids)
+      const done = new Set((existing ?? []).map((r: any) => r.recipient_id))
+      ids = ids.filter(id => !done.has(id))
+      if (!ids.length) {
+        return new Response(JSON.stringify({ sent: true, count: 0, reason: 'already_notified' }), { headers: corsHeaders })
+      }
     }
 
     // Filter recipients who have opted out of this notification type
