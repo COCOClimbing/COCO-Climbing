@@ -20,7 +20,7 @@ import {
   saveLastOutcome, getLastOutcome,
   saveLastEnvironment, getLastEnvironment,
 } from '../utils/storage';
-import { Image as CompressorImage } from 'react-native-compressor';
+import { shrinkPhotoForUpload } from '../utils/mediaUpload';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../utils/AuthContext';
 import { Pill, Divider, HoldColorDot } from './UI';
@@ -418,7 +418,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     const path = `${user!.id}/${climbId}.jpg`;
     const { data: { session } } = await supabase.auth.getSession();
 
-    const uploadUri = await CompressorImage.compress(localUri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+    const uploadUri = await shrinkPhotoForUpload(localUri, 'photo');
 
     const formData = new FormData();
     formData.append('file', { uri: uploadUri, name: 'climb.jpg', type: 'image/jpeg' } as any);

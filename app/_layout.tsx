@@ -47,7 +47,9 @@ import { markUpdateCheckSettled } from '../utils/updateGate';
 SplashScreen.preventAutoHideAsync();
 
 async function checkAndApplyUpdate() {
-  if (__DEV__) {
+  // Builds without OTA updates (dev, local Release builds) throw "not supported"
+  // from checkForUpdateAsync — Sentry REACT-NATIVE-B. Nothing to check there.
+  if (__DEV__ || !Updates.isEnabled) {
     markUpdateCheckSettled();
     return;
   }

@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent, Animated, Easing, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Image as CompressorImage } from 'react-native-compressor';
 import { supabase } from '../utils/supabase';
 import ShareModal from '../components/ShareModal';
 import LocationPicker from '../components/LocationPicker';
@@ -30,7 +29,7 @@ import MiniCalendar from '../components/MiniCalendar';
 import { useNav } from '../utils/NavigationContext';
 import { syncSessionToCloud, deleteR2MediaUrls } from '../utils/cloudSync';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
-import { uploadMedia } from '../utils/mediaUpload';
+import { uploadMedia, shrinkPhotoForUpload } from '../utils/mediaUpload';
 import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionLabel, TRAINING_KIND_LABEL, trainingKind } from '../utils/sessionHelpers';
 import SessionCard, { prefetchSessionCards } from '../components/SessionCard';
 import { SessionStatsBlock } from '../components/SessionBreakdown';
@@ -503,7 +502,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
       const slot = startIdx + i;
       try {
         const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
-        const compressedUri = await CompressorImage.compress(item.uri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+        const compressedUri = await shrinkPhotoForUpload(item.uri, item.type);
         const url = await uploadMedia(compressedUri, path, authSession.access_token);
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
@@ -634,7 +633,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
       const slot = startIdx + i;
       try {
         const path = `${user.id}/session_${sessionId}_${slot}.jpg`;
-        const compressedUri = await CompressorImage.compress(item.uri, { quality: 0.6, maxWidth: 1080, maxHeight: 1080 });
+        const compressedUri = await shrinkPhotoForUpload(item.uri, item.type);
         const url = await uploadMedia(compressedUri, path, authSession.access_token);
         resolved[slot] = { uri: url, type: item.type };
         anyUploaded = true;
