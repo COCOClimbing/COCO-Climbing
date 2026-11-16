@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Switch, Linking, Image } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as Application from 'expo-application';
+import * as Updates from 'expo-updates';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { useAuth } from '../utils/AuthContext';
@@ -12,6 +14,20 @@ import { getNotificationPrefs, saveNotificationPrefs, NotificationPrefs } from '
 import { registerForPushNotifications } from '../utils/notifications';
 import EditProfileModal from '../components/EditProfileModal';
 import PushScreen from '../components/PushScreen';
+
+// "Version 1.1.5 (15) · updated Nov 15": the installed App Store version and
+// build, plus when the OTA update now running was published. Read from the
+// app itself rather than hard-coded, which had drifted to "1.1.2-ota".
+// (expo-application comes in via expo-notifications, so every build has it.)
+function versionLabel(): string {
+  const version = Application.nativeApplicationVersion;
+  const build = Application.nativeBuildVersion;
+  let label = version ? `Version ${version}${build ? ` (${build})` : ''}` : 'Version unknown';
+  if (!Updates.isEmbeddedLaunch && Updates.createdAt) {
+    label += ` · updated ${Updates.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  }
+  return label;
+}
 
 export default function SettingsScreen() {
   const tabBarSpace = useTabBarSpace();
@@ -122,7 +138,7 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ABOUT</Text>
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border, gap: SPACING.sm }]}>
         <Text style={[styles.aboutAppName, { color: colors.accent }]}>COCO</Text>
-        <Text style={[styles.aboutVersion, { color: colors.textMuted }]}>Version 1.1.2-ota</Text>
+        <Text style={[styles.aboutVersion, { color: colors.textMuted }]}>{versionLabel()}</Text>
         <Text style={[styles.aboutDesc, { color: colors.textSecondary }]}>
           Your climbing logbook. Track every send, session, and project.
         </Text>
