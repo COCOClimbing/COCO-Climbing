@@ -13,6 +13,7 @@ import SessionShareCardVertical from './SessionShareCardVertical';
 import SessionShareCardStrava from './SessionShareCardStrava';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb } from '../utils/theme';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 
 export interface ShareData {
   date: string;
@@ -108,6 +109,10 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+      {/* Touches inside a Modal still bubble up the component tree to the screen
+          behind it, so swiping past the last card changed the Sessions tab
+          (to Projects). The guard stops the tab swipe from claiming them. */}
+      <TabSwipeGuard style={{ flex: 1 }}>
       <View style={styles.overlay}>
         <ScrollView
           ref={scrollRef}
@@ -199,6 +204,7 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
           </TouchableOpacity>
         </View>
       </View>
+      </TabSwipeGuard>
     </Modal>
   );
 }
