@@ -112,6 +112,8 @@ export type AdminReport = {
   reported: ReportPerson;
   session: { id: string; title: string | null; notes: string | null; date: string; deleted: boolean } | null;
   comment: { id: string; text: string; session_id: string; created_at: string } | null;
+  // Copy of the comment saved when the report was filed; outlives deletion.
+  comment_snapshot?: { text: string; created_at: string | null } | null;
 };
 
 export async function getAdminReports(includeResolved: boolean): Promise<AdminReport[]> {

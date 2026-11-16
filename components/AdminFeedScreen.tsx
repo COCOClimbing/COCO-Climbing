@@ -239,7 +239,10 @@ function ReportsTab({ visible, onOpenProfile }: { visible: boolean; onOpenProfil
       ) : reports.map(r => {
         const reported = r.reported;
         const preview =
-          r.content_type === 'comment' ? (r.comment ? `“${r.comment.text}”` : 'Comment was deleted') :
+          r.content_type === 'comment' ? (
+            r.comment ? `“${r.comment.text}”`
+            : r.comment_snapshot ? `“${r.comment_snapshot.text}” (deleted since)`
+            : 'Comment was deleted') :
           r.content_type === 'session' ? (r.session
             ? [r.session.title?.trim() || 'Untitled session', r.session.notes?.trim()].filter(Boolean).join(' — ') + (r.session.deleted ? ' (deleted)' : '')
             : 'Session was deleted') :
