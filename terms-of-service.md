@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Last updated: April 21, 2026**
+**Last updated: November 16, 2026**
 
 By creating an account or using COCO ("the app"), you agree to these Terms of Service. Please read them carefully.
 
@@ -32,6 +32,10 @@ Violations may result in immediate removal of content and permanent termination 
 COCO provides tools to report objectionable content and block abusive users directly within the app. We review all reports within 24 hours and will remove violating content and eject offending users promptly.
 
 To report content, tap the **⋯** menu on any post or profile.
+
+## Administrator Access
+
+To keep COCO safe, authorized COCO administrators may view any content on the app, including sessions, photos, comments and likes from all accounts, private accounts included. This includes content that has been reported, even if it is later deleted. Administrators use this access to moderate content, investigate reports, enforce these Terms and provide support. By using COCO, you agree to this access. See our Privacy Policy for details.
 
 ## Account Termination
 
