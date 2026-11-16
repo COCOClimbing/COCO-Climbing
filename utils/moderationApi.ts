@@ -61,11 +61,23 @@ export async function reportContent(
   contentId: string,
   reason: string,
 ): Promise<void> {
-  await supabase.from('content_reports').insert({
+  // Throws on failure so callers show an error instead of a false
+  // "Report Submitted".
+  const { data, error } = await supabase.from('content_reports').insert({
     reporter_id: reporterId,
     reported_user_id: reportedUserId,
     content_type: contentType,
     content_id: contentId,
     reason,
-  });
+  }).select('id').single();
+  if (error || !data) throw new Error(error?.message ?? 'Report was not saved');
+
+  // Alert the admins. The report is already saved, so a failed alert isn't
+  // the reporter's problem — it still shows in the admin Reports list.
+  supabase.functions.invoke('send-notification', { body: { type: 'report', reportId: data.id } })
+    .then(({ error: fnError, data: res }) => {
+      if (fnError) console.warn('[reports] admin alert failed:', fnError.message);
+      else if (res && !res.sent) console.warn('[reports] admin alert not sent:', res.reason);
+    })
+    .catch(() => {});
 }

@@ -274,6 +274,29 @@ export async function removeFriend(userId: string, friendId: string): Promise<vo
     .eq('receiver_id', friendId);
 }
 
+// Whether followerId currently follows userId (accepted, not a pending request)
+export async function isFollowedBy(userId: string, followerId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('sender_id', followerId)
+    .eq('receiver_id', userId)
+    .eq('status', 'accepted')
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
+// Remove someone from your followers: deletes the row where they follow you.
+// The receiver may delete it (friendships delete policy), and the follow-count
+// trigger updates both profiles.
+export async function removeFollower(userId: string, followerId: string): Promise<void> {
+  const { error } = await supabase.from('friendships')
+    .delete()
+    .eq('sender_id', followerId)
+    .eq('receiver_id', userId);
+  if (error) throw new Error(error.message);
+}
+
 // Get a friend's session IDs from the last 14 days
 export async function getFriendEndedSessionIds(friendId: string): Promise<Set<string>> {
   const fourteenDaysAgo = new Date();

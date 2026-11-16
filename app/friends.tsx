@@ -65,6 +65,8 @@ import {
   getFriendshipStatus,
   getTaggedSessions,
   getFriendCounts,
+  isFollowedBy,
+  removeFollower,
   getSessionLikes,
   likeSession,
   unlikeSession,
@@ -198,6 +200,7 @@ function FriendDetailView({
   const [loadingClimbs, setLoadingClimbs] = useState(true);
   const [friendStatus, setFriendStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [friendStatusLoaded, setFriendStatusLoaded] = useState(false);
+  const [followsYou, setFollowsYou] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [listSheetOpen, setListSheetOpen] = useState(false);
   const [listSheetTab, setListSheetTab] = useState<'following' | 'followers'>('following');
@@ -269,8 +272,90 @@ function FriendDetailView({
 
   async function loadFriendStatus() {
     if (!user) return;
-    try { setFriendStatus(await getFriendshipStatus(user.id, friend.id)); } catch {}
+    try {
+      const [status, followsMe] = await Promise.all([
+        getFriendshipStatus(user.id, friend.id),
+        isFollowedBy(user.id, friend.id),
+      ]);
+      setFriendStatus(status);
+      setFollowsYou(followsMe);
+    } catch {}
     setFriendStatusLoaded(true);
+  }
+
+  // ⋯ menu on someone else's profile: remove follower (only if they follow
+  // you), block/unblock, report.
+  function openProfileMenu() {
+    if (!user) return;
+    const buttons: any[] = [];
+    if (followsYou) {
+      buttons.push({
+        text: 'Remove from your followers',
+        onPress: () => Alert.alert(
+          `Remove ${friend.name}?`,
+          "They won't be notified. Your sessions will stop showing in their feed.",
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Remove', style: 'destructive', onPress: async () => {
+                try {
+                  await removeFollower(user.id, friend.id);
+                  setFollowsYou(false);
+                  loadCounts();
+                } catch {
+                  Alert.alert('Error', 'Could not remove follower. Please try again.');
+                }
+              },
+            },
+          ],
+        ),
+      });
+    }
+    if (isBlocked) {
+      if (onUnblock) buttons.push({
+        text: 'Unblock',
+        onPress: () => Alert.alert(
+          `Unblock ${friend.name}?`,
+          'They will be able to follow you and appear in search again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Unblock', onPress: () => onUnblock(friend.id) },
+          ],
+        ),
+      });
+    } else if (onBlock) {
+      buttons.push({
+        text: 'Block', style: 'destructive',
+        onPress: () => Alert.alert(
+          `Block ${friend.name}?`,
+          "They won't appear in your feed.",
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Block', style: 'destructive', onPress: () => onBlock(friend.id) },
+          ],
+        ),
+      });
+    }
+    buttons.push({
+      text: 'Report', style: 'destructive',
+      onPress: () => Alert.alert(
+        `Report ${friend.name}`,
+        'Why are you reporting this account?',
+        ['Spam', 'Inappropriate Content', 'Harassment', 'Impersonation'].map(reason => ({
+          text: reason,
+          onPress: async () => {
+            try {
+              await reportContent(user.id, friend.id, 'user', friend.id, reason);
+              Alert.alert('Report Submitted', 'Thank you. We review all reports within 24 hours.');
+            } catch {
+              Alert.alert('Error', 'Could not submit report. Please try again.');
+            }
+          },
+        })).concat([{ text: 'Cancel', style: 'cancel' } as any]),
+      ),
+    });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(friend.name, undefined, buttons);
   }
 
   async function loadSessions(days: number = sessionsDaysLoaded, showLoading: boolean = true): Promise<number> {
@@ -509,29 +594,9 @@ function FriendDetailView({
             <View style={detailStyles.profileInfo}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={[detailStyles.profileName, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>{friend.name}</Text>
-                {user && user.id !== friend.id && (onBlock || onUnblock) && (
+                {user && user.id !== friend.id && (
                   <TouchableOpacity
-                    onPress={() => {
-                      if (isBlocked) {
-                        Alert.alert(
-                          `Unblock ${friend.name}?`,
-                          'They will be able to follow you and appear in search again.',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Unblock', onPress: () => onUnblock?.(friend.id) },
-                          ],
-                        );
-                      } else {
-                        Alert.alert(
-                          `Block ${friend.name}?`,
-                          "They won't appear in your feed.",
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Block', style: 'destructive', onPress: () => onBlock?.(friend.id) },
-                          ],
-                        );
-                      }
-                    }}
+                    onPress={openProfileMenu}
                     activeOpacity={0.7}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >

@@ -24,6 +24,7 @@ import { NavigationProvider, useNav } from '../utils/NavigationContext';
 import { AuthProvider, useAuth } from '../utils/AuthContext';
 import { HeaderScrollProvider, useHeaderScrollContext, TabActiveContext } from '../utils/HeaderScroll';
 import AppHeader from '../components/AppHeader';
+import AdminFeedScreen from '../components/AdminFeedScreen';
 import BottomTabBar from '../components/BottomTabBar';
 import ResetPasswordScreen from './reset-password';
 
@@ -69,7 +70,7 @@ async function checkAndApplyUpdate() {
 function AppShell({ onReady }: { onReady: () => void }) {
   const { colors, mode } = useTheme();
   const { screen, navigate } = useNav();
-  const { user, loading, isPasswordRecovery } = useAuth();
+  const { user, loading, isPasswordRecovery, isAdmin } = useAuth();
   const { floating, headerHeight, headerHidden } = useHeaderScrollContext();
   useNotificationTapRouting();
 
@@ -229,6 +230,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
             <FriendsScreen />
           </View>
           {!headerHidden && <AppHeader />}
+          {isAdmin && <AdminFeedScreen />}
         </View>
         <BottomTabBar />
       </SafeAreaView>

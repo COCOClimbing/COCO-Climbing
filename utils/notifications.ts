@@ -163,6 +163,12 @@ export async function routeNotificationTap(
     return;
   }
 
+  // Sent only to admins; opens the admin page on its Reports tab.
+  if (type === 'report') {
+    nav.openAdmin('reports');
+    return;
+  }
+
   if (PROFILE_NOTIFICATION_TYPES.has(type)) {
     if (!opts.senderId) return;
     const profile = await getProfileById(opts.senderId);

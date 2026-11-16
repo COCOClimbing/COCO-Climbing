@@ -22,6 +22,9 @@ interface NavContextType {
   pendingFriendProfile: PendingFriendProfile | null;
   pendingSessionId: string | null;
   pendingActivitySessionId: string | null;
+  // Admin page (sessions feed / reports), or null when closed. Lives here so a
+  // report notification tap can open it from anywhere.
+  adminView: AdminView | null;
   navigate: (screen: ScreenId) => void;
   openDrawer: () => void;
   closeDrawer: () => void;
@@ -36,7 +39,11 @@ interface NavContextType {
   clearPendingSessionId: () => void;
   viewActivitySession: (sessionId: string) => void;
   clearPendingActivitySessionId: () => void;
+  openAdmin: (view: AdminView) => void;
+  closeAdmin: () => void;
 }
+
+export type AdminView = 'sessions' | 'reports';
 
 const NavContext = createContext<NavContextType>({
   screen: 'friends',
@@ -49,6 +56,7 @@ const NavContext = createContext<NavContextType>({
   pendingFriendProfile: null,
   pendingSessionId: null,
   pendingActivitySessionId: null,
+  adminView: null,
   navigate: () => {},
   openDrawer: () => {},
   closeDrawer: () => {},
@@ -63,6 +71,8 @@ const NavContext = createContext<NavContextType>({
   clearPendingSessionId: () => {},
   viewActivitySession: () => {},
   clearPendingActivitySessionId: () => {},
+  openAdmin: () => {},
+  closeAdmin: () => {},
 });
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
@@ -76,6 +86,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [pendingFriendProfile, setPendingFriendProfile] = useState<PendingFriendProfile | null>(null);
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [pendingActivitySessionId, setPendingActivitySessionId] = useState<string | null>(null);
+  const [adminView, setAdminView] = useState<AdminView | null>(null);
 
   function navigate(s: ScreenId) {
     if (s === screen) {
@@ -142,6 +153,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       pendingFriendProfile,
       pendingSessionId,
       pendingActivitySessionId,
+      adminView,
       navigate,
       openDrawer: () => setDrawerOpen(true),
       closeDrawer: () => setDrawerOpen(false),
@@ -156,6 +168,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       clearPendingSessionId,
       viewActivitySession,
       clearPendingActivitySessionId,
+      openAdmin: setAdminView,
+      closeAdmin: () => setAdminView(null),
     }}>
       {children}
     </NavContext.Provider>

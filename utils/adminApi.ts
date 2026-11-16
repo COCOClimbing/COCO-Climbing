@@ -96,3 +96,31 @@ export async function getAdminFeedPage(cursor: AdminFeedCursor): Promise<{ entri
     });
   return { entries, nextCursor };
 }
+
+// ─── Reports ──────────────────────────────────────────────────────────────────
+
+type ReportPerson = { id: string; name: string | null; username: string | null; avatar_url: string | null } | null;
+
+export type AdminReport = {
+  id: string;
+  content_type: 'session' | 'comment' | 'user';
+  content_id: string;
+  reason: string;
+  created_at: string;
+  resolved_at: string | null;
+  reporter: ReportPerson;
+  reported: ReportPerson;
+  session: { id: string; title: string | null; notes: string | null; date: string; deleted: boolean } | null;
+  comment: { id: string; text: string; session_id: string; created_at: string } | null;
+};
+
+export async function getAdminReports(includeResolved: boolean): Promise<AdminReport[]> {
+  const { data, error } = await supabase.rpc('admin_reports', { p_include_resolved: includeResolved, p_limit: 100 });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AdminReport[];
+}
+
+export async function setReportResolved(id: string, resolved: boolean): Promise<void> {
+  const { error } = await supabase.rpc('admin_resolve_report', { p_id: id, p_resolved: resolved });
+  if (error) throw new Error(error.message);
+}

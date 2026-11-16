@@ -7,7 +7,6 @@ import { useAuth } from '../utils/AuthContext';
 import { useHeaderScrollContext } from '../utils/HeaderScroll';
 import StatusBarFade from './StatusBarFade';
 import PushScreen from './PushScreen';
-import AdminFeedScreen from './AdminFeedScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh } from '../utils/storage';
 import { FONTS, SPACING } from '../utils/theme';
@@ -55,7 +54,6 @@ export default function AppHeader() {
   const circle = [styles.circleBtn, { backgroundColor: mode === 'dark' ? DARK_GLASS : colors.bgCard }];
 
   const [notifVisible, setNotifVisible] = useState(false);
-  const [adminFeedVisible, setAdminFeedVisible] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -161,7 +159,9 @@ export default function AppHeader() {
 
   function handleNotificationTap(n: AppNotification) {
     setNotifVisible(false);
-    if (n.type === 'follow_request' && Platform.OS === 'ios') {
+    // These open another full page, which must wait until this one has slid
+    // away (opening a page while another closes froze the app before).
+    if ((n.type === 'follow_request' || n.type === 'report') && Platform.OS === 'ios') {
       pendingSheetTapRef.current = n;
       return;
     }
@@ -183,6 +183,7 @@ export default function AppHeader() {
       case 'follow_request': return 'person-add-outline';
       case 'follow_request_accepted': return 'checkmark-circle';
       case 'session_tag': return 'flag';
+      case 'report': return 'alert-circle';
       default: return 'notifications';
     }
   }
@@ -234,7 +235,7 @@ export default function AppHeader() {
         ) : (
           <View style={styles.leftGroup}>
           {screen === 'friends' && isAdmin && (
-            <TouchableOpacity onPress={() => setAdminFeedVisible(true)} activeOpacity={0.7} style={circle} accessibilityLabel="Admin: all sessions">
+            <TouchableOpacity onPress={() => nav.openAdmin('sessions')} activeOpacity={0.7} style={circle} accessibilityLabel="Admin: all sessions">
               <Sheen radius={20} />
               <Ionicons name="shield-checkmark-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -251,8 +252,6 @@ export default function AppHeader() {
           </View>
         )}
       </View>
-
-      {isAdmin && <AdminFeedScreen visible={adminFeedVisible} onClose={() => setAdminFeedVisible(false)} />}
 
       {/* Notifications page */}
       <PushScreen visible={notifVisible} title="Notifications" onBack={() => setNotifVisible(false)} onDismiss={handleNotifModalDismiss}>

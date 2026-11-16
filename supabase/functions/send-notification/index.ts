@@ -119,6 +119,82 @@ async function verifyRecipientsAllowed(
   return { ids: [], sessionId }
 }
 
+// A user filed a content report: tell every admin (public.admins). The
+// recipients come from the admins table, never from the client, and the
+// report must be the caller's own, filed in the last few minutes, and not
+// already announced — so this can't be used to spam admins with old reports.
+async function handleReport(
+  adminClient: ReturnType<typeof createClient>,
+  callerId: string,
+  reportId: string | undefined,
+): Promise<Response> {
+  const json = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  if (!reportId) return json({ error: 'Missing reportId' }, 400)
+
+  const { data: report } = await adminClient
+    .from('content_reports')
+    .select('id, reporter_id, reported_user_id, content_type, reason, created_at')
+    .eq('id', reportId)
+    .maybeSingle()
+  if (!report || report.reporter_id !== callerId) return json({ sent: false, reason: 'not_authorized' })
+  if (Date.now() - new Date(report.created_at).getTime() > 10 * 60 * 1000) return json({ sent: false, reason: 'too_old' })
+
+  const { count: already } = await adminClient
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('report_id', reportId)
+  if ((already ?? 0) > 0) return json({ sent: true, count: 0, reason: 'already_notified' })
+
+  // Reports are free to file, so cap how many alerts one person can trigger.
+  // Extra reports are still saved and show in the admin Reports list.
+  const { count: recentReports } = await adminClient
+    .from('content_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('reporter_id', callerId)
+    .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+  if ((recentReports ?? 0) > 5) return json({ sent: false, reason: 'rate_limited' })
+
+  const { data: admins } = await adminClient.from('admins').select('user_id')
+  const adminIds: string[] = (admins ?? []).map((a: any) => a.user_id)
+  if (!adminIds.length) return json({ sent: false, reason: 'no_admins' })
+
+  const { data: people } = await adminClient
+    .from('profiles')
+    .select('id, name, username')
+    .in('id', [report.reporter_id, report.reported_user_id])
+  const label = (id: string) => {
+    const p = (people ?? []).find((x: any) => x.id === id)
+    return p?.username ? `@${p.username}` : (p?.name ?? 'Someone')
+  }
+  const what = report.content_type === 'session' ? "'s session" : report.content_type === 'comment' ? "'s comment" : ''
+  const title = 'New report'
+  const body = `${label(report.reporter_id)} reported ${label(report.reported_user_id)}${what}: ${report.reason}`
+
+  // In-app rows go in even for admins without a push token.
+  await adminClient.from('notifications').insert(
+    adminIds.map(rid => ({
+      recipient_id: rid,
+      sender_id: callerId !== rid ? callerId : null,
+      type: 'report',
+      report_id: reportId,
+      title,
+      body,
+    }))
+  )
+
+  const { data: tokenRows } = await adminClient.from('push_tokens').select('token').in('user_id', adminIds)
+  if (!tokenRows?.length) return json({ sent: true, count: 0, reason: 'no_tokens' })
+  const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(tokenRows.map(({ token }: any) => ({
+      to: token, title, body, data: { type: 'report', reportId }, sound: 'default',
+    }))),
+  })
+  return json({ sent: true, count: tokenRows.length, result: await expoRes.json() })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -147,10 +223,14 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const { type, recipientId, recipientIds, sessionId: requestedSessionId, commentId } = await req.json()
+    const { type, recipientId, recipientIds, sessionId: requestedSessionId, commentId, reportId } = await req.json()
 
     if (!type) {
       return new Response(JSON.stringify({ error: 'Missing type' }), { status: 400, headers: corsHeaders })
+    }
+
+    if (type === 'report') {
+      return await handleReport(adminClient, user.id, reportId)
     }
 
     // The sender is always the authenticated caller — never trust a
