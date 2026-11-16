@@ -9,6 +9,7 @@ import { useAuth } from '../utils/AuthContext';
 
 import { FONTS, SPACING } from '../utils/theme';
 import LogClimbModal from './LogClimbModal';
+import Sheen from './Sheen';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -38,7 +39,7 @@ const TABS: { id: ScreenId; label: string; icon: IoniconName; iconActive: Ionico
 // onTabPress runs before switching tabs — PushScreen's copy of this bar uses
 // it to close its page first.
 export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void } = {}) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const { screen, returnTo, navigate } = useNav();
   // While viewing a profile opened from another tab, the screen is 'friends'
   // underneath but you're really looking at a pushed detail view — keep
@@ -123,15 +124,15 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
             )}
           </View>
         ) : (
-          <Ionicons
+          <BoldIcon
             name={active ? tab.iconActive : tab.icon}
             size={22}
-            color={active ? colors.accent : colors.textMuted}
+            color={active ? colors.accent : colors.textPrimary}
           />
         )}
         <Text style={[
           styles.tabLabel,
-          { color: active ? colors.accent : colors.textMuted },
+          { color: active ? colors.accent : colors.textPrimary },
           active && { fontFamily: FONTS.family.bold },
         ]}>
           {tab.label}
@@ -152,15 +153,17 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         {
           // Slightly see-through, so content scrolling behind shows faintly.
           // (A true frosted blur needs a native module and an App Store build.)
-          backgroundColor: colors.bgCard + 'EB',
-          borderColor: colors.border,
+          // Dark mode lifts the bar a shade so its sheen reads against the page
+          backgroundColor: (mode === 'dark' ? colors.bgElevated : colors.bgCard) + 'EB',
           bottom: barBottom(insets.bottom),
         },
       ]}>
+        {/* Glassy rim + top highlight (replaces the old hairline border) */}
+        <Sheen radius={BAR_HEIGHT / 2} />
         {activeIndex >= 0 && tabWidth > 0 && (
           <Animated.View
             pointerEvents="none"
-            style={[styles.bubble, { width: tabWidth, backgroundColor: colors.bgElevated, transform: [{ translateX: bubbleX }] }]}
+            style={[styles.bubble, { width: tabWidth, backgroundColor: mode === 'dark' ? colors.border : colors.bgElevated, transform: [{ translateX: bubbleX }] }]}
           />
         )}
         <View style={styles.tabGroup} onLayout={onGroupLayout('left')}>
@@ -199,6 +202,24 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
   );
 }
 
+// Ionicons are font glyphs with a fixed stroke, so for slightly heavier lines
+// the glyph is drawn again nudged a fraction of a point each way — the copies
+// overlap into a thicker, still-crisp outline.
+const BOLD_OFFSETS = [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]];
+function BoldIcon({ name, size, color }: { name: IoniconName; size: number; color: string }) {
+  return (
+    <View style={{ width: size, height: size }}>
+      {BOLD_OFFSETS.map(([x, y], i) => (
+        <Ionicons
+          key={i} name={name} size={size} color={color}
+          style={{ position: 'absolute', left: x, top: y }}
+        />
+      ))}
+      <Ionicons name={name} size={size} color={color} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
@@ -206,7 +227,6 @@ const styles = StyleSheet.create({
     right: SPACING.lg,
     height: BAR_HEIGHT,
     borderRadius: BAR_HEIGHT / 2,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.xs,
     flexDirection: 'row',
     alignItems: 'center',

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
 import { routeNotificationTap } from '../utils/notifications';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import Sheen from './Sheen';
 
 const SCREEN_TITLES: Partial<Record<ScreenId, string>> = {
   log: 'Log',
@@ -37,7 +38,7 @@ type AppNotification = {
 };
 
 export default function AppHeader() {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const nav = useNav();
   const { screen, openSettings, closeSettings, openFriends, navigateToSession } = nav;
   const { user, pendingRequestCount } = useAuth();
@@ -49,7 +50,8 @@ export default function AppHeader() {
   const barOpacity = floating
     ? scrollY.interpolate({ inputRange: [0, 40], outputRange: [1, 0], extrapolate: 'clamp' })
     : 1;
-  const circle = [styles.circleBtn, { backgroundColor: colors.bgCard }];
+  // Dark mode lifts the buttons a shade off the background so the sheen reads
+  const circle = [styles.circleBtn, { backgroundColor: mode === 'dark' ? colors.bgElevated : colors.bgCard }];
 
   const [notifVisible, setNotifVisible] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -195,14 +197,17 @@ export default function AppHeader() {
       <View style={styles.side}>
         {screen === 'settings' ? (
           <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={circle} accessibilityLabel="Back">
+            <Sheen radius={20} />
             <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : (
         <View style={styles.leftGroup}>
           <TouchableOpacity onPress={startSession} activeOpacity={0.7} style={circle} accessibilityLabel="Start session">
+            <Sheen radius={20} />
             <Ionicons name="add" size={26} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={openFriends} activeOpacity={0.7} style={circle}>
+            <Sheen radius={20} />
             <Ionicons name="search" size={22} color={colors.textPrimary} />
             {pendingRequestCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
@@ -221,10 +226,12 @@ export default function AppHeader() {
       <View style={styles.sideRight}>
         {screen === 'settings' ? null : screen === 'account' ? (
           <TouchableOpacity onPress={openSettings} activeOpacity={0.7} accessibilityLabel="Settings" style={circle}>
+            <Sheen radius={20} />
             <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={openNotifications} activeOpacity={0.7} style={circle}>
+            <Sheen radius={20} />
             <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
