@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Modal, TouchableOpacity, Animated, Dimensions }
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../utils/theme';
 import ZoomablePhoto, { Rect } from './ZoomablePhoto';
+import { TabSwipeGuard } from '../utils/useTabSwipe';
 
 type Measurable = { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void };
 
@@ -84,6 +85,10 @@ export default function PhotoViewer({ uris, initialIndex, onClose, origins, clip
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      {/* Touches inside a Modal still bubble up the component tree to the screen
+          behind it; without the guard, swiping past the last photo changed that
+          screen's tab (e.g. Sessions → Projects). */}
+      <TabSwipeGuard style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
         <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.96)', opacity: fade }} />
         <Animated.View style={{ position: 'absolute', top: 54, right: 20, zIndex: 10, opacity: fade }}>
@@ -139,6 +144,7 @@ export default function PhotoViewer({ uris, initialIndex, onClose, origins, clip
           </Animated.View>
         )}
       </View>
+      </TabSwipeGuard>
     </Modal>
   );
 }
