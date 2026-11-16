@@ -18,6 +18,7 @@ export default function SwipeableComment({
   commentAvatarUrl,
   likedByUserIds,
   currentUserId,
+  readOnly = false,
 }: {
   c: any;
   isOwn: boolean;
@@ -31,15 +32,18 @@ export default function SwipeableComment({
   commentAvatarUrl: string | null;
   likedByUserIds: string[];
   currentUserId: string;
+  // Admin feed: no swipe-to-delete, long-press report or liking; the like
+  // count still shows.
+  readOnly?: boolean;
 }) {
   const liked = likedByUserIds.includes(currentUserId);
   return (
-    <SwipeToDelete onDelete={onDelete} disabled={!isOwn} heightOffset={0}>
+    <SwipeToDelete onDelete={onDelete} disabled={!isOwn || readOnly} heightOffset={0}>
       <TouchableOpacity
         style={[swipeCommentStyles.row, { backgroundColor: colors.bg }]}
         activeOpacity={0.85}
         onPress={onPress}
-        onLongPress={onReport}
+        onLongPress={readOnly ? undefined : onReport}
         delayLongPress={500}
       >
         <TouchableOpacity onPress={onNamePress} activeOpacity={0.7}>
@@ -61,7 +65,7 @@ export default function SwipeableComment({
             {formatDistanceToNow(parseISO(c.created_at), { addSuffix: true })}
           </Text>
         </View>
-        <TouchableOpacity onPress={onLike} activeOpacity={0.7} style={swipeCommentStyles.likeBtn}>
+        <TouchableOpacity onPress={onLike} disabled={readOnly} activeOpacity={0.7} style={swipeCommentStyles.likeBtn}>
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={14} color={liked ? '#e05c4a' : colors.textMuted} />
           {likedByUserIds.length > 0 && (
             <Text style={[swipeCommentStyles.likeCount, { color: liked ? '#e05c4a' : colors.textMuted }]}>

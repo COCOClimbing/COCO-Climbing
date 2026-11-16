@@ -23,6 +23,9 @@ interface AuthContextType {
   hometown: string | null;
   bio: string | null;
   isPrivate: boolean;
+  // Row in public.admins (only settable from the SQL editor). Gates the admin
+  // feed button; the admin_feed RPC re-checks it server-side.
+  isAdmin: boolean;
   pendingRequestCount: number;
   isPasswordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hometown, setHometown] = useState<string | null>(null);
   const [bio, setBio] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const syncedRef = useRef(false);
@@ -104,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (user) {
       loadProfile(user.id);
+      loadAdmin(user.id);
       refreshPendingCount(user.id);
       if (!syncedRef.current) {
         syncedRef.current = true;
@@ -121,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setHometown(null);
       setBio(null);
       setIsPrivate(false);
+      setIsAdmin(false);
       setPendingRequestCount(0);
       syncedRef.current = false;
       setInitialSyncSettled(true);
@@ -156,6 +162,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
+  }
+
+  async function loadAdmin(userId: string) {
+    const { data } = await supabase
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    setIsAdmin(!!data);
   }
 
   async function refreshProfile() {
@@ -342,6 +357,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hometown,
       bio,
       isPrivate,
+      isAdmin,
       pendingRequestCount,
       isPasswordRecovery,
       signIn,

@@ -91,10 +91,19 @@ interface ActivityCardProps {
   displayGrade: (grade: string | null, fromSystem: string | null) => string;
   onShare: () => void;
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
+  // Admin feed: the post's climbs, likes and comments come preloaded and the
+  // card is read-only — no liking, commenting, reporting or sharing.
+  readOnly?: {
+    climbs: any[];
+    likes: SessionLike[];
+    comments: SessionComment[];
+    commentLikes: Record<string, string[]>;
+    isPrivateAccount?: boolean;
+  };
 }
 
 export default function ActivityCard({
-  entry, colors, currentUserId, myAvatar, daysBack, displayGrade, onShare, onViewProfile,
+  entry, colors, currentUserId, myAvatar, daysBack, displayGrade, onShare, onViewProfile, readOnly,
 }: ActivityCardProps) {
   const isOutdoor = entry.environment === 'outdoor';
 
@@ -104,15 +113,15 @@ export default function ActivityCard({
   const [expandedClimbs, setExpandedClimbs] = useState<Climb[] | null>(null);
   const [loadingClimbs, setLoadingClimbs] = useState(false);
 
-  const [sessionLikes, setSessionLikes] = useState<SessionLike[]>([]);
-  const [sessionComments, setSessionComments] = useState<SessionComment[]>([]);
-  const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>({});
+  const [sessionLikes, setSessionLikes] = useState<SessionLike[]>(readOnly?.likes ?? []);
+  const [sessionComments, setSessionComments] = useState<SessionComment[]>(readOnly?.comments ?? []);
+  const [commentLikesMap, setCommentLikesMap] = useState<Record<string, string[]>>(readOnly?.commentLikes ?? {});
   // Full comment thread page; the card shows only the first few comments.
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const [discussionFocus, setDiscussionFocus] = useState(false);
 
   useEffect(() => {
-    if (!entry.sessionId) return;
+    if (!entry.sessionId || readOnly) return;
     Promise.all([
       getSessionLikes(entry.sessionId),
       getSessionComments(entry.sessionId),
@@ -128,6 +137,7 @@ export default function ActivityCard({
   async function handleToggleClimbs() {
     if (climbsExpanded) { setClimbsExpanded(false); return; }
     setClimbsExpanded(true);
+    if (readOnly) { setExpandedClimbs(readOnly.climbs.map(mapToClimb)); return; }
     // Refetch on every open so edits made since (e.g. a routine) show up; keep the
     // previous list on screen meanwhile rather than flashing "Loading…"
     if (expandedClimbs === null) setLoadingClimbs(true);
@@ -274,7 +284,10 @@ export default function ActivityCard({
         >
           <ProfileAvatar name={entry.friend.name} avatarUrl={entry.friend.avatar_url ?? null} size={44} colors={colors} />
           <View style={styles.cardHeaderInfo}>
-            <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={[styles.cardName, { color: colors.textPrimary }]}>{entry.friend.name}</Text>
+              {readOnly?.isPrivateAccount && <Ionicons name="lock-closed" size={13} color={colors.textMuted} accessibilityLabel="Private account" />}
+            </View>
             <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
               {formatRelativeDate(entry.sessionDate)}{entry.sessionTime && !isNaN(new Date(entry.sessionTime).getTime()) ? ` at ${format(new Date(entry.sessionTime), 'h:mm a')}` : ''} · {isOutdoor ? 'Outdoor' : 'Indoor'}
             </Text>
@@ -286,9 +299,11 @@ export default function ActivityCard({
             ) : null}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleMoreMenu} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
+        {!readOnly && (
+          <TouchableOpacity onPress={handleMoreMenu} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Title */}
@@ -411,7 +426,7 @@ export default function ActivityCard({
       )}
 
       {/* Actions */}
-      <View style={styles.cardActions}>
+      {!readOnly && <View style={styles.cardActions}>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
           <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
         </TouchableOpacity>
@@ -421,7 +436,7 @@ export default function ActivityCard({
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={onShare}>
           <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-      </View>
+      </View>}
 
       {/* Comment thread */}
       {sessionComments.length > 0 && (
@@ -443,6 +458,7 @@ export default function ActivityCard({
               likedByUserIds={commentLikesMap[c.id] ?? []}
               currentUserId={currentUserId ?? ''}
               onPress={() => openDiscussion(false)}
+              readOnly={!!readOnly}
             />
           ))}
           {sessionComments.length > 3 && (
@@ -470,6 +486,7 @@ export default function ActivityCard({
         onReportComment={c => handleReportComment(c.user_id, c.id)}
         onLikeComment={c => handleCommentLikeToggle(c.id, c.user_id)}
         onViewProfile={onViewProfile}
+        readOnly={!!readOnly}
       />
 
       {/* Photo viewer for this card's media */}

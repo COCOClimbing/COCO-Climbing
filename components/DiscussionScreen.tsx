@@ -34,6 +34,7 @@ export default function DiscussionScreen({
   onReportComment,
   onLikeComment,
   onViewProfile,
+  readOnly = false,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -54,6 +55,8 @@ export default function DiscussionScreen({
   onReportComment: (comment: SessionComment) => void;
   onLikeComment: (comment: SessionComment) => void;
   onViewProfile: (profile: ProfileRef) => void;
+  // Admin feed: the thread is view-only — no comment box, comment menu or liking.
+  readOnly?: boolean;
 }) {
   const tabBarSpace = useTabBarSpace();
   const [text, setText] = useState('');
@@ -71,7 +74,7 @@ export default function DiscussionScreen({
     const show = Keyboard.addListener('keyboardWillShow', e => setKeyboardHeight(e.endCoordinates.height));
     const hide = Keyboard.addListener('keyboardWillHide', () => setKeyboardHeight(0));
     // Wait for the slide-in before raising the keyboard.
-    const focusTimer = autoFocus ? setTimeout(() => inputRef.current?.focus(), 320) : null;
+    const focusTimer = autoFocus && !readOnly ? setTimeout(() => inputRef.current?.focus(), 320) : null;
     return () => {
       show.remove();
       hide.remove();
@@ -141,7 +144,7 @@ export default function DiscussionScreen({
         )}
 
         {comments.length === 0 ? (
-          <Text style={[styles.empty, { color: colors.textMuted }]}>No comments yet. Start the conversation.</Text>
+          <Text style={[styles.empty, { color: colors.textMuted }]}>{readOnly ? 'No comments yet.' : 'No comments yet. Start the conversation.'}</Text>
         ) : (
           comments.map(c => {
             const profile: ProfileRef = { id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null };
@@ -165,12 +168,14 @@ export default function DiscussionScreen({
                       {' · '}
                       {formatDistanceToNow(parseISO(c.created_at), { addSuffix: true })}
                     </Text>
-                    <TouchableOpacity onPress={() => handleMore(c)} activeOpacity={0.7} hitSlop={10}>
-                      <Ionicons name="ellipsis-horizontal" size={18} color={colors.textPrimary} />
-                    </TouchableOpacity>
+                    {!readOnly && (
+                      <TouchableOpacity onPress={() => handleMore(c)} activeOpacity={0.7} hitSlop={10}>
+                        <Ionicons name="ellipsis-horizontal" size={18} color={colors.textPrimary} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <Text style={[styles.commentText, { color: colors.textPrimary }]}>{c.text}</Text>
-                  <TouchableOpacity onPress={() => onLikeComment(c)} activeOpacity={0.7} style={styles.likeBtn} hitSlop={6}>
+                  <TouchableOpacity onPress={() => onLikeComment(c)} disabled={readOnly} activeOpacity={0.7} style={styles.likeBtn} hitSlop={6}>
                     <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#e05c4a' : colors.textSecondary} />
                     <Text style={[styles.likeLabel, { color: liked ? '#e05c4a' : colors.textSecondary }]}>
                       {likedBy.length === 0 ? 'Like' : `${likedBy.length} ${likedBy.length === 1 ? 'like' : 'likes'}`}
@@ -184,7 +189,7 @@ export default function DiscussionScreen({
       </ScrollView>
 
       {/* Sits above the tab bar, or right on top of the keyboard while typing. */}
-      <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: keyboardHeight > 0 ? keyboardHeight + SPACING.sm : tabBarSpace }]}>
+      {readOnly ? <View style={{ height: tabBarSpace }} /> : <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: keyboardHeight > 0 ? keyboardHeight + SPACING.sm : tabBarSpace }]}>
         <View style={styles.inputWrap}>
           <Text
             style={[styles.input, styles.mirror]}
@@ -208,7 +213,7 @@ export default function DiscussionScreen({
         <TouchableOpacity onPress={handleSend} disabled={!canSend} activeOpacity={0.7} hitSlop={8}>
           <Text style={[styles.send, { color: canSend ? colors.accent : colors.textMuted }]}>Send</Text>
         </TouchableOpacity>
-      </View>
+      </View>}
     </PushScreen>
   );
 }

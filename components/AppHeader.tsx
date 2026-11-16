@@ -7,6 +7,7 @@ import { useAuth } from '../utils/AuthContext';
 import { useHeaderScrollContext } from '../utils/HeaderScroll';
 import StatusBarFade from './StatusBarFade';
 import PushScreen from './PushScreen';
+import AdminFeedScreen from './AdminFeedScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh } from '../utils/storage';
 import { FONTS, SPACING } from '../utils/theme';
@@ -41,7 +42,7 @@ export default function AppHeader() {
   const { colors, mode } = useTheme();
   const nav = useNav();
   const { screen, openSettings, closeSettings, openFriends, navigateToSession } = nav;
-  const { user, pendingRequestCount } = useAuth();
+  const { user, pendingRequestCount, isAdmin } = useAuth();
   const { scrollY, floating, setHeaderHeight } = useHeaderScrollContext();
   const insets = useSafeAreaInsets();
   const tabBarSpace = useTabBarSpace();
@@ -54,6 +55,7 @@ export default function AppHeader() {
   const circle = [styles.circleBtn, { backgroundColor: mode === 'dark' ? DARK_GLASS : colors.bgCard }];
 
   const [notifVisible, setNotifVisible] = useState(false);
+  const [adminFeedVisible, setAdminFeedVisible] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -230,6 +232,13 @@ export default function AppHeader() {
             <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         ) : (
+          <View style={styles.leftGroup}>
+          {screen === 'friends' && isAdmin && (
+            <TouchableOpacity onPress={() => setAdminFeedVisible(true)} activeOpacity={0.7} style={circle} accessibilityLabel="Admin: all sessions">
+              <Sheen radius={20} />
+              <Ionicons name="shield-checkmark-outline" size={22} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={openNotifications} activeOpacity={0.7} style={circle}>
             <Sheen radius={20} />
             <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
@@ -239,8 +248,11 @@ export default function AppHeader() {
               </View>
             )}
           </TouchableOpacity>
+          </View>
         )}
       </View>
+
+      {isAdmin && <AdminFeedScreen visible={adminFeedVisible} onClose={() => setAdminFeedVisible(false)} />}
 
       {/* Notifications page */}
       <PushScreen visible={notifVisible} title="Notifications" onBack={() => setNotifVisible(false)} onDismiss={handleNotifModalDismiss}>
