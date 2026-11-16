@@ -54,6 +54,16 @@ export function scoreToGradeLabel(score: number, system: string): string {
   return best;
 }
 
+// The system to label a chart in for whoever's viewing it: their preferred
+// boulder system for boulder grades, their preferred rope system for rope
+// grades. Scores share a scale within each family, so any system in the
+// family can label them.
+export function viewerLabelSystem(gradeSystem: string, prefs: { boulder: string; rope: string }): string {
+  if (gradeSystem === 'v-scale' || gradeSystem === 'font') return prefs.boulder;
+  if (gradeSystem === 'yds' || gradeSystem === 'french' || gradeSystem === 'british') return prefs.rope;
+  return gradeSystem;
+}
+
 // Custom (gym-specific) grades are free text and can't be ranked, so they're
 // left out of every "hardest"/average calculation. They still count as climbs.
 export function isCustomGrade(system?: string | null): boolean {

@@ -27,7 +27,7 @@ import { supabase } from '../utils/supabase';
 import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
-import { gradeScore, isCustomGrade } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade, viewerLabelSystem } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
@@ -182,6 +182,7 @@ export default function AccountScreen() {
       hardestByType,
       sessionPoints,
       dominantSys,
+      chartLabelSys: viewerLabelSystem(dominantSys, { boulder: boulderSys, rope: ropeSys }),
     });
   }
 
@@ -718,12 +719,13 @@ interface ClimbStatsData {
   hardestByType: HardestByType[];
   sessionPoints: { date: string; avg: number }[];
   dominantSys: string;
+  chartLabelSys: string;
 }
 
 // part "month" is the Last 30 Days block above the profile's toggle; part
 // "progress" is everything shown under its Progress tab.
 function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; colors: any; part: 'month' | 'progress' }) {
-  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, sessionPoints, dominantSys } = stats;
+  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, sessionPoints, dominantSys, chartLabelSys } = stats;
 
   if (part === 'month') return (
     <View style={[statStyles.wrapper, { marginBottom: SPACING.md }]}>
@@ -754,7 +756,7 @@ function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; col
           <View style={statStyles.sectionLabelRow}>
             <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
           </View>
-          <GradeChart pts={sessionPoints} dominantSys={dominantSys} colors={colors} />
+          <GradeChart pts={sessionPoints} dominantSys={dominantSys} labelSys={chartLabelSys} colors={colors} />
         </>
       )}
 

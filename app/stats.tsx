@@ -8,8 +8,8 @@ import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
-import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
-import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel } from '../utils/gradeUtils';
+import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
+import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, viewerLabelSystem } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
 import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
@@ -124,6 +124,9 @@ export default function StatsScreen() {
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
+  // Chart labels follow the viewer's grade preference (Settings → Grades)
+  const [gradePrefs, setGradePrefs] = useState({ boulder: 'v-scale', rope: 'yds' });
+  useEffect(() => { getPreferredDisplayGrades().then(setGradePrefs).catch(() => {}); }, []);
 
   // Only the first load shows the spinner; later refreshes (e.g. cloud sync
   // finishing after launch) update the stats in place.
@@ -548,7 +551,7 @@ export default function StatsScreen() {
                   <React.Fragment key={t}>
                     <Line x1={PAD.left} y1={y} x2={PAD.left + innerW} y2={y} stroke={colors.border} strokeWidth={1} strokeDasharray="3,4" />
                     <SvgText x={PAD.left - 4} y={y + 4} fontSize={8} fill={colors.textMuted} textAnchor="end" fontFamily={FONTS.family.regular}>
-                      {numToLabel(val, dominantSys)}
+                      {numToLabel(val, viewerLabelSystem(dominantSys, gradePrefs))}
                     </SvgText>
                   </React.Fragment>
                 );

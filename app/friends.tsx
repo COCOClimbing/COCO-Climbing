@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
-import { gradeScore, isCustomGrade } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade, viewerLabelSystem } from '../utils/gradeUtils';
 import GradeChart from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
@@ -433,7 +433,8 @@ function FriendDetailView({
   const hardestByType = GRADED_TYPES.map(({ id, label }) => {
     const typeSends = allSends.filter(c => c.type === id && c.grade && c.grade_system && !isCustomGrade(c.grade_system));
     if (typeSends.length === 0) return { label, grade: null };
-    const sys = id === 'boulder' || id === 'board' ? 'v-scale' : 'yds';
+    // In the viewer's preferred system, like the chart
+    const sys = id === 'boulder' || id === 'board' ? preferredBoulder : preferredRope;
     const best = [...typeSends].sort((a, b) => {
       const da = getGradeDifficulty(a.grade, a.grade_system);
       const db = getGradeDifficulty(b.grade, b.grade_system);
@@ -626,7 +627,7 @@ function FriendDetailView({
             {sessionPoints.length >= 2 && (
               <>
                 <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
-                <GradeChart pts={sessionPoints} dominantSys={dominantSys} colors={colors} />
+                <GradeChart pts={sessionPoints} dominantSys={dominantSys} labelSys={viewerLabelSystem(dominantSys, { boulder: preferredBoulder, rope: preferredRope })} colors={colors} />
                 <View style={[detailStyles.divider, { backgroundColor: colors.border }]} />
               </>
             )}

@@ -10,9 +10,11 @@ const CHART_H = 110;
 // Line chart of the average grade sent per session — shown on your own
 // profile and on other people's. `pts` is every session, oldest first, with a
 // full YYYY-MM-DD date; the toggle above the chart picks how far back to show.
-export default function GradeChart({ pts: allPts, dominantSys, colors }: {
+export default function GradeChart({ pts: allPts, dominantSys, labelSys, colors }: {
   pts: { date: string; avg: number }[];
   dominantSys: string;
+  // System to label the axis in (the viewer's preference); defaults to dominantSys
+  labelSys?: string;
   colors: any;
 }) {
   const [chartWidth, setChartWidth] = React.useState(0);
@@ -39,7 +41,7 @@ export default function GradeChart({ pts: allPts, dominantSys, colors }: {
   function cy(v: number) {
     return PAD_TOP + innerH - ((v - minVal) / valRange) * innerH;
   }
-  const numToLabel = (score: number) => scoreToGradeLabel(score, dominantSys);
+  const numToLabel = (score: number) => scoreToGradeLabel(score, labelSys ?? dominantSys);
 
   return (
     <View style={styles.chartContainer}>
