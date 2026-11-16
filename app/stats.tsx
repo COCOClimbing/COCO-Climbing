@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
 import StatCard from '../components/StatCard';
@@ -9,7 +10,8 @@ import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
-import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, viewerLabelSystem } from '../utils/gradeUtils';
+import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, gradeDiscipline, defaultDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
+import DisciplineSwitch from '../components/DisciplineSwitch';
 import { supabase } from '../utils/supabase';
 import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
@@ -63,8 +65,9 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
         <View style={ss.modalHeader}>
-          <TouchableOpacity onPress={onClose} style={ss.modalClose}>
-            <Text style={[ss.modalCloseText, { color: colors.textMuted }]}>Done</Text>
+          {/* Same round accent checkmark the app's other sheets close with */}
+          <TouchableOpacity onPress={onClose} style={[ss.modalClose, { backgroundColor: colors.accent }]} accessibilityLabel="Done">
+            <Ionicons name="checkmark" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={[ss.modalTitle, { color: colors.textPrimary }]}>{title}</Text>
           <Text style={[ss.modalSubtitle, { color: colors.textMuted }]}>{filteredClimbs.length} climbs</Text>
@@ -124,6 +127,7 @@ export default function StatsScreen() {
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
+  const [chosenDiscipline, setChosenDiscipline] = useState<Discipline | null>(null);
   // Chart labels follow the viewer's grade preference (Settings → Grades)
   const [gradePrefs, setGradePrefs] = useState({ boulder: 'v-scale', rope: 'yds' });
   useEffect(() => { getPreferredDisplayGrades().then(setGradePrefs).catch(() => {}); }, []);
@@ -301,25 +305,31 @@ export default function StatsScreen() {
 
     const outdoorSends = sends.filter(c => c.environment === 'outdoor').length;
 
-    const dominantSys = systems[0];
-    const climbsBySession: Record<string, { date: string; climbs: Climb[] }> = {};
-    climbs.filter(c => c.gradeSystem === dominantSys).forEach(c => {
-      const key = c.sessionId || c.date.slice(0, 10);
-      const date = (c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10);
-      if (!climbsBySession[key]) climbsBySession[key] = { date, climbs: [] };
-      climbsBySession[key].climbs.push(c);
-    });
-    // One point per session; several sessions can share a date, so key by session
-    // Every session; the range toggle picks the window below
-    const allChartPoints = Object.entries(climbsBySession)
-      .sort(([, a], [, b]) => a.date.localeCompare(b.date))
-      .map(([key, { date, climbs: sc }]) => {
-        // Difficulty scores work for every grade system, not just V-scale / YDS
-        const scores = sc.map(c => gradeScore(c.grade, c.gradeSystem)).filter(v => v >= 0);
-        const avg = scores.length ? scores.reduce((sum, v) => sum + v, 0) / scores.length : -1;
-        return { key, date, val: avg };
-      })
-      .filter(p => p.val >= 0); // sessions with only custom/unknown grades
+    // Avg of each session's 3 hardest sends, split by discipline (Boulder =
+    // V + Font, Rope = YDS + French + British) — matches the profile chart.
+    // One point per session; several
+    // sessions can share a date, so key by session. Every session; the range
+    // toggle picks the window below.
+    const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
+    sends.forEach(c => { const d = gradeDiscipline(c.gradeSystem); if (d) disciplineCounts[d]++; });
+    const pointsFor = (discipline: Discipline) => {
+      const climbsBySession: Record<string, { date: string; climbs: Climb[] }> = {};
+      sends.filter(c => gradeDiscipline(c.gradeSystem) === discipline).forEach(c => {
+        const key = c.sessionId || c.date.slice(0, 10);
+        const date = (c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10);
+        if (!climbsBySession[key]) climbsBySession[key] = { date, climbs: [] };
+        climbsBySession[key].climbs.push(c);
+      });
+      return Object.entries(climbsBySession)
+        .sort(([, a], [, b]) => a.date.localeCompare(b.date))
+        .map(([key, { date, climbs: sc }]) => {
+          const scores = sc.map(c => gradeScore(c.grade, c.gradeSystem)).filter(v => v >= 0);
+          return { key, date, val: topScoresAverage(scores) };
+        })
+        .filter(p => p.val >= 0);
+    };
+    const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
+    const chartDisciplines = (['boulder', 'rope'] as Discipline[]).filter(d => chartSeries[d].length > 0);
 
     return {
       sends, flashes, projects, sendRate, flashRate,
@@ -328,7 +338,7 @@ export default function StatsScreen() {
       topStyles, typeCounts, topTypes, maxTypeCount,
       longestStreak, favLocation,
       avgPerSession, biggestSession, mostActiveMonth,
-      outdoorSends, dominantSys, allChartPoints,
+      outdoorSends, chartSeries, disciplineCounts, chartDisciplines,
     };
   }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
@@ -357,8 +367,14 @@ export default function StatsScreen() {
     topStyles, typeCounts, topTypes, maxTypeCount,
     longestStreak, favLocation,
     avgPerSession, biggestSession, mostActiveMonth,
-    outdoorSends, dominantSys, allChartPoints,
+    outdoorSends, chartSeries, disciplineCounts, chartDisciplines,
   } = computed;
+
+  const chartDiscipline = chosenDiscipline && chartDisciplines.includes(chosenDiscipline)
+    ? chosenDiscipline
+    : defaultDiscipline(disciplineCounts, chartDisciplines);
+  const allChartPoints = chartSeries[chartDiscipline];
+  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
 
   const chartPoints = filterByRange(allChartPoints, chartRange);
   const chartVals = chartPoints.map(p => p.val);
@@ -530,11 +546,16 @@ export default function StatsScreen() {
         })}
 
         {/* Progress chart */}
-        {allChartPoints.length >= 2 && (
+        {showChart && (
           <View style={{ marginTop: 10 }}>
-            <Text style={[ss.chartCaption, { color: colors.textPrimary }]}>
-              Avg Grade Attempted Per Session
-            </Text>
+            <View style={ss.chartTitleRow}>
+              <Text style={[ss.chartCaption, { color: colors.textPrimary, marginBottom: 0, flexShrink: 1 }]}>
+                Top 3 Sends Avg
+              </Text>
+              {chartDisciplines.length > 1 && (
+                <DisciplineSwitch value={chartDiscipline} onChange={setChosenDiscipline} colors={colors} />
+              )}
+            </View>
             <ChartRangeToggle value={chartRange} onChange={setChartRange} colors={colors} />
             {chartPoints.length < 2 ? (
               <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
@@ -551,7 +572,7 @@ export default function StatsScreen() {
                   <React.Fragment key={t}>
                     <Line x1={PAD.left} y1={y} x2={PAD.left + innerW} y2={y} stroke={colors.border} strokeWidth={1} strokeDasharray="3,4" />
                     <SvgText x={PAD.left - 4} y={y + 4} fontSize={8} fill={colors.textMuted} textAnchor="end" fontFamily={FONTS.family.regular}>
-                      {numToLabel(val, viewerLabelSystem(dominantSys, gradePrefs))}
+                      {numToLabel(val, gradePrefs[chartDiscipline])}
                     </SvgText>
                   </React.Fragment>
                 );
@@ -754,6 +775,7 @@ const ss = StyleSheet.create({
   impColHead: { fontSize: FONTS.sizes.xs, width: 72, textAlign: 'center' },
   impCell: { fontSize: FONTS.sizes.md, width: 72, textAlign: 'center' },
   chartCaption: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold, marginBottom: SPACING.md },
+  chartTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm, marginBottom: SPACING.md },
 
   // Styles
   styleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
@@ -774,8 +796,10 @@ const ss = StyleSheet.create({
   // Grade breakdown modal
   modalContainer: { flex: 1 },
   modalHeader: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md, alignItems: 'center' },
-  modalClose: { alignSelf: 'flex-end' },
-  modalCloseText: { fontSize: FONTS.sizes.sm },
+  modalClose: {
+    alignSelf: 'flex-end', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   modalTitle: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.family.bold, marginTop: SPACING.sm },
   modalSubtitle: { fontSize: FONTS.sizes.sm, marginTop: SPACING.xs },
   modalScroll: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },

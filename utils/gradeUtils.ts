@@ -64,6 +64,37 @@ export function viewerLabelSystem(gradeSystem: string, prefs: { boulder: string;
   return gradeSystem;
 }
 
+// Charts split by discipline rather than grading system: V + Font is
+// bouldering (board climbs included), YDS + French + British is rope (top
+// rope, sport, trad, auto belay). Scores share a scale within a discipline.
+export type Discipline = 'boulder' | 'rope';
+
+export function gradeDiscipline(system?: string | null): Discipline | null {
+  if (system === 'v-scale' || system === 'font') return 'boulder';
+  if (system === 'yds' || system === 'french' || system === 'british') return 'rope';
+  return null;
+}
+
+// Which discipline a chart opens on: whichever has more climbs, among the
+// ones that have anything to plot. Boulder wins a tie.
+export function defaultDiscipline(
+  counts: Record<Discipline, number>,
+  available: Discipline[],
+): Discipline {
+  if (available.length === 1) return available[0];
+  return counts.rope > counts.boulder ? 'rope' : 'boulder';
+}
+
+// A session's chart point: the average of its 3 hardest scores, so warm-ups
+// and easy volume don't drag a hard day down. Sessions with fewer than 3
+// average what they have. Returns -1 for an empty list.
+export const TOP_SENDS_PER_SESSION = 3;
+export function topScoresAverage(scores: number[], n = TOP_SENDS_PER_SESSION): number {
+  if (scores.length === 0) return -1;
+  const top = [...scores].sort((a, b) => b - a).slice(0, n);
+  return top.reduce((sum, v) => sum + v, 0) / top.length;
+}
+
 // Custom (gym-specific) grades are free text and can't be ranked, so they're
 // left out of every "hardest"/average calculation. They still count as climbs.
 export function isCustomGrade(system?: string | null): boolean {

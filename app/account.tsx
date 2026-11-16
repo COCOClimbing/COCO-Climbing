@@ -13,7 +13,7 @@ import {
   Share,
   Animated,
 } from 'react-native';
-import GradeChart from '../components/GradeChart';
+import GradeChart, { GradePoint } from '../components/GradeChart';
 import * as ImagePicker from 'expo-image-picker';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import { useTheme } from '../utils/ThemeContext';
@@ -27,7 +27,7 @@ import { supabase } from '../utils/supabase';
 import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
-import { gradeScore, isCustomGrade, viewerLabelSystem } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade, gradeDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
@@ -155,22 +155,22 @@ export default function AccountScreen() {
       return { label, grade: best?.converted ?? null, gradeSystem: preferredSys };
     });
 
-    const sysCounts: Record<string, number> = {};
-    sends.filter(c => !isCustomGrade(c.gradeSystem)).forEach(c => { sysCounts[c.gradeSystem] = (sysCounts[c.gradeSystem] || 0) + 1; });
-    const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
-
-    // Every session, oldest first; the chart's range toggle picks the window
+    // Avg of each session's 3 hardest sends, split by discipline (Boulder = V + Font, Rope =
+    // YDS + French + British); every session, oldest first — the chart's
+    // range toggle picks the window.
     const recentSessions = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
-    const sessionPoints = recentSessions.map(s => {
-      // Difficulty scores work for every grade system, not just V-scale / YDS
+    const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
+    sends.forEach(c => { const d = gradeDiscipline(c.gradeSystem); if (d) disciplineCounts[d]++; });
+    const pointsFor = (discipline: Discipline) => recentSessions.map(s => {
       const scores = sends
-        .filter(c => c.sessionId === s.id && c.gradeSystem === dominantSys)
+        .filter(c => c.sessionId === s.id && gradeDiscipline(c.gradeSystem) === discipline)
         .map(c => gradeScore(c.grade, c.gradeSystem))
         .filter(v => v >= 0);
       if (scores.length === 0) return null;
-      const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
+      const avg = topScoresAverage(scores);
       return { date: s.date.slice(0, 10), avg };
-    }).filter(Boolean) as { date: string; avg: number }[];
+    }).filter(Boolean) as GradePoint[];
+    const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
 
     setClimbStats({
       thisMonthClimbs: thisMonthClimbs.length,
@@ -180,9 +180,9 @@ export default function AccountScreen() {
       totalClimbs: climbsOnly.length,
       totalSends: sends.length,
       hardestByType,
-      sessionPoints,
-      dominantSys,
-      chartLabelSys: viewerLabelSystem(dominantSys, { boulder: boulderSys, rope: ropeSys }),
+      chartSeries,
+      disciplineCounts,
+      chartLabelSys: { boulder: boulderSys, rope: ropeSys },
     });
   }
 
@@ -717,15 +717,16 @@ interface ClimbStatsData {
   totalClimbs: number;
   totalSends: number;
   hardestByType: HardestByType[];
-  sessionPoints: { date: string; avg: number }[];
-  dominantSys: string;
-  chartLabelSys: string;
+  chartSeries: Record<Discipline, GradePoint[]>;
+  disciplineCounts: Record<Discipline, number>;
+  chartLabelSys: Record<Discipline, string>;
 }
 
 // part "month" is the Last 30 Days block above the profile's toggle; part
 // "progress" is everything shown under its Progress tab.
 function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; colors: any; part: 'month' | 'progress' }) {
-  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, sessionPoints, dominantSys, chartLabelSys } = stats;
+  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, chartSeries, disciplineCounts, chartLabelSys } = stats;
+  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
 
   if (part === 'month') return (
     <View style={[statStyles.wrapper, { marginBottom: SPACING.md }]}>
@@ -751,18 +752,22 @@ function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; col
   return (
     <View style={[statStyles.wrapper, { marginTop: SPACING.lg }]}>
       {/* Avg Grade Per Session line chart */}
-      {sessionPoints.length >= 2 && (
-        <>
-          <View style={statStyles.sectionLabelRow}>
-            <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
-          </View>
-          <GradeChart pts={sessionPoints} dominantSys={dominantSys} labelSys={chartLabelSys} colors={colors} />
-        </>
+      {showChart && (
+        <View style={statStyles.sectionLabelRow}>
+          <GradeChart
+            title="TOP 3 SENDS AVG"
+            titleStyle={statStyles.sectionLabel}
+            series={chartSeries}
+            counts={disciplineCounts}
+            labelSys={chartLabelSys}
+            colors={colors}
+          />
+        </View>
       )}
 
       {/* Hardest All Time */}
       <>
-        {sessionPoints.length >= 2 && <View style={[statStyles.divider, { backgroundColor: colors.border }]} />}
+        {showChart && <View style={[statStyles.divider, { backgroundColor: colors.border }]} />}
         <View style={statStyles.sectionLabelRow}>
           <Text style={[statStyles.sectionLabel, { color: colors.textPrimary }]}>HARDEST SENDS</Text>
         </View>

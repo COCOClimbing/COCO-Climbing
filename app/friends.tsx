@@ -29,8 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
-import { gradeScore, isCustomGrade, viewerLabelSystem } from '../utils/gradeUtils';
-import GradeChart from '../components/GradeChart';
+import { gradeScore, isCustomGrade, gradeDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
+import GradeChart, { GradePoint } from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
 import { isDeadMediaUrl } from '../utils/cloudSync';
@@ -443,11 +443,10 @@ function FriendDetailView({
     return { label, grade: convertGrade(best.grade, best.grade_system, sys) };
   });
 
-  // Avg grade sent per session (every session; the chart picks the range), as on your own profile:
-  // only sends in the grade system they use most, so averages are comparable.
-  const sysCounts: Record<string, number> = {};
-  allSends.filter(c => c.grade_system && !isCustomGrade(c.grade_system)).forEach(c => { sysCounts[c.grade_system] = (sysCounts[c.grade_system] || 0) + 1; });
-  const dominantSys = Object.entries(sysCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'v-scale';
+  // Avg of each session's 3 hardest sends (every session; the chart picks the range), as on your own profile:
+  // split by discipline (Boulder = V + Font, Rope = YDS + French + British).
+  const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
+  allSends.forEach(c => { const d = gradeDiscipline(c.grade_system); if (d) disciplineCounts[d]++; });
   const sessionDates = new Map<string, string>();
   countedClimbs.forEach(c => {
     if (!c.session_id) return;
@@ -455,19 +454,20 @@ function FriendDetailView({
     const prev = sessionDates.get(c.session_id);
     if (!prev || d < prev) sessionDates.set(c.session_id, d);
   });
-  const sessionPoints = [...sessionDates.entries()]
-    .sort((a, b) => a[1].localeCompare(b[1]))
+  const orderedSessions = [...sessionDates.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const pointsFor = (discipline: Discipline) => orderedSessions
     .map(([sessionId, date]) => {
-      // Difficulty scores work for every grade system, not just V-scale / YDS
       const scores = allSends
-        .filter(c => c.session_id === sessionId && c.grade_system === dominantSys)
+        .filter(c => c.session_id === sessionId && gradeDiscipline(c.grade_system) === discipline)
         .map(c => gradeScore(c.grade, c.grade_system))
         .filter(v => v >= 0);
       if (scores.length === 0) return null;
-      const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
+      const avg = topScoresAverage(scores);
       return { date: date.slice(0, 10), avg };
     })
-    .filter(Boolean) as { date: string; avg: number }[];
+    .filter(Boolean) as GradePoint[];
+  const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
+  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
 
   const friendBtnLabel = friendStatus === 'accepted' ? 'Following'
     : friendStatus === 'pending_sent' ? 'Requested'
@@ -624,10 +624,16 @@ function FriendDetailView({
           ) : profileTab === 'progress' ? (
           <View style={[detailStyles.statsWrapper, { marginTop: SPACING.lg }]}>
             {/* ── Avg grade per session ── */}
-            {sessionPoints.length >= 2 && (
+            {showChart && (
               <>
-                <Text style={[detailStyles.sectionLabel, { color: colors.textPrimary }]}>AVG GRADE SENT PER SESSION</Text>
-                <GradeChart pts={sessionPoints} dominantSys={dominantSys} labelSys={viewerLabelSystem(dominantSys, { boulder: preferredBoulder, rope: preferredRope })} colors={colors} />
+                <GradeChart
+                  title="TOP 3 SENDS AVG"
+                  titleStyle={detailStyles.sectionLabel}
+                  series={chartSeries}
+                  counts={disciplineCounts}
+                  labelSys={{ boulder: preferredBoulder, rope: preferredRope }}
+                  colors={colors}
+                />
                 <View style={[detailStyles.divider, { backgroundColor: colors.border }]} />
               </>
             )}

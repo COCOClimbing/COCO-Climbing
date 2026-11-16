@@ -1,22 +1,34 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, StyleProp, TextStyle } from 'react-native';
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Line } from 'react-native-svg';
 import { FONTS, SPACING } from '../utils/theme';
-import { scoreToGradeLabel } from '../utils/gradeUtils';
+import { scoreToGradeLabel, defaultDiscipline, Discipline } from '../utils/gradeUtils';
+import DisciplineSwitch from './DisciplineSwitch';
 import ChartRangeToggle, { ChartRange, DEFAULT_CHART_RANGE, filterByRange, rangeDateLabel } from './ChartRangeToggle';
 
 const CHART_H = 110;
 
 // Line chart of the average grade sent per session — shown on your own
-// profile and on other people's. `pts` is every session, oldest first, with a
-// full YYYY-MM-DD date; the toggle above the chart picks how far back to show.
-export default function GradeChart({ pts: allPts, dominantSys, labelSys, colors }: {
-  pts: { date: string; avg: number }[];
-  dominantSys: string;
-  // System to label the axis in (the viewer's preference); defaults to dominantSys
-  labelSys?: string;
+// profile and on other people's. Each series is every session, oldest first,
+// with a full YYYY-MM-DD date; the toggle above the chart picks how far back
+// to show. When someone climbs both disciplines a Boulder / Rope switch sits
+// beside the title and the range applies to whichever is selected.
+export type GradePoint = { date: string; avg: number };
+
+export default function GradeChart({ title, titleStyle, series, counts, labelSys, colors }: {
+  title: string;
+  titleStyle?: StyleProp<TextStyle>;
+  series: Record<Discipline, GradePoint[]>;
+  // Climbs per discipline, to pick which one the chart opens on
+  counts: Record<Discipline, number>;
+  // System to label each discipline's axis in (the viewer's preference)
+  labelSys: Record<Discipline, string>;
   colors: any;
 }) {
+  const available = (['boulder', 'rope'] as Discipline[]).filter(d => series[d].length > 0);
+  const [chosen, setDiscipline] = React.useState<Discipline | null>(null);
+  const discipline = chosen && available.includes(chosen) ? chosen : defaultDiscipline(counts, available);
+  const allPts = series[discipline];
   const [chartWidth, setChartWidth] = React.useState(0);
   const [range, setRange] = React.useState<ChartRange>(DEFAULT_CHART_RANGE);
   const pts = filterByRange(allPts, range);
@@ -41,10 +53,16 @@ export default function GradeChart({ pts: allPts, dominantSys, labelSys, colors 
   function cy(v: number) {
     return PAD_TOP + innerH - ((v - minVal) / valRange) * innerH;
   }
-  const numToLabel = (score: number) => scoreToGradeLabel(score, labelSys ?? dominantSys);
+  const numToLabel = (score: number) => scoreToGradeLabel(score, labelSys[discipline]);
 
   return (
     <View style={styles.chartContainer}>
+      <View style={styles.titleRow}>
+        <Text style={[titleStyle, styles.title, { color: colors.textPrimary }]} numberOfLines={2}>{title}</Text>
+        {available.length > 1 && (
+          <DisciplineSwitch value={discipline} onChange={setDiscipline} colors={colors} />
+        )}
+      </View>
       <ChartRangeToggle value={range} onChange={setRange} colors={colors} />
 
       <View onLayout={e => setChartWidth(e.nativeEvent.layout.width)}>
@@ -105,6 +123,17 @@ export default function GradeChart({ pts: allPts, dominantSys, labelSys, colors 
 const styles = StyleSheet.create({
   chartContainer: {
     marginBottom: SPACING.sm,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  title: {
+    flexShrink: 1,
+    marginBottom: 0,
   },
   empty: {
     alignItems: 'center',
