@@ -1,0 +1,19 @@
+# GitHub Pages (Jekyll) config. The site only needs to serve
+# privacy-policy.md and terms-of-service.md, which the app links to.
+# Internal docs and code are excluded: a planning doc containing `{{ ... }}`
+# made every Pages build fail from July 2026 until this file was added.
+exclude:
+  - docs
+  - app
+  - components
+  - utils
+  - ios
+  - dist
+  - worker
+  - scripts
+  - supabase
+  - assets
+  - node_modules
+  - package.json
+  - package-lock.json
+  - "*.sql"
