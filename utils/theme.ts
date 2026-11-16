@@ -14,8 +14,9 @@ export function buildColorScheme(mode: ThemeMode): ColorScheme {
   if (mode === 'dark') {
     return {
       id: 'obsidian', name: 'Custom', preview: accent,
-      bg: '#0A0A0A', bgCard: '#141414', bgElevated: '#1C1C1C',
-      border: '#2A2A2A', borderLight: '#333333',
+      // Page is a soft near-black like Strava's, with pure-black dividers
+      bg: '#141414', bgCard: '#1A1A1A', bgElevated: '#222222', divider: '#000000',
+      border: '#2C2C2C', borderLight: '#363636',
       accent, accentSoft,
       accentGold: '#F5C842', accentGoldSoft: '#F5C84220',
       accentGreen: '#4CAF72', accentGreenSoft: '#4CAF7220',
@@ -26,7 +27,7 @@ export function buildColorScheme(mode: ThemeMode): ColorScheme {
   } else {
     return {
       id: 'arctic', name: 'Custom', preview: accent,
-      bg: '#FFFFFF', bgCard: '#FFFFFF', bgElevated: '#EBEBE8',
+      bg: '#FFFFFF', bgCard: '#FFFFFF', bgElevated: '#EBEBE8', divider: '#EBEBE8',
       border: '#DCDCD8', borderLight: '#D0D0CC',
       accent, accentSoft,
       accentGold: '#D4A017', accentGoldSoft: '#D4A01720',
@@ -45,6 +46,8 @@ export interface ColorScheme {
   bg: string;
   bgCard: string;
   bgElevated: string;
+  // Bands between feed posts and under the header (black in dark, like Strava)
+  divider: string;
   border: string;
   borderLight: string;
   accent: string;
@@ -69,6 +72,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#0A0A0A',
     bgCard: '#141414',
     bgElevated: '#1C1C1C',
+    divider: '#1C1C1C',
     border: '#2A2A2A',
     borderLight: '#333333',
     accent: '#BF5F29',
@@ -91,6 +95,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#0D1117',
     bgCard: '#161B22',
     bgElevated: '#21262D',
+    divider: '#21262D',
     border: '#30363D',
     borderLight: '#3D444D',
     accent: '#7B9EE0',
@@ -113,6 +118,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#0A0F0A',
     bgCard: '#111811',
     bgElevated: '#1A231A',
+    divider: '#1A231A',
     border: '#243024',
     borderLight: '#2E3D2E',
     accent: '#6BCB77',
@@ -135,6 +141,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#0C0808',
     bgCard: '#160E0E',
     bgElevated: '#201414',
+    divider: '#201414',
     border: '#2E1A1A',
     borderLight: '#3D2020',
     accent: '#E63946',
@@ -157,6 +164,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#F0F4F8',
     bgCard: '#FFFFFF',
     bgElevated: '#E8EEF4',
+    divider: '#E8EEF4',
     border: '#D1DCE8',
     borderLight: '#BFD0E0',
     accent: '#0077B6',
@@ -179,6 +187,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#F5F0E8',
     bgCard: '#FFFDF8',
     bgElevated: '#EDE8DF',
+    divider: '#EDE8DF',
     border: '#DDD5C5',
     borderLight: '#CFC5B0',
     accent: '#C97C38',
@@ -201,6 +210,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#F2F7F4',
     bgCard: '#FFFFFF',
     bgElevated: '#E6F0EA',
+    divider: '#E6F0EA',
     border: '#C8DDD0',
     borderLight: '#B5CFC0',
     accent: '#3A8C5C',
@@ -223,6 +233,7 @@ export const COLOR_SCHEMES: Record<ThemeId, ColorScheme> = {
     bg: '#FDF2F3',
     bgCard: '#FFFFFF',
     bgElevated: '#FAE6E8',
+    divider: '#FAE6E8',
     border: '#EDC8CC',
     borderLight: '#E5B5BA',
     accent: '#C0394B',

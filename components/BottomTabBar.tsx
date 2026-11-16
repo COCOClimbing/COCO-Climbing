@@ -9,7 +9,7 @@ import { useAuth } from '../utils/AuthContext';
 
 import { FONTS, SPACING } from '../utils/theme';
 import LogClimbModal from './LogClimbModal';
-import Sheen from './Sheen';
+import Sheen, { DARK_GLASS, DARK_GLASS_SELECTED } from './Sheen';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -154,7 +154,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
           // Slightly see-through, so content scrolling behind shows faintly.
           // (A true frosted blur needs a native module and an App Store build.)
           // Dark mode lifts the bar a shade so its sheen reads against the page
-          backgroundColor: (mode === 'dark' ? colors.bgElevated : colors.bgCard) + 'EB',
+          backgroundColor: (mode === 'dark' ? DARK_GLASS : colors.bgCard) + 'EB',
           bottom: barBottom(insets.bottom),
         },
       ]}>
@@ -163,7 +163,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         {activeIndex >= 0 && tabWidth > 0 && (
           <Animated.View
             pointerEvents="none"
-            style={[styles.bubble, { width: tabWidth, backgroundColor: mode === 'dark' ? colors.border : colors.bgElevated, transform: [{ translateX: bubbleX }] }]}
+            style={[styles.bubble, { width: tabWidth, backgroundColor: mode === 'dark' ? DARK_GLASS_SELECTED : colors.bgElevated, transform: [{ translateX: bubbleX }] }]}
           />
         )}
         <View style={styles.tabGroup} onLayout={onGroupLayout('left')}>

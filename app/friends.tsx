@@ -2183,7 +2183,7 @@ export default function FriendsScreen() {
             return (
               <View
                 key={sessionKey}
-                style={[styles.activityCard, { borderBottomColor: colors.bgElevated }]}
+                style={[styles.activityCard, { borderBottomColor: colors.divider }]}
                 onLayout={e => { cardOffsets.current[sessionKey] = e.nativeEvent.layout.y; }}
               >
 

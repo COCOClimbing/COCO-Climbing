@@ -274,7 +274,7 @@ export default function SessionCard({
 
 
   return (
-    <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.bgElevated }]} onPress={onEdit}>
+    <TouchableOpacity activeOpacity={1} style={[styles.card, { borderBottomColor: colors.divider }]} onPress={onEdit}>
       {/* Header */}
       <View style={styles.headerRow}>
         <Avatar

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabase';
 import { routeNotificationTap } from '../utils/notifications';
 import { formatDistanceToNow, parseISO } from 'date-fns';
-import Sheen from './Sheen';
+import Sheen, { DARK_GLASS } from './Sheen';
 
 const SCREEN_TITLES: Partial<Record<ScreenId, string>> = {
   log: 'Log',
@@ -51,7 +51,7 @@ export default function AppHeader() {
     ? scrollY.interpolate({ inputRange: [0, 40], outputRange: [1, 0], extrapolate: 'clamp' })
     : 1;
   // Dark mode lifts the buttons a shade off the background so the sheen reads
-  const circle = [styles.circleBtn, { backgroundColor: mode === 'dark' ? colors.bgElevated : colors.bgCard }];
+  const circle = [styles.circleBtn, { backgroundColor: mode === 'dark' ? DARK_GLASS : colors.bgCard }];
 
   const [notifVisible, setNotifVisible] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -189,7 +189,7 @@ export default function AppHeader() {
     <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]} onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)} pointerEvents="box-none">
       <Animated.View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.bar, { backgroundColor: colors.bg, borderBottomColor: colors.border, opacity: barOpacity }]}
+        style={[StyleSheet.absoluteFill, styles.bar, { backgroundColor: colors.bg, borderBottomColor: mode === 'dark' ? colors.divider : colors.border, opacity: barOpacity }]}
       />
       {floating && <StatusBarFade />}
       {/* Left side — start session + search (your profile lives in the bottom

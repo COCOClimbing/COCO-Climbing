@@ -264,7 +264,7 @@ export default function ActivityCard({
 
 
   return (
-    <View style={[styles.card, { borderBottomColor: colors.bgElevated }]}>
+    <View style={[styles.card, { borderBottomColor: colors.divider }]}>
       {/* Header */}
       <View style={styles.cardHeader}>
         <TouchableOpacity
