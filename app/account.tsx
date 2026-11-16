@@ -35,6 +35,9 @@ import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
 import PushScreen from '../components/PushScreen';
 import EditProfileModal from '../components/EditProfileModal';
+import StreakCalendar from '../components/StreakCalendar';
+import { StreakChip } from '../components/StreakBadge';
+import { computeStreak, activeSessionDates, StreakInfo } from '../utils/streaks';
 
 
 type ProfileTab = 'progress' | 'gallery';
@@ -60,6 +63,9 @@ export default function AccountScreen() {
   const [followersList, setFollowersList] = useState<FriendProfile[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
   const [climbStats, setClimbStats] = useState<ClimbStatsData | null>(null); // defined below component
+  const [streak, setStreak] = useState<StreakInfo | null>(null);
+  const [streakDates, setStreakDates] = useState<string[]>([]);
+  const [streakOpen, setStreakOpen] = useState(false);
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -118,6 +124,10 @@ export default function AccountScreen() {
     // it's ended. getValidActiveSessionId also auto-ends one idle for 1.5 hours.
     const activeId = await getValidActiveSessionId();
     const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+    // Streaks count the session in progress too, once it has an entry
+    const dates = activeSessionDates(allSessions, allClimbs);
+    setStreakDates(dates);
+    setStreak(computeStreak(dates));
     const climbs = activeId ? allClimbs.filter(c => c.sessionId !== activeId) : allClimbs;
     const sessions = activeId ? allSessions.filter(s => s.id !== activeId) : allSessions;
     const now = new Date();
@@ -383,6 +393,11 @@ export default function AccountScreen() {
               <Text style={[styles.countLabel, { color: colors.textMuted }]}>Followers</Text>
               <Text style={[styles.countNumber, { color: colors.textPrimary }]}>{friendCounts?.followers ?? '—'}</Text>
             </TouchableOpacity>
+            {streak && streak.weeks.size > 0 && (
+              <View style={styles.streakItem}>
+                <StreakChip weeks={streak.current} colors={colors} onPress={() => setStreakOpen(true)} />
+              </View>
+            )}
           </View>
           <View style={styles.profileButtons}>
             <TouchableOpacity
@@ -457,6 +472,11 @@ export default function AccountScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Streak calendar — opens from the streak chip */}
+      <PushScreen visible={streakOpen} title="Streak" onBack={() => setStreakOpen(false)}>
+        {streak && <StreakCalendar streak={streak} activeDates={streakDates} colors={colors} />}
+      </PushScreen>
 
       {/* Following / Followers page — slides in like the app's other pages */}
       <PushScreen visible={followListModal !== null} title={profileName || 'You'} onBack={() => setFollowListModal(null)}>
@@ -1014,6 +1034,11 @@ const styles = StyleSheet.create({
   countsRow: {
     flexDirection: 'row',
     gap: SPACING.xl,
+  },
+  streakItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   countItem: {
     alignItems: 'flex-start',

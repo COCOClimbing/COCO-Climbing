@@ -4,6 +4,7 @@ import { isDeadMediaUrl } from './cloudSync';
 import { getGradeDifficulty } from './theme';
 import { isCustomGrade } from './gradeUtils';
 import { trainingKind, TrainingKind, climbCount, sessionStartTime } from './sessionHelpers';
+import { format } from 'date-fns';
 
 export interface FriendProfile {
   id: string;
@@ -53,7 +54,27 @@ export type SessionSummary = {
   notes?: string;
   title?: string;
   location?: string;
+  streakWeeks?: number; // set on the first session of a week that extended a 2+ week streak
 };
+
+// Streak banner data for a batch of feed posts: session id → weeks reached.
+// Empty if supabase_streaks.sql hasn't been run yet, so the feed just shows no banners.
+export async function getSessionStreaks(sessionIds: string[]): Promise<Record<string, number>> {
+  if (sessionIds.length === 0) return {};
+  const { data, error } = await supabase.rpc('session_streaks', { p_session_ids: sessionIds });
+  if (error || !data) return {};
+  return Object.fromEntries((data as { session_id: string; streak_weeks: number }[]).map(r => [r.session_id, r.streak_weeks]));
+}
+
+// A user's current weekly streak, for their profile. `today` is the viewer's local date.
+export async function getWeekStreak(userId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('get_week_streak', {
+    target_user_id: userId,
+    p_today: format(new Date(), 'yyyy-MM-dd'),
+  });
+  if (error || typeof data !== 'number') return 0;
+  return data;
+}
 
 const SUMMARY_PHOTO_HEIGHT = 220;
 
@@ -152,13 +173,17 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
   // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size immediately
   const allUris = [...new Set(summaries.flatMap(e => e.sessionPhotos ?? []))];
   const widthCache: Record<string, number> = {};
-  await Promise.all(
-    allUris.map(uri => new Promise<void>(resolve => {
-      Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(SUMMARY_PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
-    }))
-  );
+  const [, streaks] = await Promise.all([
+    Promise.all(
+      allUris.map(uri => new Promise<void>(resolve => {
+        Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(SUMMARY_PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
+      }))
+    ),
+    getSessionStreaks(summaries.map(e => e.sessionId).filter((id): id is string => !!id)),
+  ]);
   return summaries.map(e => ({
     ...e,
+    streakWeeks: e.sessionId ? streaks[e.sessionId] : undefined,
     photoWidths: e.sessionPhotos ? Object.fromEntries(e.sessionPhotos.filter(u => widthCache[u]).map(u => [u, widthCache[u]])) : undefined,
   }));
 }

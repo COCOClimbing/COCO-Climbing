@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { sessionStreakMap, computeStreak } from '../utils/streaks';
+import { StreakChip, StreakBanner } from '../components/StreakBadge';
 import {
   View,
   Text,
@@ -78,6 +80,8 @@ import {
   unlikeComment,
   SessionSummary,
   getFriendSessionSummaries,
+  getSessionStreaks,
+  getWeekStreak,
   getProfileById,
   getOpenSessionIds,
   finishedSessions,
@@ -213,6 +217,15 @@ function FriendDetailView({
   if (listSheetProfile) lastListProfile.current = listSheetProfile;
   const shownListProfile = listSheetProfile ?? lastListProfile.current;
   const [ownDays, setOwnDays] = useState<DaySession[]>([]);
+  const [ownStreaks, setOwnStreaks] = useState<Record<string, number>>({});
+  // Current weekly streak for the header chip (local for you, from the server for others)
+  const [profileStreak, setProfileStreak] = useState(0);
+  useEffect(() => {
+    if (isSelf) return;
+    let cancelled = false;
+    getWeekStreak(friend.id).then(n => { if (!cancelled) setProfileStreak(n); });
+    return () => { cancelled = true; };
+  }, [friend.id, isSelf]);
   const [friendSessions, setFriendSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
   // Starts at 30 days so the list covers everything in "Last 30 days"
@@ -369,6 +382,9 @@ function FriendDetailView({
         daysAgo.setDate(daysAgo.getDate() - days);
         const cutoff = daysAgo.toISOString().slice(0, 10);
         const sessionIdsWithClimbs = new Set(allClimbs.map(c => c.sessionId));
+        // From every session, not just the loaded window, so early streak weeks still count
+        setOwnStreaks(sessionStreakMap(sessions.filter(s => sessionIdsWithClimbs.has(s.id))));
+        setProfileStreak(computeStreak(sessions.filter(s => sessionIdsWithClimbs.has(s.id)).map(s => s.date)).current);
         const result: DaySession[] = sessions
           .filter(s => s.id !== activeId && sessionIdsWithClimbs.has(s.id) && s.date >= cutoff)
           .map(s => ({
@@ -605,6 +621,12 @@ function FriendDetailView({
               </View>
               {friend.username ? <Text style={[detailStyles.profileUsername, { color: colors.textSecondary }]}>@{friend.username}</Text> : null}
               {friend.hometown ? <Text style={[detailStyles.profileHometown, { color: colors.textMuted }]} numberOfLines={1}>{friend.hometown}</Text> : null}
+              {/* Under the name: the counts row also holds the Follow button, so there's no room there */}
+              {profileStreak > 0 && !isLocked && (
+                <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+                  <StreakChip weeks={profileStreak} colors={colors} />
+                </View>
+              )}
             </View>
           </View>
 
@@ -743,6 +765,7 @@ function FriendDetailView({
                     <SessionCard
                       key={day.sessionId}
                       day={day}
+                      streakWeeks={ownStreaks[day.sessionId]}
                       colors={colors}
                       currentUserId={user?.id}
                       myAvatar={myAvatar}
@@ -1447,7 +1470,7 @@ export default function FriendsScreen() {
       restUris.forEach(uri => { Image.prefetch(uri).catch(() => {}); });
       // Likes and comments load alongside the photos, so each post shows
       // up complete instead of its buttons and counts filling in afterward.
-      const [, , social] = await Promise.all([
+      const [, , social, streaks] = await Promise.all([
         // Capped so a slow connection can't hold the whole feed back.
         Promise.race([
           preloadPhotos(topUris, PHOTO_HEIGHT).then(w => { Object.assign(widthCache, w); }),
@@ -1467,11 +1490,13 @@ export default function FriendsScreen() {
             return { key: `sid-${e.sessionId}`, likes, comments };
           })
         ),
+        getSessionStreaks(deduped.map(e => e.sessionId).filter((id): id is string => !!id)),
       ]);
       const commentIds = social.flatMap(x => x.comments.map(c => c.id));
       const commentLikes = commentIds.length > 0 ? await getCommentLikes(commentIds).catch(() => ({})) : {};
       const dedupedWithWidths = deduped.map(e => ({
         ...e,
+        streakWeeks: e.sessionId ? streaks[e.sessionId] : undefined,
         photoWidths: e.sessionPhotos ? Object.fromEntries(e.sessionPhotos.filter(u => widthCache[u]).map(u => [u, widthCache[u]])) : undefined,
       }));
       // Set together so the feed renders once, complete.
@@ -2257,6 +2282,11 @@ export default function FriendsScreen() {
               >
 
                 {renderPostTop(entry, false)}
+
+                {/* Streak milestone: first session of a week that extended a 2+ week streak */}
+                {entry.streakWeeks ? (
+                  <StreakBanner weeks={entry.streakWeeks} name={entry.friend.name ?? ''} isSelf={entry.friend.id === user?.id} colors={colors} />
+                ) : null}
 
                 {/* ── Photo strip ── */}
                 {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (

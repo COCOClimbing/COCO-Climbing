@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert, Animated,
 } from 'react-native';
 import { PhotoGroup, useGroupedPhoto, preloadPhotos } from './PhotoGroup';
+import { StreakBanner } from './StreakBadge';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
 import { DaySession, sessionStats, sessionTimeOfDay, sessionStartTime, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
@@ -145,10 +146,11 @@ interface SessionCardProps {
   onShare: () => void;
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
   condensed?: boolean;
+  streakWeeks?: number; // first session of a week that extended a 2+ week streak
 }
 
 export default function SessionCard({
-  day, colors, currentUserId, myAvatar, onEdit, onShare, onViewProfile, condensed = false,
+  day, colors, currentUserId, myAvatar, onEdit, onShare, onViewProfile, condensed = false, streakWeeks,
 }: SessionCardProps) {
   const { sends, hardest, projecting, gradedCount, training } = sessionStats(day);
   // Header matches the Activity feed: "Yesterday at 3:29 PM · Indoor".
@@ -375,6 +377,10 @@ export default function SessionCard({
           </>
         )}
       </View>
+
+      {!condensed && streakWeeks ? (
+        <StreakBanner weeks={streakWeeks} name="" isSelf colors={colors} />
+      ) : null}
 
       {/* Photos */}
       {!condensed && hasMedia && (

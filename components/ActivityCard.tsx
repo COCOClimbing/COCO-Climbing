@@ -23,6 +23,7 @@ import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotificat
 import { reportContent } from '../utils/moderationApi';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
+import { StreakBanner } from './StreakBadge';
 
 const PHOTO_HEIGHT = 220;
 
@@ -364,6 +365,11 @@ export default function ActivityCard({
           </>
         ) : null}
       </View>
+
+      {/* Streak milestone: first session of a week that extended a 2+ week streak */}
+      {entry.streakWeeks ? (
+        <StreakBanner weeks={entry.streakWeeks} name={entry.friend.name ?? ''} isSelf={entry.friend.id === currentUserId} colors={colors} />
+      ) : null}
 
       {/* Photos */}
       {entry.sessionPhotos && entry.sessionPhotos.length > 0 && (

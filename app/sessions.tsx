@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { sessionStreakMap } from '../utils/streaks';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent, Animated, Easing, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -317,6 +318,11 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const activeSessionId = getActiveSessionId();
   const activeSession = activeSessionId ? (days.find(d => d.sessionId === activeSessionId) ?? null) : null;
   const listDays = days.filter(d => d.sessionId !== activeSessionId);
+  // Streak banners: the first session of each week that extended a 2+ week streak
+  const streakBySession = useMemo(
+    () => sessionStreakMap(days.filter(d => d.climbs.length > 0).map(d => ({ id: d.sessionId, date: d.date, startedAt: d.startedAt }))),
+    [days],
+  );
 
   // After editing from a climb's page, show the saved version of that climb
   // (or close the page if the climb no longer exists).
@@ -1433,6 +1439,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                     colors={colors}
                     currentUserId={user?.id}
                     myAvatar={localAvatarUri ?? avatarUrl}
+                    streakWeeks={streakBySession[day.sessionId]}
                     onEdit={() => setSelectedDay(day)}
                     onShare={() => setShareDay(day)}
                     onViewProfile={viewFriendProfile}
