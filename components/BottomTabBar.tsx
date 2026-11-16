@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Animated, LayoutChangeEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerSessionsTabReselect } from '../utils/storage';
+import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from '../utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../utils/ThemeContext';
 import { useNav, ScreenId } from '../utils/NavigationContext';
@@ -109,16 +109,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         key={tab.id}
         onLayout={onTabLayout(tab.id, group)}
         style={styles.tab}
-        onPress={() => {
-          // Re-tapping Sessions while on it scrolls the list to the top. Not
-          // from PushScreen's copy (onTabPress), where it closes the page.
-          if (!onTabPress && tab.id === 'sessions' && screen === 'sessions' && activeScreen === 'sessions') {
-            triggerSessionsTabReselect();
-            return;
-          }
-          onTabPress?.();
-          navigate(tab.id);
-        }}
+        onPress={() => { onTabPress?.(); navigate(tab.id); }}
         activeOpacity={0.7}
       >
         {tab.id === 'account' ? (

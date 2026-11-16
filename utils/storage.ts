@@ -123,12 +123,6 @@ let _onSessionsScrollTop: (() => void) | null = null;
 export function setSessionsScrollTopCallback(cb: (() => void) | null) { _onSessionsScrollTop = cb; }
 export function triggerSessionsScrollTop() { _onSessionsScrollTop?.(); }
 
-// sessions-hub.tsx registers here; BottomTabBar calls it when the Sessions
-// tab is tapped while already on it (back to the list, scrolled to the top).
-let _onSessionsTabReselect: (() => void) | null = null;
-export function setSessionsTabReselectCallback(cb: (() => void) | null) { _onSessionsTabReselect = cb; }
-export function triggerSessionsTabReselect() { _onSessionsTabReselect?.(); }
-
 // ─── Projects refresh hook ────────────────────────────────────────────────────
 // projects.tsx registers its load() here; BottomTabBar calls triggerProjectsRefresh() after saving
 let _onProjectsRefresh: (() => void) | null = null;

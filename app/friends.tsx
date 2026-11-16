@@ -1053,6 +1053,11 @@ export default function FriendsScreen() {
   // Tapping Activity tab while already on it returns to main feed
   useEffect(() => {
     if (tabResetCount['friends']) {
+      // Already on the main feed: jump back to the top instead.
+      if (!viewingFriend && !viewingSession) {
+        feedScrollRef.current?.scrollTo({ y: 0, animated: true });
+        return;
+      }
       setViewingFriend(null);
       setViewingSession(null);
       // This abandons any open profile without going through onBack, so clear

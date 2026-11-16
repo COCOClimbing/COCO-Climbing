@@ -7,7 +7,7 @@ import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import ProjectsScreen from './projects';
-import { setSessionsTabReselectCallback, triggerSessionsScrollTop } from '../utils/storage';
+import { triggerSessionsScrollTop } from '../utils/storage';
 
 type View_ = 'sessions' | 'projects' | 'calendar';
 
@@ -20,7 +20,7 @@ const VIEWS: UnderlineTab<View_>[] = [
 // The Sessions tab: a Strava-style underlined toggle between the sessions
 // list, projects (which no longer have their own bottom tab) and a calendar.
 export default function SessionsHub() {
-  const { pendingSessionId } = useNav();
+  const { pendingSessionId, tabResetCount } = useNav();
   const { headerHidden } = useHeaderScrollContext();
   const { colors } = useTheme();
   const [view, setView] = useState<View_>('sessions');
@@ -41,13 +41,10 @@ export default function SessionsHub() {
   }
 
   useEffect(() => {
-    setSessionsTabReselectCallback(() => {
-      if (headerHidden) return; // a session's detail view is open
-      setView('sessions');
-      triggerSessionsScrollTop();
-    });
-    return () => setSessionsTabReselectCallback(null);
-  }, [headerHidden]);
+    if (!tabResetCount['sessions'] || headerHidden) return; // detail view open
+    setView('sessions');
+    triggerSessionsScrollTop();
+  }, [tabResetCount['sessions']]);
 
   return (
     <View style={styles.root} {...tabSwipe.panHandlers}>
