@@ -27,7 +27,7 @@ import { supabase } from '../utils/supabase';
 import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
-import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
@@ -162,9 +162,13 @@ export default function AccountScreen() {
     // Every session, oldest first; the chart's range toggle picks the window
     const recentSessions = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
     const sessionPoints = recentSessions.map(s => {
-      const sessionSends = sends.filter(c => c.sessionId === s.id && c.gradeSystem === dominantSys);
-      if (sessionSends.length === 0) return null;
-      const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
+      // Difficulty scores work for every grade system, not just V-scale / YDS
+      const scores = sends
+        .filter(c => c.sessionId === s.id && c.gradeSystem === dominantSys)
+        .map(c => gradeScore(c.grade, c.gradeSystem))
+        .filter(v => v >= 0);
+      if (scores.length === 0) return null;
+      const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
       return { date: s.date.slice(0, 10), avg };
     }).filter(Boolean) as { date: string; avg: number }[];
 

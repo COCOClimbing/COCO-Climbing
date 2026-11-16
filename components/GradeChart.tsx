@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Line } from 'react-native-svg';
 import { FONTS, SPACING } from '../utils/theme';
+import { scoreToGradeLabel } from '../utils/gradeUtils';
 import ChartRangeToggle, { ChartRange, DEFAULT_CHART_RANGE, filterByRange, rangeDateLabel } from './ChartRangeToggle';
 
 const CHART_H = 110;
@@ -38,19 +39,7 @@ export default function GradeChart({ pts: allPts, dominantSys, colors }: {
   function cy(v: number) {
     return PAD_TOP + innerH - ((v - minVal) / valRange) * innerH;
   }
-  function numToLabel(n: number): string {
-    if (dominantSys === 'v-scale') {
-      if (n < 0) return 'VB';
-      const whole = Math.floor(n);
-      return n % 1 >= 0.4 ? `V${whole}+` : `V${whole}`;
-    }
-    if (dominantSys === 'yds') {
-      const main = Math.floor(n / 10);
-      const sub = ['a', 'b', 'c', 'd'][Math.round(n % 10)] || '';
-      return `5.${main}${sub}`;
-    }
-    return String(Math.round(n));
-  }
+  const numToLabel = (score: number) => scoreToGradeLabel(score, dominantSys);
 
   return (
     <View style={styles.chartContainer}>

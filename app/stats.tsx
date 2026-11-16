@@ -9,7 +9,7 @@ import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
-import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
+import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel } from '../utils/gradeUtils';
 import { supabase } from '../utils/supabase';
 import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
@@ -36,19 +36,7 @@ function hardestSend(climbs: Climb[], system: string): Climb | undefined {
     .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && c.gradeSystem === system && types.includes(c.type))
     .sort((a, b) => getGradeDifficulty(b.grade, b.gradeSystem) - getGradeDifficulty(a.grade, a.gradeSystem))[0];
 }
-function numToLabel(n: number, sys: string): string {
-  if (sys === 'v-scale') {
-    if (n < 0) return 'VB';
-    const whole = Math.floor(n);
-    return n % 1 >= 0.4 ? `V${whole}+` : `V${whole}`;
-  }
-  if (sys === 'yds') {
-    const main = Math.floor(n / 10);
-    const sub = ['a', 'b', 'c', 'd'][Math.round(n % 10)] || '';
-    return `5.${main}${sub}`;
-  }
-  return String(Math.round(n));
-}
+const numToLabel = scoreToGradeLabel;
 
 // ── Shared grade breakdown modal ─────────────────────────────────────────────
 
@@ -323,9 +311,12 @@ export default function StatsScreen() {
     const allChartPoints = Object.entries(climbsBySession)
       .sort(([, a], [, b]) => a.date.localeCompare(b.date))
       .map(([key, { date, climbs: sc }]) => {
-        const avg = sc.reduce((sum, c) => sum + gradeNum(c), 0) / sc.length;
+        // Difficulty scores work for every grade system, not just V-scale / YDS
+        const scores = sc.map(c => gradeScore(c.grade, c.gradeSystem)).filter(v => v >= 0);
+        const avg = scores.length ? scores.reduce((sum, v) => sum + v, 0) / scores.length : -1;
         return { key, date, val: avg };
-      });
+      })
+      .filter(p => p.val >= 0); // sessions with only custom/unknown grades
 
     return {
       sends, flashes, projects, sendRate, flashRate,

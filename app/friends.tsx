@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
-import { gradeToNum, isCustomGrade } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade } from '../utils/gradeUtils';
 import GradeChart from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
@@ -457,9 +457,13 @@ function FriendDetailView({
   const sessionPoints = [...sessionDates.entries()]
     .sort((a, b) => a[1].localeCompare(b[1]))
     .map(([sessionId, date]) => {
-      const sessionSends = allSends.filter(c => c.session_id === sessionId && c.grade_system === dominantSys);
-      if (sessionSends.length === 0) return null;
-      const avg = sessionSends.reduce((sum, c) => sum + gradeToNum(c.grade, dominantSys), 0) / sessionSends.length;
+      // Difficulty scores work for every grade system, not just V-scale / YDS
+      const scores = allSends
+        .filter(c => c.session_id === sessionId && c.grade_system === dominantSys)
+        .map(c => gradeScore(c.grade, c.grade_system))
+        .filter(v => v >= 0);
+      if (scores.length === 0) return null;
+      const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
       return { date: date.slice(0, 10), avg };
     })
     .filter(Boolean) as { date: string; avg: number }[];
