@@ -2,37 +2,36 @@ import React from 'react';
 import { View, Text, StyleSheet, StyleProp, TextStyle } from 'react-native';
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Line } from 'react-native-svg';
 import { FONTS, SPACING } from '../utils/theme';
-import { scoreToGradeLabel, defaultDiscipline, Discipline } from '../utils/gradeUtils';
-import DisciplineSwitch from './DisciplineSwitch';
-import ChartRangeToggle, { ChartRange, DEFAULT_CHART_RANGE, filterByRange, rangeDateLabel } from './ChartRangeToggle';
+import { scoreToGradeLabel, Discipline, ChartStyle, ChartStyleSeries, chartStylesWithData, defaultChartStyle, chartStyleDiscipline } from '../utils/gradeUtils';
+import ChartStyleDropdown from './ChartStyleDropdown';
+import { rangeDateLabel } from './ChartRangeToggle';
 
 const CHART_H = 110;
 
 // Line chart of the average grade sent per session — shown on your own
 // profile and on other people's. Each series is every session, oldest first,
-// with a full YYYY-MM-DD date; the toggle above the chart picks how far back
-// to show. When someone climbs both disciplines a Boulder / Rope switch sits
-// beside the title and the range applies to whichever is selected.
+// with a full YYYY-MM-DD date, one series per climb type. Always all time —
+// the time-range toggle lives only on the Stats page's chart. A dropdown
+// beside the title picks the type, listing those with enough sessions.
+// Callers render it only when chartStylesWithData(series) isn't empty.
 export type GradePoint = { date: string; avg: number };
 
 export default function GradeChart({ title, titleStyle, series, counts, labelSys, colors }: {
   title: string;
   titleStyle?: StyleProp<TextStyle>;
-  series: Record<Discipline, GradePoint[]>;
-  // Climbs per discipline, to pick which one the chart opens on
-  counts: Record<Discipline, number>;
+  series: ChartStyleSeries<GradePoint>;
+  // Sends per type, to pick which one the chart opens on
+  counts: Partial<Record<ChartStyle, number>>;
   // System to label each discipline's axis in (the viewer's preference)
   labelSys: Record<Discipline, string>;
   colors: any;
 }) {
-  const available = (['boulder', 'rope'] as Discipline[]).filter(d => series[d].length > 0);
-  const [chosen, setDiscipline] = React.useState<Discipline | null>(null);
-  const discipline = chosen && available.includes(chosen) ? chosen : defaultDiscipline(counts, available);
-  const allPts = series[discipline];
+  const available = chartStylesWithData(series);
+  const [chosen, setChosen] = React.useState<ChartStyle | null>(null);
+  const style = chosen && available.includes(chosen) ? chosen : defaultChartStyle(counts, available);
+  const pts = series[style] ?? [];
   const [chartWidth, setChartWidth] = React.useState(0);
-  const [range, setRange] = React.useState<ChartRange>(DEFAULT_CHART_RANGE);
-  const pts = filterByRange(allPts, range);
-  const dateLabel = (d: string) => rangeDateLabel(d, range);
+  const dateLabel = (d: string) => rangeDateLabel(d, 'ALL');
 
   const PAD_LEFT = 36;
   const PAD_RIGHT = 12;
@@ -42,8 +41,12 @@ export default function GradeChart({ title, titleStyle, series, counts, labelSys
   const innerH = CHART_H - PAD_TOP - PAD_BOTTOM;
 
   const vals = pts.map(p => p.avg);
-  const minVal = Math.min(...vals);
-  const maxVal = Math.max(...vals);
+  // A flat line (every session the same grade) gets about a grade of headroom
+  // each way, so the axis reads e.g. 5.11a / 5.11b / 5.11c, not 5.11b three times.
+  const FLAT_PAD = 10; // about one grade on the score scale (V grades are 10 apart)
+  const flat = Math.max(...vals) === Math.min(...vals);
+  const minVal = Math.min(...vals) - (flat ? FLAT_PAD : 0);
+  const maxVal = Math.max(...vals) + (flat ? FLAT_PAD : 0);
   const valRange = maxVal - minVal || 1;
 
   function cx(i: number) {
@@ -53,23 +56,22 @@ export default function GradeChart({ title, titleStyle, series, counts, labelSys
   function cy(v: number) {
     return PAD_TOP + innerH - ((v - minVal) / valRange) * innerH;
   }
-  const numToLabel = (score: number) => scoreToGradeLabel(score, labelSys[discipline]);
+  const numToLabel = (score: number) => scoreToGradeLabel(score, labelSys[chartStyleDiscipline(style)]);
 
   return (
     <View style={styles.chartContainer}>
       <View style={styles.titleRow}>
         <Text style={[titleStyle, styles.title, { color: colors.textPrimary }]} numberOfLines={2}>{title}</Text>
-        {available.length > 1 && (
-          <DisciplineSwitch value={discipline} onChange={setDiscipline} colors={colors} />
+        {available.length > 0 && (
+          <ChartStyleDropdown value={style} options={available} onChange={setChosen} colors={colors} />
         )}
       </View>
-      <ChartRangeToggle value={range} onChange={setRange} colors={colors} />
 
       <View onLayout={e => setChartWidth(e.nativeEvent.layout.width)}>
         {pts.length < 2 ? (
           <View style={[styles.empty, { height: CHART_H }]}>
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              Not enough sessions in this range
+              Not enough sessions yet
             </Text>
           </View>
         ) : chartWidth > 0 && (

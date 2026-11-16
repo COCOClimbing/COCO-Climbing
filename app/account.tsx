@@ -27,7 +27,7 @@ import { supabase } from '../utils/supabase';
 import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
-import { gradeScore, isCustomGrade, gradeDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade, Discipline, topScoresAverage, CHART_STYLES, ChartStyle, ChartStyleSeries, chartStyleOf, chartStyleCounts, chartStylesWithData } from '../utils/gradeUtils';
 import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
@@ -155,22 +155,20 @@ export default function AccountScreen() {
       return { label, grade: best?.converted ?? null, gradeSystem: preferredSys };
     });
 
-    // Avg of each session's 3 hardest sends, split by discipline (Boulder = V + Font, Rope =
-    // YDS + French + British); every session, oldest first — the chart's
-    // range toggle picks the window.
+    // Avg of each session's 3 hardest sends, one series per climb type;
+    // every session, oldest first.
     const recentSessions = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
-    const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
-    sends.forEach(c => { const d = gradeDiscipline(c.gradeSystem); if (d) disciplineCounts[d]++; });
-    const pointsFor = (discipline: Discipline) => recentSessions.map(s => {
+    const styleCounts = chartStyleCounts(sends.map(c => ({ type: c.type, system: c.gradeSystem })));
+    const pointsFor = (style: ChartStyle) => recentSessions.map(s => {
       const scores = sends
-        .filter(c => c.sessionId === s.id && gradeDiscipline(c.gradeSystem) === discipline)
+        .filter(c => c.sessionId === s.id && chartStyleOf(c.type, c.gradeSystem) === style)
         .map(c => gradeScore(c.grade, c.gradeSystem))
         .filter(v => v >= 0);
       if (scores.length === 0) return null;
       const avg = topScoresAverage(scores);
       return { date: s.date.slice(0, 10), avg };
     }).filter(Boolean) as GradePoint[];
-    const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
+    const chartSeries: ChartStyleSeries<GradePoint> = Object.fromEntries(CHART_STYLES.map(st => [st.id, pointsFor(st.id)]));
 
     setClimbStats({
       thisMonthClimbs: thisMonthClimbs.length,
@@ -181,7 +179,7 @@ export default function AccountScreen() {
       totalSends: sends.length,
       hardestByType,
       chartSeries,
-      disciplineCounts,
+      styleCounts,
       chartLabelSys: { boulder: boulderSys, rope: ropeSys },
     });
   }
@@ -717,16 +715,16 @@ interface ClimbStatsData {
   totalClimbs: number;
   totalSends: number;
   hardestByType: HardestByType[];
-  chartSeries: Record<Discipline, GradePoint[]>;
-  disciplineCounts: Record<Discipline, number>;
+  chartSeries: ChartStyleSeries<GradePoint>;
+  styleCounts: Partial<Record<ChartStyle, number>>;
   chartLabelSys: Record<Discipline, string>;
 }
 
 // part "month" is the Last 30 Days block above the profile's toggle; part
 // "progress" is everything shown under its Progress tab.
 function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; colors: any; part: 'month' | 'progress' }) {
-  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, chartSeries, disciplineCounts, chartLabelSys } = stats;
-  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
+  const { thisMonthClimbs, thisMonthSessions, thisMonthSends, totalSessions, totalClimbs, totalSends, hardestByType, chartSeries, styleCounts, chartLabelSys } = stats;
+  const showChart = chartStylesWithData(chartSeries).length > 0;
 
   if (part === 'month') return (
     <View style={[statStyles.wrapper, { marginBottom: SPACING.md }]}>
@@ -758,7 +756,7 @@ function ClimbStatsSection({ stats, colors, part }: { stats: ClimbStatsData; col
             title="TOP 3 SENDS AVG"
             titleStyle={statStyles.sectionLabel}
             series={chartSeries}
-            counts={disciplineCounts}
+            counts={styleCounts}
             labelSys={chartLabelSys}
             colors={colors}
           />

@@ -10,8 +10,8 @@ import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
-import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, gradeDiscipline, defaultDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
-import DisciplineSwitch from '../components/DisciplineSwitch';
+import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, topScoresAverage, CHART_STYLES, ChartStyle, chartStyleOf, chartStyleCounts, chartStylesWithData, defaultChartStyle, chartStyleDiscipline } from '../utils/gradeUtils';
+import ChartStyleDropdown from '../components/ChartStyleDropdown';
 import { supabase } from '../utils/supabase';
 import { rowToClimb, rowToSession } from '../utils/cloudSync';
 import { EmptyState } from '../components/UI';
@@ -127,7 +127,7 @@ export default function StatsScreen() {
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
-  const [chosenDiscipline, setChosenDiscipline] = useState<Discipline | null>(null);
+  const [chosenStyle, setChosenStyle] = useState<ChartStyle | null>(null);
   // Chart labels follow the viewer's grade preference (Settings → Grades)
   const [gradePrefs, setGradePrefs] = useState({ boulder: 'v-scale', rope: 'yds' });
   useEffect(() => { getPreferredDisplayGrades().then(setGradePrefs).catch(() => {}); }, []);
@@ -305,16 +305,15 @@ export default function StatsScreen() {
 
     const outdoorSends = sends.filter(c => c.environment === 'outdoor').length;
 
-    // Avg of each session's 3 hardest sends, split by discipline (Boulder =
-    // V + Font, Rope = YDS + French + British) — matches the profile chart.
+    // Avg of each session's 3 hardest sends, one series per climb type —
+    // matches the profile chart.
     // One point per session; several
     // sessions can share a date, so key by session. Every session; the range
     // toggle picks the window below.
-    const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
-    sends.forEach(c => { const d = gradeDiscipline(c.gradeSystem); if (d) disciplineCounts[d]++; });
-    const pointsFor = (discipline: Discipline) => {
+    const styleCounts = chartStyleCounts(sends.map(c => ({ type: c.type, system: c.gradeSystem })));
+    const pointsFor = (style: ChartStyle) => {
       const climbsBySession: Record<string, { date: string; climbs: Climb[] }> = {};
-      sends.filter(c => gradeDiscipline(c.gradeSystem) === discipline).forEach(c => {
+      sends.filter(c => chartStyleOf(c.type, c.gradeSystem) === style).forEach(c => {
         const key = c.sessionId || c.date.slice(0, 10);
         const date = (c.sessionId && sessionDateMap[c.sessionId]) ? sessionDateMap[c.sessionId] : c.date.slice(0, 10);
         if (!climbsBySession[key]) climbsBySession[key] = { date, climbs: [] };
@@ -328,8 +327,8 @@ export default function StatsScreen() {
         })
         .filter(p => p.val >= 0);
     };
-    const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
-    const chartDisciplines = (['boulder', 'rope'] as Discipline[]).filter(d => chartSeries[d].length > 0);
+    const chartSeries = Object.fromEntries(CHART_STYLES.map(st => [st.id, pointsFor(st.id)])) as Record<ChartStyle, ReturnType<typeof pointsFor>>;
+    const chartStyles = chartStylesWithData(chartSeries);
 
     return {
       sends, flashes, projects, sendRate, flashRate,
@@ -338,7 +337,7 @@ export default function StatsScreen() {
       topStyles, typeCounts, topTypes, maxTypeCount,
       longestStreak, favLocation,
       avgPerSession, biggestSession, mostActiveMonth,
-      outdoorSends, chartSeries, disciplineCounts, chartDisciplines,
+      outdoorSends, chartSeries, styleCounts, chartStyles,
     };
   }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
@@ -367,19 +366,24 @@ export default function StatsScreen() {
     topStyles, typeCounts, topTypes, maxTypeCount,
     longestStreak, favLocation,
     avgPerSession, biggestSession, mostActiveMonth,
-    outdoorSends, chartSeries, disciplineCounts, chartDisciplines,
+    outdoorSends, chartSeries, styleCounts, chartStyles,
   } = computed;
 
-  const chartDiscipline = chosenDiscipline && chartDisciplines.includes(chosenDiscipline)
-    ? chosenDiscipline
-    : defaultDiscipline(disciplineCounts, chartDisciplines);
-  const allChartPoints = chartSeries[chartDiscipline];
-  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
+  const showChart = chartStyles.length > 0;
+  const chartStyle = chosenStyle && chartStyles.includes(chosenStyle)
+    ? chosenStyle
+    : defaultChartStyle(styleCounts, chartStyles);
+  const allChartPoints = (showChart && chartSeries[chartStyle]) || [];
+  const chartDiscipline = showChart ? chartStyleDiscipline(chartStyle) : 'boulder';
 
   const chartPoints = filterByRange(allChartPoints, chartRange);
   const chartVals = chartPoints.map(p => p.val);
-  const minVal = Math.min(...chartVals);
-  const maxVal = Math.max(...chartVals);
+  // A flat line (every session the same grade) gets about a grade of headroom
+  // each way, so the axis reads e.g. 5.11a / 5.11b / 5.11c, not 5.11b three times.
+  const FLAT_PAD = 10; // about one grade on the score scale (V grades are 10 apart)
+  const flat = Math.max(...chartVals) === Math.min(...chartVals);
+  const minVal = Math.min(...chartVals) - (flat ? FLAT_PAD : 0);
+  const maxVal = Math.max(...chartVals) + (flat ? FLAT_PAD : 0);
   const valRange = maxVal - minVal || 1;
 
   const innerW = CHART_W - PAD.left - PAD.right;
@@ -552,9 +556,7 @@ export default function StatsScreen() {
               <Text style={[ss.chartCaption, { color: colors.textPrimary, marginBottom: 0, flexShrink: 1 }]}>
                 Top 3 Sends Avg
               </Text>
-              {chartDisciplines.length > 1 && (
-                <DisciplineSwitch value={chartDiscipline} onChange={setChosenDiscipline} colors={colors} />
-              )}
+              <ChartStyleDropdown value={chartStyle} options={chartStyles} onChange={setChosenStyle} colors={colors} />
             </View>
             <ChartRangeToggle value={chartRange} onChange={setChartRange} colors={colors} />
             {chartPoints.length < 2 ? (

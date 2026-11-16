@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
 import { FONTS, SPACING, CLIMB_TYPES, getGradeDifficulty, convertGrade } from '../utils/theme';
-import { gradeScore, isCustomGrade, gradeDiscipline, Discipline, topScoresAverage } from '../utils/gradeUtils';
+import { gradeScore, isCustomGrade, topScoresAverage, CHART_STYLES, ChartStyle, ChartStyleSeries, chartStyleOf, chartStyleCounts, chartStylesWithData } from '../utils/gradeUtils';
 import GradeChart, { GradePoint } from '../components/GradeChart';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllSessions, getAllClimbs, getActiveSessionId, getPreferredDisplayGrades, setFeedRefreshCallback } from '../utils/storage';
@@ -528,10 +528,9 @@ function FriendDetailView({
     return { label, grade: convertGrade(best.grade, best.grade_system, sys) };
   });
 
-  // Avg of each session's 3 hardest sends (every session; the chart picks the range), as on your own profile:
-  // split by discipline (Boulder = V + Font, Rope = YDS + French + British).
-  const disciplineCounts: Record<Discipline, number> = { boulder: 0, rope: 0 };
-  allSends.forEach(c => { const d = gradeDiscipline(c.grade_system); if (d) disciplineCounts[d]++; });
+  // Avg of each session's 3 hardest sends (every session), one series per
+  // climb type, as on your own profile.
+  const styleCounts = chartStyleCounts(allSends.map(c => ({ type: c.type, system: c.grade_system })));
   const sessionDates = new Map<string, string>();
   countedClimbs.forEach(c => {
     if (!c.session_id) return;
@@ -540,10 +539,10 @@ function FriendDetailView({
     if (!prev || d < prev) sessionDates.set(c.session_id, d);
   });
   const orderedSessions = [...sessionDates.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const pointsFor = (discipline: Discipline) => orderedSessions
+  const pointsFor = (style: ChartStyle) => orderedSessions
     .map(([sessionId, date]) => {
       const scores = allSends
-        .filter(c => c.session_id === sessionId && gradeDiscipline(c.grade_system) === discipline)
+        .filter(c => c.session_id === sessionId && chartStyleOf(c.type, c.grade_system) === style)
         .map(c => gradeScore(c.grade, c.grade_system))
         .filter(v => v >= 0);
       if (scores.length === 0) return null;
@@ -551,8 +550,8 @@ function FriendDetailView({
       return { date: date.slice(0, 10), avg };
     })
     .filter(Boolean) as GradePoint[];
-  const chartSeries = { boulder: pointsFor('boulder'), rope: pointsFor('rope') };
-  const showChart = chartSeries.boulder.length >= 2 || chartSeries.rope.length >= 2;
+  const chartSeries: ChartStyleSeries<GradePoint> = Object.fromEntries(CHART_STYLES.map(st => [st.id, pointsFor(st.id)]));
+  const showChart = chartStylesWithData(chartSeries).length > 0;
 
   const friendBtnLabel = friendStatus === 'accepted' ? 'Following'
     : friendStatus === 'pending_sent' ? 'Requested'
@@ -695,7 +694,7 @@ function FriendDetailView({
                   title="TOP 3 SENDS AVG"
                   titleStyle={detailStyles.sectionLabel}
                   series={chartSeries}
-                  counts={disciplineCounts}
+                  counts={styleCounts}
                   labelSys={{ boulder: preferredBoulder, rope: preferredRope }}
                   colors={colors}
                 />
