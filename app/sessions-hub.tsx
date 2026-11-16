@@ -7,6 +7,7 @@ import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import ProjectsScreen from './projects';
+import { setSessionsTabReselectCallback, triggerSessionsScrollTop } from '../utils/storage';
 
 type View_ = 'sessions' | 'projects' | 'calendar';
 
@@ -32,6 +33,22 @@ export default function SessionsHub() {
     if (pendingSessionId) setView('sessions');
   }, [pendingSessionId]);
 
+  // Tapping Sessions again — the top toggle or the bottom pill bar — while
+  // already on it scrolls the list back to the top.
+  function onSelectView(id: View_) {
+    if (id === 'sessions' && view === 'sessions') triggerSessionsScrollTop();
+    setView(id);
+  }
+
+  useEffect(() => {
+    setSessionsTabReselectCallback(() => {
+      if (headerHidden) return; // a session's detail view is open
+      setView('sessions');
+      triggerSessionsScrollTop();
+    });
+    return () => setSessionsTabReselectCallback(null);
+  }, [headerHidden]);
+
   return (
     <View style={styles.root} {...tabSwipe.panHandlers}>
       {/* Hidden while a session's detail view fills the screen. */}
@@ -39,7 +56,7 @@ export default function SessionsHub() {
           scrolls visibly underneath the pinned toggle. */}
       {!headerHidden && (
         <View style={[styles.tabsBar, { backgroundColor: colors.bg }]}>
-          <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={setView} />
+          <UnderlineTabs<View_> tabs={VIEWS} value={view} onChange={onSelectView} />
         </View>
       )}
       <Animated.View style={[styles.root, tabSwipe.slideStyle]}>

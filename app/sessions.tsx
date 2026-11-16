@@ -16,7 +16,7 @@ import {
   getAllSessions, getAllClimbs, deleteSession, deleteClimb,
   getOrCreateSessionForDate, createNewSession, saveSession, saveClimb,
   getTodayISO, setActiveSessionId, getActiveSessionId, endSession,
-  setSessionsRefreshCallback, cleanupEmptySessions, restoreActiveSession, isInitialSyncSettled,
+  setSessionsRefreshCallback, setSessionsScrollTopCallback, cleanupEmptySessions, restoreActiveSession, isInitialSyncSettled,
   triggerFeedRefresh, triggerStatsRefresh,
 } from '../utils/storage';
 import FriendPicker from '../components/FriendPicker';
@@ -104,7 +104,10 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   // so this never re-ran when the sessions finished loading.
   useEffect(() => {
     if (!navPendingSessionId) return;
-    const target = days.find(d => d.sessionId === navPendingSessionId);
+    // The active session is its own card at the top, so it needn't be in the
+    // list yet (an empty one may never be) — e.g. the header's + button.
+    const target = navPendingSessionId === getActiveSessionId()
+      || days.find(d => d.sessionId === navPendingSessionId);
     if (target) {
       revealSession(navPendingSessionId);
       clearPendingSessionId();
@@ -304,6 +307,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     setSessionsRefreshCallback(load);
     return () => setSessionsRefreshCallback(null);
   }, [load]);
+
+  // Tapping the already-selected Sessions tab jumps the list back to the top.
+  useEffect(() => {
+    setSessionsScrollTopCallback(() => sessionsScrollRef.current?.scrollTo({ y: 0, animated: true }));
+    return () => setSessionsScrollTopCallback(null);
+  }, []);
 
   const activeSessionId = getActiveSessionId();
   const activeSession = activeSessionId ? (days.find(d => d.sessionId === activeSessionId) ?? null) : null;
