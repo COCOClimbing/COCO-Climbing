@@ -13,11 +13,11 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const GROW_MS = 40;
 const SPRING_BACK = { stiffness: 700, damping: 26, mass: 1, restDisplacementThreshold: 0.001, restSpeedThreshold: 0.01 };
 
-export function usePressScale(scaleTo: number) {
+export function usePressScale(scaleTo: number, growMs = GROW_MS) {
   const scale = useRef(new Animated.Value(1)).current;
   const grow = () => {
     scale.stopAnimation();
-    Animated.timing(scale, { toValue: scaleTo, duration: GROW_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    Animated.timing(scale, { toValue: scaleTo, duration: growMs, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   };
   // Spring back right away, as one native animation, so it isn't held up
   // behind whatever the press opens
@@ -33,15 +33,26 @@ export function usePressScale(scaleTo: number) {
 // single native animation of a 0→1 progress value mapped to a bump in scale,
 // so it runs in step with the highlight's slide and isn't held up by the new
 // screen rendering.
-const PULSE_MS = 260;
 // How long a button's release is shown before its action runs
 const POP_MS = 110;
-const PULSE_PEAK = 0.35; // share of the pulse spent growing
+const PULSE_SHRINK_MS = 170; // the pulse's settle back to normal size
 
-export function usePressPulse(scaleTo: number) {
-  const { scale: hold, grow, release } = usePressScale(scaleTo);
+// growMs: how long the grow takes, both held and in a tap's pulse. The
+// bottom bar uses a slower grow than the round buttons.
+export function usePressPulse(scaleTo: number, growMs = GROW_MS) {
+  const { scale: hold, grow, release } = usePressScale(scaleTo, growMs);
   const pulse = useRef(new Animated.Value(0)).current;
-  const bump = pulse.interpolate({ inputRange: [0, PULSE_PEAK, 1], outputRange: [0, scaleTo - 1, 0] });
+  const PULSE_MS = growMs + PULSE_SHRINK_MS;
+  const PULSE_PEAK = growMs / PULSE_MS; // share of the pulse spent growing
+  // The pulse runs linearly; the curve is drawn here instead. The grow follows
+  // an ease-out cubic (moving on the very first frame, then gliding into full
+  // size), and the way back down eases out too.
+  const d = scaleTo - 1;
+  const P = PULSE_PEAK;
+  const bump = useRef(pulse.interpolate({
+    inputRange: [0, P * 0.1, P * 0.25, P * 0.5, P * 0.75, P, P + (1 - P) * 0.4, 1],
+    outputRange: [0, d * 0.27, d * 0.58, d * 0.875, d * 0.98, d, d * 0.3, 0],
+  })).current;
   const scale = useRef(Animated.add(hold, bump)).current;
   const pressedAt = useRef(0);
   return {
@@ -50,15 +61,15 @@ export function usePressPulse(scaleTo: number) {
     pressOut: () => {
       const held = Date.now() - pressedAt.current;
       // Held long enough to reach full size: just spring back
-      if (held >= GROW_MS) { release(); return; }
+      if (held >= growMs) { release(); return; }
       // A quick tap: hand the part-grown bar over to the pulse at the same
       // size, so it carries on growing to full and then shrinks, without a jump
-      const grown = Easing.out(Easing.cubic)(held / GROW_MS);
+      const grown = Easing.out(Easing.cubic)(held / growMs);
       const start = PULSE_PEAK * grown;
       hold.stopAnimation();
       hold.setValue(1);
       pulse.setValue(start);
-      Animated.timing(pulse, { toValue: 1, duration: PULSE_MS * (1 - start), easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => pulse.setValue(0));
+      Animated.timing(pulse, { toValue: 1, duration: PULSE_MS * (1 - start), easing: Easing.linear, useNativeDriver: true }).start(() => pulse.setValue(0));
     },
   };
 }

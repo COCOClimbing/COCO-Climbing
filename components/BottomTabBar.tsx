@@ -38,6 +38,11 @@ const TABS: { id: ScreenId; label: string; icon: IoniconName; iconActive: Ionico
 
 // onTabPress runs before switching tabs — PushScreen's copy of this bar uses
 // it to close its page first.
+// The whole bar's grow on press. Ease-out, so it starts moving on the first
+// frame, but over 180ms (vs the round buttons' 40ms) so a big surface glides
+// up to full size rather than snapping there.
+const BAR_GROW_MS = 180;
+
 export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void } = {}) {
   const { colors, mode } = useTheme();
   const { screen, returnTo, navigate } = useNav();
@@ -58,7 +63,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
 
   const insets = useSafeAreaInsets();
   // The whole bar grows a little while a tab (or the +) is held; the held tab's icon draws bolder
-  const barPress = usePressPulse(1.04);
+  const barPress = usePressPulse(1.04, BAR_GROW_MS);
   const [heldTab, setHeldTab] = useState<string | null>(null);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const sessionIdRef = useRef<string | undefined>();
