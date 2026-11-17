@@ -85,7 +85,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.sm,
+    // No bottom margin: the next item (View climbs / photos) brings its own
+    // top margin, which matches the space above the banner
   },
   bannerTitle: { fontSize: 14, fontFamily: FONTS.family.bold },
   bannerSub: { fontSize: 13, fontFamily: FONTS.family.regular, marginTop: 1 },
