@@ -303,8 +303,6 @@ export default function StatsScreen() {
       ? new Date(mostActiveMonthKey + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
       : null;
 
-    const outdoorSends = sends.filter(c => c.environment === 'outdoor').length;
-
     // Avg of each session's 3 hardest sends, one series per climb type —
     // matches the profile chart.
     // One point per session; several
@@ -337,7 +335,7 @@ export default function StatsScreen() {
       topStyles, typeCounts, topTypes, maxTypeCount,
       longestStreak, favLocation,
       avgPerSession, biggestSession, mostActiveMonth,
-      outdoorSends, chartSeries, styleCounts, chartStyles,
+      chartSeries, styleCounts, chartStyles,
     };
   }, [climbs, sessionDateMap, sessionLocationMap, sessionCount]);
 
@@ -366,7 +364,7 @@ export default function StatsScreen() {
     topStyles, typeCounts, topTypes, maxTypeCount,
     longestStreak, favLocation,
     avgPerSession, biggestSession, mostActiveMonth,
-    outdoorSends, chartSeries, styleCounts, chartStyles,
+    chartSeries, styleCounts, chartStyles,
   } = computed;
 
   const showChart = chartStyles.length > 0;
@@ -529,11 +527,6 @@ export default function StatsScreen() {
           <Text style={[ss.envPct, { color: colors.textMuted }]}>{outdoorCount}</Text>
         </View>
         </View>
-        {outdoorSends > 0 && (
-          <Text style={[ss.envSub, { color: colors.textMuted }]}>
-            {outdoorSends} outdoor {outdoorSends === 1 ? 'send' : 'sends'}
-          </Text>
-        )}
         </StatCard>
 
         {/* ── Improvement ── */}
@@ -586,8 +579,7 @@ export default function StatsScreen() {
               />
               {chartPoints.map((p, i) => (
                 <React.Fragment key={p.key}>
-                  {/* Dots get crowded over long ranges; drop them past ~40 sessions */}
-                  {chartPoints.length <= 40 && <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />}
+                  <Circle cx={cx(i)} cy={cy(p.val)} r={3} fill={colors.accent} />
                   {(i === 0 || i === chartPoints.length - 1) && (
                     // Right-align the last date so it doesn't run off the chart's narrow right edge
                     <SvgText x={cx(i)} y={CHART_H - 2} fontSize={8} fill={colors.textMuted} textAnchor={i === chartPoints.length - 1 ? 'end' : 'middle'} fontFamily={FONTS.family.regular}>
@@ -768,7 +760,6 @@ const ss = StyleSheet.create({
   envTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   envFill: { height: '100%', borderRadius: 3 },
   envPct: { fontSize: FONTS.sizes.xs, width: 28, textAlign: 'right' },
-  envSub: { fontSize: FONTS.sizes.xs, marginTop: SPACING.sm },
 
   // Improvement
   impHeader: { flexDirection: 'row', marginBottom: SPACING.sm },

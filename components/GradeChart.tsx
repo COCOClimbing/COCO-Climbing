@@ -4,15 +4,18 @@ import Svg, { Polyline as SvgPolyline, Circle as SvgCircle, Text as SvgText, Lin
 import { FONTS, SPACING } from '../utils/theme';
 import { scoreToGradeLabel, Discipline, ChartStyle, ChartStyleSeries, chartStylesWithData, defaultChartStyle, chartStyleDiscipline } from '../utils/gradeUtils';
 import ChartStyleDropdown from './ChartStyleDropdown';
-import { rangeDateLabel } from './ChartRangeToggle';
+import { ChartRange, filterByRange, rangeDateLabel } from './ChartRangeToggle';
 
 const CHART_H = 110;
+// The profile chart always shows the last 3 months; the range toggle is only on Stats.
+const PROFILE_RANGE: ChartRange = '3M';
 
 // Line chart of the average grade sent per session — shown on your own
 // profile and on other people's. Each series is every session, oldest first,
-// with a full YYYY-MM-DD date, one series per climb type. Always all time —
-// the time-range toggle lives only on the Stats page's chart. A dropdown
-// beside the title picks the type, listing those with enough sessions.
+// with a full YYYY-MM-DD date, one series per climb type. Always the last
+// 3 months — the time-range toggle lives only on the Stats page's chart. A
+// dropdown beside the title picks the type, listing those with enough
+// sessions in that window.
 // Callers render it only when chartStylesWithData(series) isn't empty.
 export type GradePoint = { date: string; avg: number };
 
@@ -26,12 +29,17 @@ export default function GradeChart({ title, titleStyle, series, counts, labelSys
   labelSys: Record<Discipline, string>;
   colors: any;
 }) {
-  const available = chartStylesWithData(series);
+  const ranged = React.useMemo(() => {
+    const out: ChartStyleSeries<GradePoint> = {};
+    (Object.keys(series) as ChartStyle[]).forEach(k => { out[k] = filterByRange(series[k] ?? [], PROFILE_RANGE); });
+    return out;
+  }, [series]);
+  const available = chartStylesWithData(ranged);
   const [chosen, setChosen] = React.useState<ChartStyle | null>(null);
   const style = chosen && available.includes(chosen) ? chosen : defaultChartStyle(counts, available);
-  const pts = series[style] ?? [];
+  const pts = (style && ranged[style]) || [];
   const [chartWidth, setChartWidth] = React.useState(0);
-  const dateLabel = (d: string) => rangeDateLabel(d, 'ALL');
+  const dateLabel = (d: string) => rangeDateLabel(d, PROFILE_RANGE);
 
   const PAD_LEFT = 36;
   const PAD_RIGHT = 12;
@@ -71,7 +79,7 @@ export default function GradeChart({ title, titleStyle, series, counts, labelSys
         {pts.length < 2 ? (
           <View style={[styles.empty, { height: CHART_H }]}>
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              Not enough sessions yet
+              Not enough sessions in the last 3 months
             </Text>
           </View>
         ) : chartWidth > 0 && (
@@ -101,8 +109,7 @@ export default function GradeChart({ title, titleStyle, series, counts, labelSys
                 fill="none" stroke={colors.accent} strokeWidth={2}
                 strokeLinejoin="round" strokeLinecap="round"
               />
-              {/* Dots get crowded over long ranges; drop them past ~40 sessions */}
-              {pts.length <= 40 && pts.map((p, i) => (
+              {pts.map((p, i) => (
                 <SvgCircle key={i} cx={cx(i)} cy={cy(p.avg)} r={3.5} fill={colors.accent} />
               ))}
             </Svg>
