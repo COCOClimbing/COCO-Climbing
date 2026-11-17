@@ -5,14 +5,22 @@ import { FONTS, SPACING } from '../utils/theme';
 
 export const STREAK_COLOR = '#F2B33D';
 
+// Number size as a share of the bolt: the bolt is narrow in the middle, so
+// each extra digit needs a smaller font to stay inside it
+function boltNumScale(weeks: number) {
+  if (weeks >= 100) return 0.19;
+  if (weeks >= 10) return 0.24;
+  return 0.3;
+}
+
 // Lightning bolt with the week count on it
-export function StreakBolt({ weeks, size = 40 }: { weeks?: number; size?: number }) {
+export function StreakBolt({ weeks, size = 44 }: { weeks?: number; size?: number }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Ionicons name="flash" size={size} color={STREAK_COLOR} />
       {weeks !== undefined && (
         <Text
-          style={[styles.boltNum, { fontSize: size * (weeks >= 100 ? 0.24 : 0.3) }]}
+          style={[styles.boltNum, { fontSize: size * boltNumScale(weeks) }]}
           numberOfLines={1}
           adjustsFontSizeToFit
         >
@@ -55,7 +63,7 @@ export function StreakChip({ weeks, colors, onPress }: { weeks: number; colors: 
   );
   if (!onPress) return body;
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${weeks} week streak. Show streak calendar`}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${weeks} week streak. Show calendar`}>
       {body}
     </TouchableOpacity>
   );

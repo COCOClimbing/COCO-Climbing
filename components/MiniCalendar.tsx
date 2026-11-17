@@ -7,9 +7,10 @@ import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING } from '../utils/theme';
 import {
-  format, startOfMonth, endOfMonth, eachDayOfInterval,
+  format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, addWeeks,
   getDay, addMonths, subMonths, isToday, differenceInCalendarMonths, parseISO
 } from 'date-fns';
+import { STREAK_COLOR } from './StreakBadge';
 
 const SCREEN_W = Dimensions.get('window').width;
 const H_PAD = SPACING.md * 2;
@@ -29,63 +30,112 @@ interface Props {
   // Render in place (e.g. as a tab) as a vertically scrolling list of months
   // instead of as a modal sheet that swipes between months.
   inline?: boolean;
+  // Mondays (yyyy-MM-dd) of weeks that are part of a 2+ week streak; each
+  // gets a band across its row, and back-to-back weeks join into one stripe.
+  streakWeeks?: Set<string>;
 }
 
-const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// Weeks start on Monday to match streak weeks (Monday–Sunday)
+const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS_PER_PAGE = 12;
 
-// Day cells for one month. Shared by the modal and the scrolling list.
-function MonthGrid({ month, activeDates, dateTypeColors, selectedDate, onPressDay }: {
+// Day cells for one month, one row per Monday–Sunday week. Shared by the
+// modal and the scrolling list.
+function MonthGrid({ month, activeDates, dateTypeColors, selectedDate, onPressDay, streakWeeks }: {
   month: Date; activeDates: string[]; dateTypeColors?: Record<string, string[]>; selectedDate?: string; onPressDay: (iso: string) => void;
+  streakWeeks?: Set<string>;
 }) {
-  const { colors } = useTheme();
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
-  const startPad = getDay(startOfMonth(month));
+  const startPad = (getDay(startOfMonth(month)) + 6) % 7; // Monday = 0
+  const cells: (Date | null)[] = [...Array(startPad).fill(null), ...days];
+  while (cells.length % 7) cells.push(null);
+  const rows = Array.from({ length: cells.length / 7 }, (_, r) => cells.slice(r * 7, r * 7 + 7));
+  const banded = (wk: Date) => !!streakWeeks?.has(format(wk, 'yyyy-MM-dd'));
+  // Columns holding this month's days: the first and last rows are partial
+  const span = (row: (Date | null)[]) => {
+    const first = row.findIndex(Boolean);
+    let last = row.length - 1;
+    while (!row[last]) last--;
+    return [first, last] as const;
+  };
   return (
     <>
-      {Array.from({ length: startPad }).map((_, i) => (
-        <View key={`pad-${i}`} style={styles.cell} />
-      ))}
-      {days.map(day => {
-        const iso = format(day, 'yyyy-MM-dd');
-        const hasClimbs = activeDates.includes(iso);
-        const isSelected = selectedDate === iso;
-        const today = isToday(day);
-        const ringColors = hasClimbs ? (dateTypeColors?.[iso]?.length ? dateTypeColors[iso] : [colors.accent]) : [];
-        const mainColor = ringColors[0] ?? colors.accent;
-        // Extra types get extra rings outside the first, spaced tighter past three so they fit the cell
-        const extraRings = ringColors.slice(1);
-        const ringStep = extraRings.length > 2 ? 3 : 4;
+      {rows.map((row, r) => {
+        const monday = startOfWeek(row.find(Boolean)!, { weekStartsOn: 1 });
+        const band = banded(monday);
+        const [first, last] = span(row);
+        // Join the band to the rows above/below when those weeks are banded
+        // too; a corner squares off only where the neighbouring band covers it
+        const up = band && r > 0 && banded(addWeeks(monday, -1)) ? span(rows[r - 1]) : null;
+        const down = band && r < rows.length - 1 && banded(addWeeks(monday, 1)) ? span(rows[r + 1]) : null;
+        const radius = CELL_W / 2;
         return (
-          <TouchableOpacity key={iso} style={styles.cell} onPress={() => onPressDay(iso)} activeOpacity={0.7}>
-            {extraRings.map((c, i) => {
-              const size = DAY_SIZE + ringStep * 2 * (i + 1);
-              return (
-                <View
-                  key={i}
-                  pointerEvents="none"
-                  style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2.25, borderColor: c }}
-                />
-              );
-            })}
-            <View style={[
-              styles.dayCircle,
-              hasClimbs && !today && { borderWidth: 2.25, borderColor: mainColor },
-              isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 2.25, borderColor: colors.accent },
-              today && { backgroundColor: colors.accent },
-            ]}>
-              <Text style={[styles.dayNum, {
-                color: today ? '#000' : hasClimbs ? mainColor : isSelected ? colors.accent : colors.textPrimary,
-                fontFamily: FONTS.family.bold,
-                fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
-              }]}>
-                {format(day, 'd')}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View key={format(monday, 'yyyy-MM-dd')} style={styles.weekRow}>
+            {/* Band behind this month's days only, not the blank cells */}
+            {band && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: first * CELL_W, width: (last - first + 1) * CELL_W,
+                  backgroundColor: STREAK_COLOR + '33',
+                  borderTopLeftRadius: up && up[0] <= first ? 0 : radius,
+                  borderTopRightRadius: up && up[1] >= last ? 0 : radius,
+                  borderBottomLeftRadius: down && down[0] <= first ? 0 : radius,
+                  borderBottomRightRadius: down && down[1] >= last ? 0 : radius,
+                }}
+              />
+            )}
+            {row.map((day, i) => day
+              ? <DayCell key={i} day={day} activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onPressDay={onPressDay} />
+              : <View key={i} style={styles.cell} />)}
+          </View>
         );
       })}
     </>
+  );
+}
+
+function DayCell({ day, activeDates, dateTypeColors, selectedDate, onPressDay }: {
+  day: Date; activeDates: string[]; dateTypeColors?: Record<string, string[]>; selectedDate?: string; onPressDay: (iso: string) => void;
+}) {
+  const { colors } = useTheme();
+  const iso = format(day, 'yyyy-MM-dd');
+  const hasClimbs = activeDates.includes(iso);
+  const isSelected = selectedDate === iso;
+  const today = isToday(day);
+  const ringColors = hasClimbs ? (dateTypeColors?.[iso]?.length ? dateTypeColors[iso] : [colors.accent]) : [];
+  const mainColor = ringColors[0] ?? colors.accent;
+  // Extra types get extra rings outside the first, spaced tighter past three so they fit the cell
+  const extraRings = ringColors.slice(1);
+  const ringStep = extraRings.length > 2 ? 3 : 4;
+  return (
+    <TouchableOpacity style={styles.cell} onPress={() => onPressDay(iso)} activeOpacity={0.7}>
+      {extraRings.map((c, i) => {
+        const size = DAY_SIZE + ringStep * 2 * (i + 1);
+        return (
+          <View
+            key={i}
+            pointerEvents="none"
+            style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2.25, borderColor: c }}
+          />
+        );
+      })}
+      <View style={[
+        styles.dayCircle,
+        hasClimbs && !today && { borderWidth: 2.25, borderColor: mainColor },
+        isSelected && !today && { backgroundColor: colors.accentSoft, borderWidth: 2.25, borderColor: colors.accent },
+        today && { backgroundColor: colors.accent },
+      ]}>
+        <Text style={[styles.dayNum, {
+          color: today ? '#000' : hasClimbs ? mainColor : isSelected ? colors.accent : colors.textPrimary,
+          fontFamily: FONTS.family.bold,
+          fontSize: isSelected && !today ? FONTS.sizes.md * 1.05 : FONTS.sizes.md,
+        }]}>
+          {format(day, 'd')}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -94,8 +144,9 @@ function MonthGrid({ month, activeDates, dateTypeColors, selectedDate, onPressDa
 // oldest session and loads another year whenever you reach the top. The list
 // is inverted, so item 0 (this month) renders at the bottom and "end reached"
 // fires at the top.
-function ScrollingMonths({ activeDates, dateTypeColors, selectedDate, onSelectDate }: {
+function ScrollingMonths({ activeDates, dateTypeColors, selectedDate, onSelectDate, streakWeeks }: {
   activeDates: string[]; dateTypeColors?: Record<string, string[]>; selectedDate?: string; onSelectDate: (date: string) => void;
+  streakWeeks?: Set<string>;
 }) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
@@ -134,7 +185,7 @@ function ScrollingMonths({ activeDates, dateTypeColors, selectedDate, onSelectDa
                 </Text>
               </Text>
               <View style={styles.listGrid}>
-                <MonthGrid month={month} activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onPressDay={onSelectDate} />
+                <MonthGrid month={month} activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onPressDay={onSelectDate} streakWeeks={streakWeeks} />
               </View>
             </View>
           );
@@ -144,9 +195,9 @@ function ScrollingMonths({ activeDates, dateTypeColors, selectedDate, onSelectDa
   );
 }
 
-export default function MiniCalendar({ visible, onClose, activeDates, dateTypeColors, onSelectDate, selectedDate, mode, inline = false }: Props) {
+export default function MiniCalendar({ visible, onClose, activeDates, dateTypeColors, onSelectDate, selectedDate, mode, inline = false, streakWeeks }: Props) {
   if (inline) {
-    return <ScrollingMonths activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onSelectDate={onSelectDate} />;
+    return <ScrollingMonths activeDates={activeDates} dateTypeColors={dateTypeColors} selectedDate={selectedDate} onSelectDate={onSelectDate} streakWeeks={streakWeeks} />;
   }
   return (
     <ModalCalendar
@@ -268,7 +319,8 @@ const styles = StyleSheet.create({
   monthName: { fontSize: 28, letterSpacing: -0.5 },
   yearName: { fontSize: FONTS.sizes.md, marginTop: 2 },
   row: { flexDirection: 'row', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, flex: 1, alignContent: 'flex-start' },
+  grid: { paddingHorizontal: SPACING.md, flex: 1 },
+  weekRow: { flexDirection: 'row' },
   cell: { width: CELL_W, height: CELL_W, alignItems: 'center', justifyContent: 'center' },
   dayHeader: { fontSize: FONTS.sizes.sm },
   dayCircle: { width: DAY_SIZE, height: DAY_SIZE, borderRadius: DAY_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
@@ -286,5 +338,5 @@ const styles = StyleSheet.create({
   monthBlock: { paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
   listMonthName: { fontSize: FONTS.sizes.xl, paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm },
   listYearName: { fontSize: FONTS.sizes.md },
-  listGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md },
+  listGrid: { paddingHorizontal: SPACING.md },
 });

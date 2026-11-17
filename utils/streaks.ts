@@ -16,6 +16,10 @@ export function weekStartOf(date: string | Date): string {
   return format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd');
 }
 
+// A streak only counts (chip, banner, calendar stripe) once it's 2+ weeks.
+// supabase_streaks.sql uses the same threshold for the feed banner.
+export const MIN_STREAK_WEEKS = 2;
+
 export type StreakInfo = {
   current: number;           // weeks in a row, ending this week (or last week if this one is empty)
   longest: number;           // longest run ever
@@ -50,6 +54,14 @@ export function computeStreak(dates: string[], today: Date = new Date()): Streak
   return { current, longest, thisWeekLogged, weeks };
 }
 
+// Mondays of the counted weeks that belong to a run of 2+ weeks — the weeks
+// the Sessions calendar draws a streak band across. A lone week gets none.
+export function streakBandWeeks(dates: string[]): Set<string> {
+  const weeks = new Set(dates.filter(Boolean).map(d => weekStartOf(d)));
+  const shift = (wk: string, n: number) => format(addWeeks(parseISO(wk), n), 'yyyy-MM-dd');
+  return new Set([...weeks].filter(wk => weeks.has(shift(wk, -1)) || weeks.has(shift(wk, 1))));
+}
+
 // Dates of the local sessions that have at least one entry
 export function activeSessionDates(
   sessions: { id: string; date: string }[],
@@ -60,8 +72,11 @@ export function activeSessionDates(
 }
 
 // Feed banner data for your own sessions, matching session_streaks() in
-// supabase_streaks.sql: the first session of each counted week gets the
-// streak that week reached, when it's 2+. `sessions` must all have entries.
+// supabase_streaks.sql. One banner per streak (run of MIN_STREAK_WEEKS+
+// weeks), on the first session of the streak's last week, with the length it
+// reached — so weekly climbing shows one banner that moves forward, not
+// 4, 5, 6… down the feed, and an ended streak keeps its final banner.
+// `sessions` must all have entries.
 export function sessionStreakMap(
   sessions: { id: string; date: string; startedAt?: string | null }[],
 ): Record<string, number> {
@@ -73,12 +88,15 @@ export function sessionStreakMap(
     if (!cur || key < cur.key) firstByWeek.set(wk, { id: s.id, key });
   }
   const out: Record<string, number> = {};
+  const sorted = [...firstByWeek.keys()].sort();
   let run = 0;
-  let prev: string | null = null;
-  for (const wk of [...firstByWeek.keys()].sort()) {
+  sorted.forEach((wk, i) => {
+    const prev = sorted[i - 1];
     run = prev && format(addWeeks(parseISO(prev), 1), 'yyyy-MM-dd') === wk ? run + 1 : 1;
-    if (run >= 2) out[firstByWeek.get(wk)!.id] = run;
-    prev = wk;
-  }
+    // Last week of its run: the next counted week isn't the week after
+    const next = sorted[i + 1];
+    const runEnds = !next || format(addWeeks(parseISO(wk), 1), 'yyyy-MM-dd') !== next;
+    if (runEnds && run >= MIN_STREAK_WEEKS) out[firstByWeek.get(wk)!.id] = run;
+  });
   return out;
 }

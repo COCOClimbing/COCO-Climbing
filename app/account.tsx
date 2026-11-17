@@ -28,16 +28,15 @@ import { getFriendCounts, getFollowing, getFollowers, FriendProfile } from '../u
 import { FONTS, SPACING, Climb, convertGrade, GRADE_DIFFICULTY } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
 import { gradeScore, isCustomGrade, Discipline, topScoresAverage, CHART_STYLES, ChartStyle, ChartStyleSeries, chartStyleOf, chartStyleCounts, chartStylesWithData } from '../utils/gradeUtils';
-import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades } from '../utils/storage';
+import { getAllClimbs, getAllSessions, getValidActiveSessionId, getPreferredDisplayGrades, savePreferredDisplayGrades, requestSessionsCalendar } from '../utils/storage';
 import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
 import PushScreen from '../components/PushScreen';
 import EditProfileModal from '../components/EditProfileModal';
-import StreakCalendar from '../components/StreakCalendar';
 import { StreakChip } from '../components/StreakBadge';
-import { computeStreak, activeSessionDates, StreakInfo } from '../utils/streaks';
+import { computeStreak, activeSessionDates, StreakInfo, MIN_STREAK_WEEKS } from '../utils/streaks';
 
 
 type ProfileTab = 'progress' | 'gallery';
@@ -64,8 +63,6 @@ export default function AccountScreen() {
   const [followListLoading, setFollowListLoading] = useState(false);
   const [climbStats, setClimbStats] = useState<ClimbStatsData | null>(null); // defined below component
   const [streak, setStreak] = useState<StreakInfo | null>(null);
-  const [streakDates, setStreakDates] = useState<string[]>([]);
-  const [streakOpen, setStreakOpen] = useState(false);
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -126,7 +123,6 @@ export default function AccountScreen() {
     const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
     // Streaks count the session in progress too, once it has an entry
     const dates = activeSessionDates(allSessions, allClimbs);
-    setStreakDates(dates);
     setStreak(computeStreak(dates));
     const climbs = activeId ? allClimbs.filter(c => c.sessionId !== activeId) : allClimbs;
     const sessions = activeId ? allSessions.filter(s => s.id !== activeId) : allSessions;
@@ -382,6 +378,13 @@ export default function AccountScreen() {
           <Text style={[styles.profileBio, { color: colors.textPrimary }]}>{bio}</Text>
         ) : null}
 
+        {/* Streak: its own row between the bio and the counts, same as friends' profiles */}
+        {streak && streak.current >= MIN_STREAK_WEEKS && (
+          <View style={styles.streakItem}>
+            <StreakChip weeks={streak.current} colors={colors} onPress={() => { requestSessionsCalendar(); navigate('sessions'); }} />
+          </View>
+        )}
+
         {/* Follow counts, then Edit Profile / Invite Friends side by side */}
         <View style={styles.profileBottom}>
           <View style={styles.countsRow}>
@@ -393,11 +396,6 @@ export default function AccountScreen() {
               <Text style={[styles.countLabel, { color: colors.textMuted }]}>Followers</Text>
               <Text style={[styles.countNumber, { color: colors.textPrimary }]}>{friendCounts?.followers ?? '—'}</Text>
             </TouchableOpacity>
-            {streak && streak.weeks.size > 0 && (
-              <View style={styles.streakItem}>
-                <StreakChip weeks={streak.current} colors={colors} onPress={() => setStreakOpen(true)} />
-              </View>
-            )}
           </View>
           <View style={styles.profileButtons}>
             <TouchableOpacity
@@ -472,11 +470,6 @@ export default function AccountScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Streak calendar — opens from the streak chip */}
-      <PushScreen visible={streakOpen} title="Streak" onBack={() => setStreakOpen(false)}>
-        {streak && <StreakCalendar streak={streak} activeDates={streakDates} colors={colors} />}
-      </PushScreen>
 
       {/* Following / Followers page — slides in like the app's other pages */}
       <PushScreen visible={followListModal !== null} title={profileName || 'You'} onBack={() => setFollowListModal(null)}>
@@ -1036,9 +1029,7 @@ const styles = StyleSheet.create({
     gap: SPACING.xl,
   },
   streakItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
   countItem: {
     alignItems: 'flex-start',

@@ -7,7 +7,7 @@ import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import SessionsScreen from './sessions';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import ProjectsScreen from './projects';
-import { triggerSessionsScrollTop } from '../utils/storage';
+import { triggerSessionsScrollTop, setOpenSessionsCalendarCallback } from '../utils/storage';
 
 type View_ = 'sessions' | 'projects' | 'calendar';
 
@@ -27,6 +27,12 @@ export default function SessionsHub() {
   // Swipe sideways to move between Sessions / Projects / Calendar (off while a
   // session's detail view is open, which hides the tabs)
   const tabSwipe = useTabSwipe<View_>(VIEWS.map(v => v.id), view, setView, !headerHidden);
+
+  // The profile streak chip opens the calendar view
+  useEffect(() => {
+    setOpenSessionsCalendarCallback(() => setView('calendar'));
+    return () => setOpenSessionsCalendarCallback(null);
+  }, []);
 
   // Jumping to a specific session (e.g. from Stats) must land on the sessions view.
   useEffect(() => {

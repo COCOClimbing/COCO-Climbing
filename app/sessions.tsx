@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { sessionStreakMap } from '../utils/streaks';
+import { sessionStreakMap, streakBandWeeks } from '../utils/streaks';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, TextInputProps, Modal, Alert, Dimensions, Image, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent, Animated, Easing, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -318,7 +318,13 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const activeSessionId = getActiveSessionId();
   const activeSession = activeSessionId ? (days.find(d => d.sessionId === activeSessionId) ?? null) : null;
   const listDays = days.filter(d => d.sessionId !== activeSessionId);
-  // Streak banners: the first session of each week that extended a 2+ week streak
+  // Calendar streak bands: weeks in a run of 2+, counting sessions with entries
+  const streakWeeks = useMemo(
+    () => streakBandWeeks(days.filter(d => d.climbs.length > 0).map(d => d.date)),
+    [days],
+  );
+
+  // Streak banners: one per 2+ week streak, on the first session of its last week
   const streakBySession = useMemo(
     () => sessionStreakMap(days.filter(d => d.climbs.length > 0).map(d => ({ id: d.sessionId, date: d.date, startedAt: d.startedAt }))),
     [days],
@@ -1408,6 +1414,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
             onClose={() => {}}
             activeDates={activeDates}
             dateTypeColors={dateTypeColors}
+            streakWeeks={streakWeeks}
             onSelectDate={handleCalendarSelect}
             selectedDate={selectedCalDate}
             mode="view"

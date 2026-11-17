@@ -59,9 +59,12 @@ AS $$
 $$;
 
 -- ─── session_streaks ─────────────────────────────────────────────────────────
--- For the feed banner. Of the given sessions, returns the ones that were the
--- first counted session of their week, with the streak that week reached.
--- Only streaks of 2+ weeks are returned.
+-- For the feed banner. One banner per streak (run of 2+ weeks): of the given
+-- sessions, returns the ones that were the first counted session of a
+-- streak's last week, with the length the streak reached. A current streak's
+-- banner sits on its newest week and moves forward as it grows; an ended
+-- streak keeps its final one.
+-- 2026-11-17: was one banner on every week of a streak (2, 3, 4…).
 CREATE OR REPLACE FUNCTION public.session_streaks(p_session_ids text[])
 RETURNS TABLE (session_id text, streak_weeks int)
 LANGUAGE sql
@@ -92,12 +95,18 @@ AS $$
     SELECT DISTINCT ON (user_id, wk) user_id, wk, id
     FROM owned
     ORDER BY user_id, wk, left(date, 10), started_at NULLS LAST, id
+  ),
+  -- Last week of each run, with the run's length
+  run_ends AS (
+    SELECT user_id, max(wk) AS wk, max(streak) AS streak
+    FROM ranked r JOIN numbered n USING (user_id, wk)
+    GROUP BY user_id, n.grp
   )
-  SELECT f.id, r.streak
+  SELECT f.id, e.streak
   FROM firsts f
-  JOIN ranked r USING (user_id, wk)
+  JOIN run_ends e USING (user_id, wk)
   WHERE f.id = ANY (p_session_ids)
-    AND r.streak >= 2;
+    AND e.streak >= 2;
 $$;
 
 GRANT SELECT ON public.streak_sessions TO authenticated;

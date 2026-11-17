@@ -123,6 +123,21 @@ let _onSessionsScrollTop: (() => void) | null = null;
 export function setSessionsScrollTopCallback(cb: (() => void) | null) { _onSessionsScrollTop = cb; }
 export function triggerSessionsScrollTop() { _onSessionsScrollTop?.(); }
 
+// ─── Open the Sessions calendar ───────────────────────────────────────────────
+// The profile streak chip asks for the Calendar view of the Sessions tab. The
+// hub may not be mounted yet (it mounts on first visit), so the request is kept
+// until it registers and takes it.
+let _calendarRequested = false;
+let _onOpenSessionsCalendar: (() => void) | null = null;
+export function setOpenSessionsCalendarCallback(cb: (() => void) | null) {
+  _onOpenSessionsCalendar = cb;
+  if (cb && _calendarRequested) { _calendarRequested = false; cb(); }
+}
+export function requestSessionsCalendar() {
+  if (_onOpenSessionsCalendar) _onOpenSessionsCalendar();
+  else _calendarRequested = true;
+}
+
 // ─── Projects refresh hook ────────────────────────────────────────────────────
 // projects.tsx registers its load() here; BottomTabBar calls triggerProjectsRefresh() after saving
 let _onProjectsRefresh: (() => void) | null = null;

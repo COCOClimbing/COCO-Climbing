@@ -54,10 +54,11 @@ export type SessionSummary = {
   notes?: string;
   title?: string;
   location?: string;
-  streakWeeks?: number; // set on the first session of a week that extended a 2+ week streak
+  streakWeeks?: number; // set on the post that started a 2+ week streak's last week
 };
 
 // Streak banner data for a batch of feed posts: session id → weeks reached.
+// One per streak: the post that started the streak's last week, with its length.
 // Empty if supabase_streaks.sql hasn't been run yet, so the feed just shows no banners.
 export async function getSessionStreaks(sessionIds: string[]): Promise<Record<string, number>> {
   if (sessionIds.length === 0) return {};

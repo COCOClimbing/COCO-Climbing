@@ -146,7 +146,7 @@ interface SessionCardProps {
   onShare: () => void;
   onViewProfile: (profile: { id: string; name: string; username: string; avatar_url: string | null }) => void;
   condensed?: boolean;
-  streakWeeks?: number; // first session of a week that extended a 2+ week streak
+  streakWeeks?: number; // first session of a 2+ week streak's last week
 }
 
 export default function SessionCard({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { sessionStreakMap, computeStreak } from '../utils/streaks';
+import { sessionStreakMap, computeStreak, MIN_STREAK_WEEKS } from '../utils/streaks';
 import { StreakChip, StreakBanner } from '../components/StreakBadge';
 import {
   View,
@@ -621,16 +621,17 @@ function FriendDetailView({
               </View>
               {friend.username ? <Text style={[detailStyles.profileUsername, { color: colors.textSecondary }]}>@{friend.username}</Text> : null}
               {friend.hometown ? <Text style={[detailStyles.profileHometown, { color: colors.textMuted }]} numberOfLines={1}>{friend.hometown}</Text> : null}
-              {/* Under the name: the counts row also holds the Follow button, so there's no room there */}
-              {profileStreak > 0 && !isLocked && (
-                <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
-                  <StreakChip weeks={profileStreak} colors={colors} />
-                </View>
-              )}
             </View>
           </View>
 
           {bio ? <Text style={[detailStyles.profileBio, { color: colors.textSecondary }]}>{bio}</Text> : null}
+
+          {/* Streak: its own row between the bio and the counts, same as your own profile */}
+          {profileStreak >= MIN_STREAK_WEEKS && !isLocked && (
+            <View style={{ alignSelf: 'flex-start' }}>
+              <StreakChip weeks={profileStreak} colors={colors} />
+            </View>
+          )}
 
           {/* Following / Followers + friend action button */}
           <View style={detailStyles.profileBottom}>
