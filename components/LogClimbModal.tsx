@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import BoldIcon from './BoldIcon';
+import PressGrow from './PressGrow';
 import Svg, { Path } from 'react-native-svg';
 import {
   View, Text, StyleSheet, ScrollView, Modal,
@@ -581,9 +583,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             {/* Round back (cancel) and check (save) buttons, like the app's other round buttons */}
-            <TouchableOpacity onPress={onClose} style={[styles.roundBtn, { backgroundColor: colors.bgCard }]} activeOpacity={0.7} accessibilityLabel="Cancel">
-              <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <PressGrow onPress={onClose} style={[styles.roundBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Cancel">
+              {pressed => <BoldIcon name="chevron-back" size={24} color={colors.textPrimary} weight={pressed ? 0.5 : 0} />}
+            </PressGrow>
             <View style={{ alignItems: 'center', flex: 1 }}>
               <Text style={[styles.headerTitle, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>
                 {editProjectMode
@@ -601,17 +603,17 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 </Text>
               )}
             </View>
-            <TouchableOpacity onPress={handleSave} style={[styles.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} activeOpacity={0.7} accessibilityLabel="Save">
-              {saving
+            <PressGrow onPress={handleSave} style={[styles.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} accessibilityLabel="Save">
+              {pressed => saving
                 ? <ActivityIndicator size="small" color="#fff" />
                 : (
                   // Same path as Ionicons' checkmark, but at the back arrow's
                   // line weight (48) so the two buttons match
                   <Svg width={24} height={24} viewBox="0 0 512 512">
-                    <Path d="M416 128L192 384l-96-96" fill="none" stroke="#fff" strokeWidth={48} strokeLinecap="round" strokeLinejoin="round" />
+                    <Path d="M416 128L192 384l-96-96" fill="none" stroke="#fff" strokeWidth={pressed ? 60 : 48} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
                 )}
-            </TouchableOpacity>
+            </PressGrow>
           </View>
 
           <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">

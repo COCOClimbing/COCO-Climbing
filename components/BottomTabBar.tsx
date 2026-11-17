@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Animated, LayoutChangeEvent } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import BoldIcon, { IoniconName } from './BoldIcon';
+import { usePressPulse } from './PressGrow';
 import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh } from '../utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../utils/ThemeContext';
@@ -11,7 +12,6 @@ import { FONTS, SPACING } from '../utils/theme';
 import LogClimbModal from './LogClimbModal';
 import Sheen, { DARK_GLASS, DARK_GLASS_SELECTED } from './Sheen';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 // The bar floats as a rounded pill over the bottom of the screen, Strava-style,
 // with content scrolling behind it. Scroll views pad their content by
@@ -57,6 +57,9 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
     : '?';
 
   const insets = useSafeAreaInsets();
+  // The whole bar grows a little while a tab (or the +) is held; the held tab's icon draws bolder
+  const barPress = usePressPulse(1.04);
+  const [heldTab, setHeldTab] = useState<string | null>(null);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const sessionIdRef = useRef<string | undefined>();
 
@@ -74,17 +77,23 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
   const [layoutVersion, setLayoutVersion] = useState(0);
   const activeIndex = TABS.findIndex(t => t.id === activeScreen);
 
-  useEffect(() => {
-    const t = tabX.current[activeScreen];
+  // Where the bubble is headed, so a slide already started from a tap isn't
+  // restarted (and jolted) when the screen change catches up
+  const bubbleTarget = useRef<number | null>(null);
+  function slideBubbleTo(id: string) {
+    const t = tabX.current[id];
     if (!t || !tabWidth) return;
     const x = groupX.current[t.group] + t.x;
     if (!bubblePlaced.current) {
       bubbleX.setValue(x);
       bubblePlaced.current = true;
-    } else {
-      Animated.spring(bubbleX, { toValue: x, useNativeDriver: true, speed: 18, bounciness: 4 }).start();
+    } else if (bubbleTarget.current !== x) {
+      Animated.spring(bubbleX, { toValue: x, useNativeDriver: true, speed: 11, bounciness: 4 }).start();
     }
-  }, [activeScreen, tabWidth, layoutVersion]);
+    bubbleTarget.current = x;
+  }
+
+  useEffect(() => { slideBubbleTo(activeScreen); }, [activeScreen, tabWidth, layoutVersion]);
 
   function onGroupLayout(group: 'left' | 'right') {
     return (e: LayoutChangeEvent) => {
@@ -109,9 +118,18 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         key={tab.id}
         onLayout={onTabLayout(tab.id, group)}
         style={styles.tab}
-        onPress={() => { onTabPress?.(); navigate(tab.id); }}
-        activeOpacity={0.7}
+        onPress={() => {
+          // Start the highlight's slide now, and switch screens a frame later,
+          // so drawing the new screen can't hold the slide (or the bar's
+          // spring back) up — they all move together.
+          slideBubbleTo(tab.id);
+          requestAnimationFrame(() => { onTabPress?.(); navigate(tab.id); });
+        }}
+        onPressIn={() => { barPress.pressIn(); setHeldTab(tab.id); }}
+        onPressOut={() => { setHeldTab(null); barPress.pressOut(); }}
+        activeOpacity={1}
       >
+        {(() => { const pressed = heldTab === tab.id; return (<>
         {tab.id === 'account' ? (
           <View style={[
             styles.avatar,
@@ -128,6 +146,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
             name={active ? tab.iconActive : tab.icon}
             size={22}
             color={active ? colors.accent : colors.textPrimary}
+            weight={pressed ? 0.55 : 0.3}
           />
         )}
         <Text style={[
@@ -142,15 +161,17 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
             <Text style={styles.badgeText}>{pendingRequestCount > 9 ? '9+' : pendingRequestCount}</Text>
           </View>
         )}
+        </>); })()}
       </TouchableOpacity>
     );
   }
 
   return (
     <>
-      <View style={[
+      <Animated.View style={[
         styles.bar,
         {
+          transform: [{ scale: barPress.scale }],
           // Slightly see-through, so content scrolling behind shows faintly.
           // (A true frosted blur needs a native module and an App Store build.)
           // Dark mode lifts the bar a shade so its sheen reads against the page
@@ -182,6 +203,8 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
             sessionIdRef.current = id;
             setLogModalVisible(true);
           }}
+          onPressIn={barPress.pressIn}
+          onPressOut={barPress.pressOut}
           activeOpacity={0.85}
         >
           <Text style={styles.fabText}>+</Text>
@@ -190,7 +213,7 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         <View style={styles.tabGroup} onLayout={onGroupLayout('right')}>
           {rightTabs.map(t => renderTab(t, 'right'))}
         </View>
-      </View>
+      </Animated.View>
 
       <LogClimbModal
         visible={logModalVisible}
@@ -199,24 +222,6 @@ export default function BottomTabBar({ onTabPress }: { onTabPress?: () => void }
         defaultSessionId={sessionIdRef.current}
       />
     </>
-  );
-}
-
-// Ionicons are font glyphs with a fixed stroke, so for slightly heavier lines
-// the glyph is drawn again nudged a fraction of a point each way — the copies
-// overlap into a thicker, still-crisp outline.
-const BOLD_OFFSETS = [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]];
-function BoldIcon({ name, size, color }: { name: IoniconName; size: number; color: string }) {
-  return (
-    <View style={{ width: size, height: size }}>
-      {BOLD_OFFSETS.map(([x, y], i) => (
-        <Ionicons
-          key={i} name={name} size={size} color={color}
-          style={{ position: 'absolute', left: x, top: y }}
-        />
-      ))}
-      <Ionicons name={name} size={size} color={color} />
-    </View>
   );
 }
 

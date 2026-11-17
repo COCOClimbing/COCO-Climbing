@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Modal, SafeAreaView, ActivityIndicator } from 'react-native';
 import StatCard from '../components/StatCard';
+import PressGrow from '../components/PressGrow';
+import BoldIcon from '../components/BoldIcon';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { FONTS, SPACING, Climb, CLIMB_TYPES, CLIMB_STYLES, getGradeDifficulty } from '../utils/theme';
 import { isTrainingClimb } from '../utils/sessionHelpers';
@@ -66,9 +68,9 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
       <SafeAreaView style={[ss.modalContainer, { backgroundColor: colors.bg }]}>
         <View style={ss.modalHeader}>
           {/* Same round accent checkmark the app's other sheets close with */}
-          <TouchableOpacity onPress={onClose} style={[ss.modalClose, { backgroundColor: colors.accent }]} accessibilityLabel="Done">
-            <Ionicons name="checkmark" size={24} color="#fff" />
-          </TouchableOpacity>
+          <PressGrow onPress={onClose} style={[ss.modalClose, { backgroundColor: colors.accent }]} accessibilityLabel="Done">
+            {pressed => <BoldIcon name="checkmark" size={24} color="#fff" weight={pressed ? 0.5 : 0} />}
+          </PressGrow>
           <Text style={[ss.modalTitle, { color: colors.textPrimary }]}>{title}</Text>
           <Text style={[ss.modalSubtitle, { color: colors.textMuted }]}>{filteredClimbs.length} climbs</Text>
         </View>

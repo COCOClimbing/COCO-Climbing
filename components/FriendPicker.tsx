@@ -10,6 +10,8 @@ import { getFollowing, FriendProfile } from '../utils/friendsApi';
 import { FONTS, SPACING } from '../utils/theme';
 import { useSlideSheet } from '../utils/useSlideSheet';
 import { Ionicons } from '@expo/vector-icons';
+import BoldIcon from './BoldIcon';
+import PressGrow from './PressGrow';
 import Avatar from './Avatar';
 
 interface SelectedFriend { id: string; name: string; }
@@ -128,17 +130,17 @@ export default function FriendPicker({ selected, onChange, onOpenChange }: Props
           >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <View style={styles.headerBtn}>
-              <GHTouchableOpacity onPress={close} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
-                <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-              </GHTouchableOpacity>
+              <PressGrow gh onPress={close} style={[styles.backBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Back">
+                {pressed => <BoldIcon name="chevron-back" size={24} color={colors.textPrimary} weight={pressed ? 0.5 : 0} />}
+              </PressGrow>
             </View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]}>
               Climbing With
             </Text>
             <View style={[styles.headerBtn, styles.headerBtnRight]}>
-              <GHTouchableOpacity onPress={handleSave} style={[styles.backBtn, { backgroundColor: colors.accent }]} accessibilityLabel="Save">
-                <Ionicons name="checkmark" size={24} color="#fff" />
-              </GHTouchableOpacity>
+              <PressGrow gh onPress={handleSave} style={[styles.backBtn, { backgroundColor: colors.accent }]} accessibilityLabel="Save">
+                {pressed => <BoldIcon name="checkmark" size={24} color="#fff" weight={pressed ? 0.5 : 0} />}
+              </PressGrow>
             </View>
           </View>
 

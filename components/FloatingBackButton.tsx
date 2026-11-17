@@ -1,6 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import BoldIcon from './BoldIcon';
+import PressGrow from './PressGrow';
 import { useTheme } from '../utils/ThemeContext';
 
 export const BACK_BUTTON_SIZE = 40;
@@ -9,14 +10,13 @@ export const BACK_BUTTON_SIZE = 40;
 export default function FloatingBackButton({ onPress, style }: { onPress: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors } = useTheme();
   return (
-    <TouchableOpacity
+    <PressGrow
       onPress={onPress}
       style={[styles.btn, { backgroundColor: colors.bgCard }, style]}
-      activeOpacity={0.7}
       accessibilityLabel="Back"
     >
-      <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-    </TouchableOpacity>
+      {pressed => <BoldIcon name="chevron-back" size={24} color={colors.textPrimary} weight={pressed ? 0.5 : 0} />}
+    </PressGrow>
   );
 }
 

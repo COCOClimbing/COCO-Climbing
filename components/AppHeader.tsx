@@ -11,6 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNewSession, getValidActiveSessionId, setActiveSessionId, triggerSessionsRefresh } from '../utils/storage';
 import { FONTS, SPACING } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
+import BoldIcon from './BoldIcon';
+import PressGrow from './PressGrow';
+
+// How much bolder a header icon's lines get while its button is held
+const HELD_WEIGHT = 0.5;
 import { supabase } from '../utils/supabase';
 import { routeNotificationTap } from '../utils/notifications';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -199,25 +204,31 @@ export default function AppHeader() {
           bar's You tab); just a back button on Settings, which isn't a tab. */}
       <View style={styles.side}>
         {screen === 'settings' ? (
-          <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={circle} accessibilityLabel="Back">
+          <PressGrow onPress={closeSettings} style={circle} accessibilityLabel="Back">
+            {pressed => (<>
             <Sheen radius={20} />
-            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+            <BoldIcon name="chevron-back" size={24} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
+            </>)}
+          </PressGrow>
         ) : (
         <View style={styles.leftGroup}>
-          <TouchableOpacity onPress={startSession} activeOpacity={0.7} style={circle} accessibilityLabel="Start session">
+          <PressGrow onPress={startSession} style={circle} accessibilityLabel="Start session">
+            {pressed => (<>
             <Sheen radius={20} />
-            <Ionicons name="add" size={26} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={openFriends} activeOpacity={0.7} style={circle}>
+            <BoldIcon name="add" size={26} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
+            </>)}
+          </PressGrow>
+          <PressGrow onPress={openFriends} style={circle} accessibilityLabel="Search">
+            {pressed => (<>
             <Sheen radius={20} />
-            <Ionicons name="search" size={22} color={colors.textPrimary} />
+            <BoldIcon name="search" size={22} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
             {pendingRequestCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
                 <Text style={styles.badgeText}>{pendingRequestCount > 9 ? '9+' : pendingRequestCount}</Text>
               </View>
             )}
-          </TouchableOpacity>
+            </>)}
+          </PressGrow>
         </View>
         )}
       </View>
@@ -228,27 +239,33 @@ export default function AppHeader() {
 
       <View style={styles.sideRight}>
         {screen === 'settings' ? null : screen === 'account' ? (
-          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} accessibilityLabel="Settings" style={circle}>
+          <PressGrow onPress={openSettings} accessibilityLabel="Settings" style={circle}>
+            {pressed => (<>
             <Sheen radius={20} />
-            <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
+            <BoldIcon name="settings-outline" size={22} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
+            </>)}
+          </PressGrow>
         ) : (
           <View style={styles.leftGroup}>
           {screen === 'friends' && isAdmin && (
-            <TouchableOpacity onPress={() => nav.openAdmin('sessions')} activeOpacity={0.7} style={circle} accessibilityLabel="Admin: all sessions">
+            <PressGrow onPress={() => nav.openAdmin('sessions')} style={circle} accessibilityLabel="Admin: all sessions">
+              {pressed => (<>
               <Sheen radius={20} />
-              <Ionicons name="shield-checkmark-outline" size={22} color={colors.textPrimary} />
-            </TouchableOpacity>
+              <BoldIcon name="shield-checkmark-outline" size={22} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
+              </>)}
+            </PressGrow>
           )}
-          <TouchableOpacity onPress={openNotifications} activeOpacity={0.7} style={circle}>
+          <PressGrow onPress={openNotifications} style={circle} accessibilityLabel="Notifications">
+            {pressed => (<>
             <Sheen radius={20} />
-            <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
+            <BoldIcon name="notifications-outline" size={22} color={colors.textPrimary} weight={pressed ? HELD_WEIGHT : 0} />
             {unreadCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.accent }]}>
                 <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
               </View>
             )}
-          </TouchableOpacity>
+            </>)}
+          </PressGrow>
           </View>
         )}
       </View>
