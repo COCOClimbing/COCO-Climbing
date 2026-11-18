@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 // Lets a screen's main scroll view run under the app header, Strava-style:
@@ -90,7 +90,11 @@ export function useHeaderScroll(enabled = true) {
   const tabActive = useContext(TabActiveContext);
   enabled = enabled && tabActive;
 
-  useEffect(() => {
+  // Layout effect, not a plain effect: the layout drops its top padding only
+  // once a screen registers, so registering after paint drew the screen's
+  // first frame with both paddings (a header's height too low) and then it
+  // jumped up. This runs before that frame is shown.
+  useLayoutEffect(() => {
     if (!enabled) return;
     return register();
   }, [enabled, register]);
@@ -107,7 +111,8 @@ export function useHideHeader(active = true) {
   const { registerHidden } = useContext(HeaderScrollContext);
   const tabActive = useContext(TabActiveContext);
   active = active && tabActive;
-  useEffect(() => {
+  // Before paint, for the same reason as useHeaderScroll's register
+  useLayoutEffect(() => {
     if (!active) return;
     return registerHidden();
   }, [active, registerHidden]);

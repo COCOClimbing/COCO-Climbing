@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Animated, Easing } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
 import { supabase } from '../utils/supabase';
@@ -67,6 +67,9 @@ async function checkAndApplyUpdate() {
   markUpdateCheckSettled();
 }
 
+// How long a page takes to fade in when you switch tabs
+const PAGE_FADE_MS = 100;
+
 function AppShell({ onReady }: { onReady: () => void }) {
   const { colors, mode } = useTheme();
   const { screen, navigate } = useNav();
@@ -80,6 +83,30 @@ function AppShell({ onReady }: { onReady: () => void }) {
   useEffect(() => {
     if (screen === 'sessions') setSessionsMounted(true);
   }, [screen]);
+
+  // Switching tabs fades the new page in instead of popping it on; the header
+  // and bottom bar stay solid. Not on app start. Each screen gets a fresh
+  // value that starts transparent, so the transparency arrives in the same
+  // update that puts the new page on screen. (Setting an existing value to 0
+  // took effect before the new page had mounted, which faded the old page.)
+  const switchedOnce = useRef(false);
+  const pageOpacity = React.useMemo(
+    () => new Animated.Value(switchedOnce.current ? 0 : 1),
+    [screen],
+  );
+  useEffect(() => {
+    if (!switchedOnce.current) { switchedOnce.current = true; return; }
+    // Start the fade only once the new page has mounted. The native animation
+    // drives the container directly, so starting it sooner faded the old
+    // page's content while the new page was still mounting.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        Animated.timing(pageOpacity, { toValue: 1, duration: PAGE_FADE_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [pageOpacity]);
 
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
@@ -218,7 +245,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
         <View style={styles.body}>
           {/* Screens that opt into useHeaderScroll run under the floating
               header; the rest start below it. */}
-          <View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating || headerHidden ? 0 : headerHeight }]}>
+          <Animated.View style={[styles.body, { backgroundColor: colors.bg, paddingTop: floating || headerHidden ? 0 : headerHeight, opacity: pageOpacity }]}>
             {screen !== 'friends' && renderScreen()}
             {(screen === 'sessions' || sessionsMounted) && (
               <View style={screen === 'sessions' ? styles.body : styles.hidden}>
@@ -228,7 +255,7 @@ function AppShell({ onReady }: { onReady: () => void }) {
               </View>
             )}
             <FriendsScreen />
-          </View>
+          </Animated.View>
           {!headerHidden && <AppHeader />}
           {isAdmin && <AdminFeedScreen />}
         </View>

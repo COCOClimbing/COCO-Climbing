@@ -1132,9 +1132,15 @@ export default function FriendsScreen() {
     });
   }, [screen]);
 
+  // Coming back to Activity: refresh in place when posts are already showing.
+  // A spinner here swapped out the feed and slid it back in on every visit.
+  // The first load, and a different account signing in, still get the spinner.
+  const feedUserRef = useRef<string | null>(null);
   useEffect(() => {
     if (!user || screen !== 'friends') return;
-    loadFeed();
+    const sameUser = feedUserRef.current === user.id;
+    feedUserRef.current = user.id;
+    loadFeed(undefined, !(sameUser && activityFeed.length > 0));
     loadRequests();
   }, [user?.id, screen]);
 

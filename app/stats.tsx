@@ -11,6 +11,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { useHeaderScroll } from '../utils/HeaderScroll';
 import { useNav } from '../utils/NavigationContext';
+import { useAuth } from '../utils/AuthContext';
 import { getAllClimbs, getAllSessions, getPreferredDisplayGrades, setStatsRefreshCallback, bulkSaveClimbs, bulkSaveSessions, getDeletedClimbIds, getDeletedSessionIds } from '../utils/storage';
 import { gradeToNum, isCustomGrade, gradeScore, scoreToGradeLabel, topScoresAverage, CHART_STYLES, ChartStyle, chartStyleOf, chartStyleCounts, chartStylesWithData, defaultChartStyle, chartStyleDiscipline } from '../utils/gradeUtils';
 import ChartStyleDropdown from '../components/ChartStyleDropdown';
@@ -117,28 +118,61 @@ function GradeBreakdownModal({ visible, title, filteredClimbs, accentColor, onCl
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+// What Stats last showed. The screen is rebuilt on every visit, so without
+// this it opened on a spinner each time while it re-downloaded everything;
+// now it opens on the last numbers and refreshes them in place.
+// Tied to the account, so a different sign-in never sees someone else's numbers.
+type StatsData = { climbs: Climb[]; sessionDateMap: Record<string, string>; sessionLocationMap: Record<string, string>; sessionCount: number };
+let lastStatsCache: { userId: string | null; data: StatsData } | null = null;
+
 export default function StatsScreen() {
   const tabBarSpace = useTabBarSpace();
   const { colors } = useTheme();
   const { screen, navigateToSession } = useNav();
-  const [climbs, setClimbs] = useState<Climb[]>([]);
-  const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>({});
-  const [sessionLocationMap, setSessionLocationMap] = useState<Record<string, string>>({});
-  const [sessionCount, setSessionCount] = useState(0);
+  const userId = useAuth().user?.id ?? null;
+  const lastStats = lastStatsCache?.userId === userId ? lastStatsCache.data : null;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const [climbs, setClimbs] = useState<Climb[]>(() => lastStats?.climbs ?? []);
+  const [sessionDateMap, setSessionDateMap] = useState<Record<string, string>>(() => lastStats?.sessionDateMap ?? {});
+  const [sessionLocationMap, setSessionLocationMap] = useState<Record<string, string>>(() => lastStats?.sessionLocationMap ?? {});
+  const [sessionCount, setSessionCount] = useState(() => lastStats?.sessionCount ?? 0);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !lastStats);
   const [chartRange, setChartRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
   const [chosenStyle, setChosenStyle] = useState<ChartStyle | null>(null);
   // Chart labels follow the viewer's grade preference (Settings → Grades)
   const [gradePrefs, setGradePrefs] = useState({ boulder: 'v-scale', rope: 'yds' });
   useEffect(() => { getPreferredDisplayGrades().then(setGradePrefs).catch(() => {}); }, []);
 
-  // Only the first load shows the spinner; later refreshes (e.g. cloud sync
-  // finishing after launch) update the stats in place.
-  const hasLoadedRef = useRef(false);
+  // Show something as soon as possible, then refresh in place: the last
+  // numbers if Stats has been open before, otherwise the phone's own copy of
+  // your climbs (quick to read) while the cloud download runs.
+  const hasLoadedRef = useRef(!!lastStats);
+  const apply = (d: StatsData) => {
+    lastStatsCache = { userId: userIdRef.current, data: d };
+    setClimbs(d.climbs);
+    setSessionCount(d.sessionCount);
+    setSessionDateMap(d.sessionDateMap);
+    setSessionLocationMap(d.sessionLocationMap);
+  };
+  const fromLocal = async (): Promise<StatsData> => {
+    const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+    const map: Record<string, string> = {};
+    const locMap: Record<string, string> = {};
+    allSessions.forEach(s => {
+      map[s.id] = s.date;
+      if (s.location) locMap[s.id] = s.location;
+    });
+    return { climbs: allClimbs.filter(c => !isTrainingClimb(c)), sessionCount: allSessions.length, sessionDateMap: map, sessionLocationMap: locMap };
+  };
   const loadData = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
+    if (!hasLoadedRef.current) {
+      apply(await fromLocal());
+      setLoading(false);
+      hasLoadedRef.current = true;
+    }
     let cloudClimbs: Climb[] | null = null;
     let cloudSessionCount: number | null = null;
     let cloudSessionMap: Record<string, string> | null = null;
@@ -185,22 +219,15 @@ export default function StatsScreen() {
     }
 
     if (cloudClimbs !== null) {
-      setClimbs(cloudClimbs.filter(c => !isTrainingClimb(c)));
-      if (cloudSessionCount !== null) setSessionCount(cloudSessionCount);
-      if (cloudSessionMap !== null) setSessionDateMap(cloudSessionMap);
-      if (cloudSessionLocationMap !== null) setSessionLocationMap(cloudSessionLocationMap);
-    } else {
-      const [allClimbs, allSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
-      setClimbs(allClimbs.filter(c => !isTrainingClimb(c)));
-      setSessionCount(allSessions.length);
-      const map: Record<string, string> = {};
-      const locMap: Record<string, string> = {};
-      allSessions.forEach(s => {
-        map[s.id] = s.date;
-        if (s.location) locMap[s.id] = s.location;
+      const prev = lastStatsCache?.data;
+      apply({
+        climbs: cloudClimbs.filter(c => !isTrainingClimb(c)),
+        sessionCount: cloudSessionCount ?? prev?.sessionCount ?? 0,
+        sessionDateMap: cloudSessionMap ?? prev?.sessionDateMap ?? {},
+        sessionLocationMap: cloudSessionLocationMap ?? prev?.sessionLocationMap ?? {},
       });
-      setSessionDateMap(map);
-      setSessionLocationMap(locMap);
+    } else {
+      apply(await fromLocal());
     }
     setLoading(false);
     hasLoadedRef.current = true;
