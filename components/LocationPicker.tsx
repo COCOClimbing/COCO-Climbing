@@ -13,6 +13,7 @@ import PressGrow from './PressGrow';
 import { FONTS, SPACING } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useSlideSheet } from '../utils/useSlideSheet';
+import { rememberLocationCoords } from '../utils/sessionCoords';
 
 const RECENT_KEY = 'coco_recent_locations';
 const MAX_RECENT = 8;
@@ -22,6 +23,8 @@ interface SearchResult {
   primary: string;
   secondary: string;
   fullName: string;
+  lat: number;
+  lng: number;
 }
 
 async function getRecentLocations(): Promise<string[]> {
@@ -42,6 +45,8 @@ async function saveRecentLocation(name: string) {
 interface NominatimResult {
   place_id: number;
   display_name: string;
+  lat: string;
+  lon: string;
   name: string;
   address: {
     amenity?: string;
@@ -72,7 +77,7 @@ async function searchPlaces(query: string): Promise<SearchResult[]> {
       const fullName = placeName
         ? `${placeName}${a.city || a.town ? `, ${a.city || a.town}` : ''}`
         : [streetLine, a.city || a.town].filter(Boolean).join(', ');
-      return { id: `n-${r.place_id}`, primary, secondary, fullName: fullName || primary };
+      return { id: `n-${r.place_id}`, primary, secondary, fullName: fullName || primary, lat: parseFloat(r.lat), lng: parseFloat(r.lon) };
     })
     .filter(r => {
       const key = r.fullName.toLowerCase();
@@ -100,6 +105,9 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
   const [locationError, setLocationError] = useState('');
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where the last picked place is (map result or GPS), so saving that name
+  // also records its coordinates for "Climbers at your gyms"
+  const pickedRef = useRef<{ name: string; lat: number; lng: number } | null>(null);
   const insets = useSafeAreaInsets();
   const { translateY, close } = useSlideSheet(modalVisible, () => setModalVisible(false));
   useEffect(() => { onOpenChange?.(modalVisible); }, [modalVisible]);
@@ -162,6 +170,7 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
           ? `${placeName}${r.city ? `, ${r.city}` : ''}`
           : [[r.streetNumber, r.street].filter(Boolean).join(' '), r.city].filter(Boolean).join(', ');
         setSearchText(formatted || '');
+        if (formatted) pickedRef.current = { name: formatted, lat: pos.coords.latitude, lng: pos.coords.longitude };
       }
     } catch {
       setLocationError('Could not get location. Try again.');
@@ -172,6 +181,10 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
   function handleConfirm(text: string) {
     const trimmed = text.trim();
     if (trimmed) saveRecentLocation(trimmed);
+    const picked = pickedRef.current;
+    if (trimmed && picked && picked.name.trim() === trimmed) {
+      rememberLocationCoords(trimmed, picked.lat, picked.lng);
+    }
     onChange(trimmed);
     close();
   }
@@ -321,7 +334,10 @@ export default function LocationPicker({ value, onChange, onOpenChange }: Props)
                 renderItem={({ item }) => (
                   <GHTouchableOpacity
                     style={[styles.resultRow, { borderBottomColor: colors.border }]}
-                    onPress={() => handleSelect(item.fullName)}
+                    onPress={() => {
+                      pickedRef.current = { name: item.fullName, lat: item.lat, lng: item.lng };
+                      handleSelect(item.fullName);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Ionicons name="location-outline" size={16} color={colors.textMuted} style={styles.resultIcon} />

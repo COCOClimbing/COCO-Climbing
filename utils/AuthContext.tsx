@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Alert, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
+import { syncSessionCoords } from './sessionCoords';
 import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls, recoverOrphanedR2Media, cleanupOrphanedR2Media, cleanupOrphanedCloudRecords, cleanupOrphanedLocalRecords, processPendingDeletes } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
 import { setCloudUserId, setInitialSyncSettled, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
@@ -231,6 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // see cleanupOrphanedCloudRecords for why that matters.
       await cleanupOrphanedCloudRecords(userId);
       await cleanupOrphanedLocalRecords(userId);
+      // Not awaited: may do a few slow place lookups, nothing waits on it
+      syncSessionCoords(userId).catch(() => {});
     } catch (e) {
       console.warn('Sync error:', e);
     } finally {
@@ -248,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await reuploadMissingMedia(user.id);
       await mergeData(user.id);
+      syncSessionCoords(user.id).catch(() => {});
     } catch (e) {
       console.warn('Sync error:', e);
     }

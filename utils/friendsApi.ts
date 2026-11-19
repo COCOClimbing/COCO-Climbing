@@ -207,6 +207,68 @@ export async function getProfileById(id: string): Promise<FriendProfile | null> 
   return data ?? null;
 }
 
+export interface SuggestedClimber extends FriendProfile {
+  followsYou: boolean;
+  mutualCount: number;      // people you follow who follow them
+  mutualName: string | null; // one of them, for "Followed by Milo"
+}
+
+// Find Friends → Suggested: people who follow you, and people followed by
+// people you follow. See supabase_suggested_climbers.sql.
+export async function getSuggestedClimbers(limit = 30): Promise<SuggestedClimber[]> {
+  const { data, error } = await supabase.rpc('suggested_climbers', { max_results: limit });
+  if (error || !Array.isArray(data)) return [];
+  return data.map((r: any) => ({
+    id: r.id,
+    name: r.name ?? '',
+    username: r.username ?? '',
+    avatar_url: r.avatar_url ?? null,
+    hometown: r.hometown ?? null,
+    is_private: false,
+    followsYou: !!r.follows_you,
+    mutualCount: r.mutual_count ?? 0,
+    mutualName: r.mutual_name ?? null,
+  }));
+}
+
+// Opens a profile from a scanned QR code (coco://u/<username>). Uses the same
+// search as Find Friends, so private profiles are found too (to request).
+export async function findProfileByUsername(username: string): Promise<FriendProfile | null> {
+  const u = username.trim().replace(/^@/, '').toLowerCase();
+  if (!u) return null;
+  const { data, error } = await supabase.rpc('search_profiles', { q: u, max_results: 10 });
+  if (error || !Array.isArray(data)) return null;
+  return (data as FriendProfile[]).find(p => (p.username ?? '').toLowerCase() === u) ?? null;
+}
+
+export interface GymClimber extends FriendProfile {
+  gym: string;            // your session location they matched
+  sharedSessions: number; // how many of their recent sessions were there
+}
+
+// Public climbers who've logged sessions near where you have (by distance,
+// or the same gym name). See supabase_climbers_at_my_gyms.sql.
+export async function getClimbersAtMyGyms(limit = 20): Promise<GymClimber[]> {
+  const { data, error } = await supabase.rpc('climbers_at_my_gyms', { max_results: limit });
+  if (error || !Array.isArray(data)) return [];
+  // Hometown for the second line (all suggestions are public profiles, so this is readable)
+  const hometowns = new Map<string, string | null>();
+  if (data.length > 0) {
+    const { data: rows } = await supabase.from('profiles').select('id, hometown').in('id', data.map((r: any) => r.id));
+    for (const r of rows ?? []) hometowns.set(r.id, r.hometown ?? null);
+  }
+  return data.map((r: any) => ({
+    id: r.id,
+    name: r.name ?? '',
+    username: r.username ?? '',
+    avatar_url: r.avatar_url ?? null,
+    hometown: hometowns.get(r.id) ?? null,
+    is_private: false,
+    gym: r.gym ?? '',
+    sharedSessions: r.shared_sessions ?? 1,
+  }));
+}
+
 // Follow a user. Public profiles are auto-accepted; private profiles create a pending request.
 export async function sendFriendRequest(senderId: string, receiverId: string, isPrivate = false): Promise<{ error: string | null }> {
   // Reject if either party has blocked the other

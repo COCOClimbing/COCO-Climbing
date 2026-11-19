@@ -44,6 +44,7 @@ import { getCloudProfile } from '../utils/cloudSync';
 import { restoreActiveSession } from '../utils/storage';
 import { registerForPushNotifications, useNotificationTapRouting } from '../utils/notifications';
 import { markUpdateCheckSettled } from '../utils/updateGate';
+import { useProfileLinkRouting } from '../utils/profileLinks';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -76,6 +77,8 @@ function AppShell({ onReady }: { onReady: () => void }) {
   const { user, loading, isPasswordRecovery, isAdmin } = useAuth();
   const { floating, headerHeight, headerHidden } = useHeaderScrollContext();
   useNotificationTapRouting();
+  // Scanned Friends-page QR codes (coco://u/<username>); search needs sign-in
+  useProfileLinkRouting(!!user && !loading);
 
   // The Sessions tab stays mounted (hidden) after its first visit, so a
   // session you've opened is still open when you come back to the tab.

@@ -20,13 +20,14 @@ import {
   Platform,
   Keyboard,
   Pressable,
+  Share,
 } from 'react-native';
 import { PhotoGroup, useGroupedPhoto, preloadPhotos } from '../components/PhotoGroup';
 import ShareModal from '../components/ShareModal';
 import SessionBreakdown from '../components/SessionBreakdown';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
-import { useHeaderScroll } from '../utils/HeaderScroll';
+import { useHeaderScroll, useHideHeader } from '../utils/HeaderScroll';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../utils/NavigationContext';
 import { useAuth } from '../utils/AuthContext';
@@ -52,6 +53,8 @@ import {
   SessionLike,
   SessionComment,
   searchByUsername,
+  getClimbersAtMyGyms,
+  getSuggestedClimbers,
   sendFriendRequest,
   getPendingRequests,
   getAcceptedFriends,
@@ -93,6 +96,8 @@ import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotific
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 import { MediaBox } from '../components/TrainingEntry';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
+import QRCode from 'react-native-qrcode-svg';
+import { profileLink } from '../utils/profileLinks';
 import PhotoGallery from '../components/PhotoGallery';
 import { getMyGalleryPhotos, getFriendGalleryPhotos } from '../utils/gallery';
 import StatusBarFade from '../components/StatusBarFade';
@@ -109,6 +114,30 @@ import DiscussionScreen from '../components/DiscussionScreen';
 type SearchResult = FriendProfile & {
   friendshipStatus: 'none' | 'pending_sent' | 'pending_received' | 'accepted';
 };
+
+type GymClimberResult = SearchResult & { gym: string; sharedSessions: number };
+type SuggestedResult = SearchResult & { followsYou: boolean; mutualCount: number; mutualName: string | null };
+
+// Friends page tabs (under the search box). Who you follow lives on your profile.
+type FriendsPageTab = 'suggested' | 'gym' | 'qr';
+const FRIENDS_PAGE_TABS: UnderlineTab<FriendsPageTab>[] = [
+  { id: 'suggested', label: 'Suggested', icon: 'people-outline', iconActive: 'people' },
+  { id: 'gym', label: 'Gym/Crag', icon: 'location-outline', iconActive: 'location' },
+  { id: 'qr', label: 'QR Code', icon: 'qr-code-outline', iconActive: 'qr-code' },
+];
+
+function suggestedReason(c: SuggestedResult): string {
+  if (c.followsYou) return 'Follows you';
+  if (!c.mutualName) return '';
+  const others = c.mutualCount - 1;
+  return others > 0 ? `Followed by ${c.mutualName} and ${others} other${others === 1 ? '' : 's'}` : `Followed by ${c.mutualName}`;
+}
+
+function gymReason(c: GymClimberResult): string {
+  return `${c.sharedSessions > 1 ? `${c.sharedSessions} sessions at ` : 'Climbs at '}${c.gym}`;
+}
+
+const INVITE_MESSAGE = 'Join me on COCO and track your climbs https://apps.apple.com/app/id6762497120';
 
 type FriendWithActivity = FriendProfile & {
   recentClimbCount: number;
@@ -200,6 +229,9 @@ function FriendDetailView({
   const tabBarSpace = useTabBarSpace();
   // Swipe in from the left edge to close the profile (below the back button).
   const edgeSwipe = useEdgeSwipeBack(onBack, { skipTop: insets.top + 56 });
+  // The app header is drawn above every screen; without hiding it, it covered
+  // this profile's back button and left no way out.
+  useHideHeader(true);
   const [climbs, setClimbs] = useState<any[]>([]);
   const [counts, setCounts] = useState<FriendCounts>({ followers: 0, following: 0 });
   const [loadingClimbs, setLoadingClimbs] = useState(true);
@@ -993,6 +1025,45 @@ export default function FriendsScreen() {
   // Friends manager modal state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [gymClimbers, setGymClimbers] = useState<GymClimberResult[]>([]);
+  const [suggested, setSuggested] = useState<SuggestedResult[]>([]);
+  const [friendsPageTab, setFriendsPageTab] = useState<FriendsPageTab>('suggested');
+  const [followingAll, setFollowingAll] = useState(false);
+  // A profile opened from the Friends page slides in on top of it; back slides
+  // it away to show the Friends page again (instead of closing and reopening it).
+  const [friendsProfile, setFriendsProfile] = useState<FriendProfile | null>(null);
+  const [suggestionsRefresh, setSuggestionsRefresh] = useState(0);
+  const lastFriendsProfile = useRef<FriendProfile | null>(null);
+  if (friendsProfile) lastFriendsProfile.current = friendsProfile;
+  const shownFriendsProfile = friendsProfile ?? lastFriendsProfile.current;
+  // Invite bar slides away while scrolling down the Friends page, back on scroll up
+  const inviteSlide = useRef(new Animated.Value(0)).current; // 0 shown, 1 hidden
+  const inviteHiddenRef = useRef(false);
+  const friendsScrollY = useRef(0);
+  const [inviteBarHeight, setInviteBarHeight] = useState(0);
+  const setInviteHidden = useCallback((hidden: boolean) => {
+    if (inviteHiddenRef.current === hidden) return;
+    inviteHiddenRef.current = hidden;
+    Animated.timing(inviteSlide, {
+      toValue: hidden ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [inviteSlide]);
+  function onFriendsPageScroll(e: any) {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const y = contentOffset.y;
+    const maxY = Math.max(0, contentSize.height - layoutMeasurement.height);
+    if (y <= 0) { setInviteHidden(false); friendsScrollY.current = 0; return; }
+    if (y >= maxY) { friendsScrollY.current = maxY; return; } // ignore the bottom bounce
+    const dy = y - friendsScrollY.current;
+    if (dy > 6) setInviteHidden(true);
+    else if (dy < -6) setInviteHidden(false);
+    friendsScrollY.current = y;
+  }
+  // Fresh page or tab: show the bar again
+  useEffect(() => { setInviteHidden(false); friendsScrollY.current = 0; }, [friendsOpen, friendsPageTab, setInviteHidden]);
   const [searching, setSearching] = useState(false);
   const [sendingRequest, setSendingRequest] = useState<string | null>(null);
 
@@ -1551,6 +1622,24 @@ export default function FriendsScreen() {
     setLoadingRequests(false);
   }
 
+  // Suggested + Your Gym lists — loaded each time the Friends page opens
+  useEffect(() => {
+    if (!user || !friendsOpen) return;
+    let cancelled = false;
+    const hidden = new Set([...blockedIds, ...blockedByIds]);
+    getClimbersAtMyGyms().then(list => {
+      if (cancelled) return;
+      const out = list.filter(c => !hidden.has(c.id)).map(c => ({ ...c, friendshipStatus: 'none' as const }));
+      setGymClimbers(out);
+    }).catch(() => {});
+    getSuggestedClimbers().then(list => {
+      if (cancelled) return;
+      const out = list.filter(c => !hidden.has(c.id)).map(c => ({ ...c, friendshipStatus: 'none' as const }));
+      setSuggested(out);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user, friendsOpen, blockedIds, blockedByIds, suggestionsRefresh]);
+
   // Search with debounce
   useEffect(() => {
     if (!user || !friendsOpen) return;
@@ -1588,15 +1677,15 @@ export default function FriendsScreen() {
     if (!user) return;
     setSendingRequest(receiverId);
     try {
-      const target = searchResults.find(r => r.id === receiverId);
+      const target = searchResults.find(r => r.id === receiverId) ?? gymClimbers.find(r => r.id === receiverId) ?? suggested.find(r => r.id === receiverId);
       const isPrivate = target?.is_private ?? false;
       const { error } = await sendFriendRequest(user.id, receiverId, isPrivate);
       if (error) Alert.alert('Error', error);
       else {
-        setSearchResults(prev => prev.map(r => r.id === receiverId
-          ? { ...r, friendshipStatus: isPrivate ? 'pending_sent' : 'accepted' }
-          : r
-        ));
+        const newStatus = isPrivate ? 'pending_sent' as const : 'accepted' as const;
+        setSearchResults(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: newStatus } : r));
+        setGymClimbers(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: newStatus } : r));
+        setSuggested(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: newStatus } : r));
         if (isPrivate) {
           sendFollowRequestNotification(receiverId, user.id).catch(() => {});
         } else {
@@ -1609,9 +1698,77 @@ export default function FriendsScreen() {
     setSendingRequest(null);
   }
 
+  // Follows everyone in a suggestion list not followed yet (all are public, so no requests)
+  async function handleFollowAll(list: SearchResult[]) {
+    if (!user || followingAll) return;
+    const targets = list.filter(c => c.friendshipStatus === 'none');
+    if (targets.length === 0) return;
+    setFollowingAll(true);
+    for (const t of targets) {
+      const { error } = await sendFriendRequest(user.id, t.id, false).catch(() => ({ error: 'failed' }));
+      if (!error) {
+        const mark = <T extends SearchResult>(prev: T[]) => prev.map(r => r.id === t.id ? { ...r, friendshipStatus: 'accepted' as const } : r);
+        setGymClimbers(mark);
+        setSuggested(mark);
+        sendNewFollowerNotification(t.id, user.id).catch(() => {});
+      }
+    }
+    setFollowingAll(false);
+  }
+
+  // One suggestion row: avatar, name, hometown, why we're suggesting them, Follow
+  function renderSuggestionRow(item: SearchResult, reason: string) {
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.personRow}
+        onPress={() => setFriendsProfile(item)}
+        activeOpacity={0.75}
+      >
+        <ProfileAvatar name={item.name} avatarUrl={item.avatar_url ?? null} size={52} colors={colors} />
+        <View style={styles.personInfo}>
+          <Text style={[styles.personRowName, { color: colors.textPrimary }]} numberOfLines={1}>{item.name}</Text>
+          {item.hometown ? (
+            <Text style={[styles.personRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.hometown}</Text>
+          ) : null}
+          {reason ? <Text style={[styles.personRowReason, { color: colors.textMuted }]} numberOfLines={1}>{reason}</Text> : null}
+        </View>
+        {renderAddFriendButton(item)}
+      </TouchableOpacity>
+    );
+  }
+
+  // Count header + Follow All + rows, or an empty message
+  function renderSuggestionList<T extends SearchResult>(list: T[], reason: (c: T) => string, empty: string, hint: string) {
+    if (list.length === 0) return (
+      <View style={styles.emptyStateContainer}>
+        <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>{empty}</Text>
+        <Text style={[styles.suggestHint, { color: colors.textMuted }]}>{hint}</Text>
+      </View>
+    );
+    const unfollowed = list.filter(c => c.friendshipStatus === 'none').length;
+    return (
+      <View>
+        <View style={styles.suggestHeader}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, marginBottom: 0, flex: 1 }]}>
+            {list.length} {list.length === 1 ? 'CLIMBER' : 'CLIMBERS'} TO FOLLOW
+          </Text>
+          {unfollowed > 1 && (
+            <TouchableOpacity style={[styles.followPill, { borderColor: colors.accent }]} onPress={() => handleFollowAll(list)} disabled={followingAll} activeOpacity={0.7}>
+              {followingAll
+                ? <ActivityIndicator color={colors.accent} size="small" />
+                : <Text style={[styles.followPillText, { color: colors.accent }]}>Follow All</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
+        {list.map(item => renderSuggestionRow(item, reason(item)))}
+      </View>
+    );
+  }
+
   function handleCancelRequest(receiverId: string) {
     if (!user) return;
-    const target = searchResults.find(r => r.id === receiverId);
+    const target = searchResults.find(r => r.id === receiverId) ?? gymClimbers.find(r => r.id === receiverId) ?? suggested.find(r => r.id === receiverId);
     Alert.alert(
       'Cancel follow request?',
       `${target?.name ?? 'They'} won't see your request anymore.`,
@@ -1625,6 +1782,8 @@ export default function FriendsScreen() {
             try {
               await removeFriend(user.id, receiverId);
               setSearchResults(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: 'none' } : r));
+              setGymClimbers(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: 'none' } : r));
+              setSuggested(prev => prev.map(r => r.id === receiverId ? { ...r, friendshipStatus: 'none' } : r));
             } catch {
               Alert.alert('Error', 'Failed to cancel request.');
             }
@@ -1967,25 +2126,25 @@ export default function FriendsScreen() {
   }
 
   function renderAddFriendButton(item: SearchResult) {
-    if (sendingRequest === item.id) return <ActivityIndicator color={colors.accent} size="small" />;
+    if (sendingRequest === item.id) return <ActivityIndicator color={colors.accent} size="small" style={styles.followPill} />;
     if (item.friendshipStatus === 'accepted') return (
-      <View style={[styles.statusBadge, { backgroundColor: colors.accentGreenSoft }]}>
-        <Text style={[styles.statusBadgeText, { color: colors.accentGreen }]}>Following</Text>
+      <View style={[styles.followPill, { borderColor: colors.border }]}>
+        <Text style={[styles.followPillText, { color: colors.textMuted }]}>Following</Text>
       </View>
     );
     if (item.friendshipStatus === 'pending_sent') return (
-      <TouchableOpacity style={[styles.statusBadge, { backgroundColor: colors.bgElevated }]} onPress={() => handleCancelRequest(item.id)} activeOpacity={0.7}>
-        <Text style={[styles.statusBadgeText, { color: colors.textMuted }]}>Requested</Text>
+      <TouchableOpacity style={[styles.followPill, { borderColor: colors.border }]} onPress={() => handleCancelRequest(item.id)} activeOpacity={0.7}>
+        <Text style={[styles.followPillText, { color: colors.textMuted }]}>Requested</Text>
       </TouchableOpacity>
     );
     if (item.friendshipStatus === 'pending_received') return (
-      <View style={[styles.statusBadge, { backgroundColor: colors.accentSoft }]}>
-        <Text style={[styles.statusBadgeText, { color: colors.accent }]}>Follow Back</Text>
+      <View style={[styles.followPill, { borderColor: colors.accent }]}>
+        <Text style={[styles.followPillText, { color: colors.accent }]}>Follow Back</Text>
       </View>
     );
     return (
-      <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.accent }]} onPress={() => handleSendRequest(item.id)} activeOpacity={0.8}>
-        <Text style={styles.addButtonText}>Follow</Text>
+      <TouchableOpacity style={[styles.followPill, { borderColor: colors.accent }]} onPress={() => handleSendRequest(item.id)} activeOpacity={0.7}>
+        <Text style={[styles.followPillText, { color: colors.accent }]}>Follow</Text>
       </TouchableOpacity>
     );
   }
@@ -2473,7 +2632,15 @@ export default function FriendsScreen() {
       <PushScreen visible={friendsOpen} title="Friends" onBack={() => { closeFriends(); setSearchQuery(''); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.manageModalContainer, { backgroundColor: colors.bg }]}>
 
-          <ScrollView style={styles.scrollArea} contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.scrollArea}
+            // The invite bar floats over the bottom, so leave room for it
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: searchQuery.trim().length === 0 ? inviteBarHeight + SPACING.md : tabBarSpace }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onScroll={onFriendsPageScroll}
+            scrollEventThrottle={16}
+          >
             {/* Search */}
             <View style={[styles.searchBar, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <TextInput
@@ -2505,7 +2672,7 @@ export default function FriendsScreen() {
                     <TouchableOpacity
                       key={item.id}
                       style={[styles.personCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                      onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(item, 'friends'); }}
+                      onPress={() => setFriendsProfile(item)}
                       activeOpacity={0.75}
                     >
                       <ProfileAvatar name={item.name} avatarUrl={item.avatar_url ?? null} size={44} colors={colors} />
@@ -2537,7 +2704,7 @@ export default function FriendsScreen() {
                         <View key={req.id} style={[styles.requestCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                           <TouchableOpacity
                             style={styles.requestLeft}
-                            onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(req.profile, 'friends'); }}
+                            onPress={() => setFriendsProfile(req.profile)}
                             activeOpacity={0.75}
                           >
                             <ProfileAvatar name={req.profile.name} avatarUrl={req.profile.avatar_url ?? null} size={44} colors={colors} />
@@ -2566,36 +2733,108 @@ export default function FriendsScreen() {
                   </View>
                 )}
 
-                {/* Friends list */}
-                <View style={styles.section}>
-                  <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MY FRIENDS</Text>
-                  {friends.length === 0 ? (
-                    <View style={styles.emptyStateContainer}>
-                      <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>Search above to add friends.</Text>
-                    </View>
-                  ) : (
-                    friends.map(friend => (
-                      <TouchableOpacity
-                        key={friend.id}
-                        style={[styles.personCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                        onPress={() => { closeFriends(); setSearchQuery(''); openFriendProfile(friend, 'friends'); }}
-                        onLongPress={() => handleRemoveFriend(friend.id, friend.name)}
-                        activeOpacity={0.75}
-                      >
-                        <ProfileAvatar name={friend.name} avatarUrl={friend.avatar_url ?? null} size={44} colors={colors} />
-                        <View style={styles.personInfo}>
-                          <Text style={[styles.personName, { color: colors.textPrimary }]}>{friend.name}</Text>
-                          {friend.username ? <Text style={[styles.personUsername, { color: colors.textMuted }]}>@{friend.username}</Text> : null}
-                        </View>
-                        <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
-                      </TouchableOpacity>
-                    ))
-                  )}
+                {/* Suggested | Following */}
+                <View style={styles.friendsTabs}>
+                  <UnderlineTabs<FriendsPageTab> tabs={FRIENDS_PAGE_TABS} value={friendsPageTab} onChange={setFriendsPageTab} />
                 </View>
+
+                {friendsPageTab === 'suggested' && renderSuggestionList(
+                  suggested, suggestedReason,
+                  'No suggestions yet.',
+                  'Follow a few climbers and people they follow will show up here.',
+                )}
+                {friendsPageTab === 'gym' && renderSuggestionList(
+                  gymClimbers, gymReason,
+                  'No climbers found at your gyms or crags yet.',
+                  'Pick your gym or crag from the map when you log a session, and climbers who log there will show up here.',
+                )}
+                {friendsPageTab === 'qr' && (
+                  <View style={styles.qrWrap}>
+                    {username ? (
+                      <>
+                        <View style={[styles.qrCard, { backgroundColor: '#fff', borderColor: colors.border }]}>
+                          <QRCode value={profileLink(username)} size={220} color="#111" backgroundColor="#fff" />
+                        </View>
+                        <Text style={[styles.qrName, { color: colors.textPrimary }]}>{profileName || 'You'}</Text>
+                        <Text style={[styles.personRowSub, { color: colors.textSecondary }]}>@{username}</Text>
+                        <Text style={[styles.suggestHint, { color: colors.textMuted, marginTop: SPACING.lg }]}>
+                          Friends can scan this with their iPhone camera to open your profile in COCO.
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>Set a username on your profile to get a QR code.</Text>
+                    )}
+                  </View>
+                )}
               </>
             )}
           </ScrollView>
+
+          {/* Invite, pinned above the tab bar */}
+          {searchQuery.trim().length === 0 && (
+            <Animated.View
+              onLayout={e => setInviteBarHeight(e.nativeEvent.layout.height)}
+              style={[
+                styles.inviteBar,
+                { backgroundColor: colors.bg, borderTopColor: colors.border, paddingBottom: tabBarSpace },
+                { transform: [{ translateY: inviteSlide.interpolate({ inputRange: [0, 1], outputRange: [0, inviteBarHeight || 200] }) }] },
+              ]}
+            >
+              <Text style={[styles.inviteText, { color: colors.textPrimary }]}>Invite friends who aren't on COCO</Text>
+              <TouchableOpacity
+                style={[styles.inviteButton, { backgroundColor: colors.accent }]}
+                onPress={() => Share.share({ message: INVITE_MESSAGE }).catch(() => {})}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="share-outline" size={20} color="#fff" />
+                <Text style={styles.inviteButtonText}>Invite</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </KeyboardAvoidingView>
+
+        {/* Profile tapped on this page, stacked on top of it */}
+        <PushScreen
+          visible={!!friendsProfile}
+          title=""
+          hideHeader
+          onBack={() => setFriendsProfile(null)}
+          onDismiss={() => setSuggestionsRefresh(n => n + 1)}
+          onTabPress={() => { setFriendsProfile(null); closeFriends(); setSearchQuery(''); }}
+        >
+          {shownFriendsProfile && (
+            <FriendDetailView
+              key={shownFriendsProfile.id}
+              friend={shownFriendsProfile}
+              onBack={() => setFriendsProfile(null)}
+              onViewProfile={setFriendsProfile}
+              isBlocked={blockedIds.includes(shownFriendsProfile.id)}
+              onBlock={async (friendId) => {
+                try {
+                  await blockUser(user!.id, friendId);
+                  setBlockedIds(prev => [...prev, friendId]);
+                  setActivityFeed(prev => prev.filter(e => e.friend.id !== friendId));
+                  setFriends(prev => prev.filter(f => f.id !== friendId));
+                  setSuggested(prev => prev.filter(c => c.id !== friendId));
+                  setGymClimbers(prev => prev.filter(c => c.id !== friendId));
+                  setFriendsProfile(null);
+                } catch {
+                  Alert.alert('Error', 'Could not block user. Please try again.');
+                }
+              }}
+              onUnblock={async (friendId) => {
+                try {
+                  await unblockUser(user!.id, friendId);
+                  setBlockedIds(prev => prev.filter(id => id !== friendId));
+                  setFriendsProfile(null);
+                } catch {
+                  Alert.alert('Error', 'Could not unblock user. Please try again.');
+                }
+              }}
+              colors={colors}
+            />
+          )}
+        </PushScreen>
       </PushScreen>
 
     </KeyboardAvoidingView>
@@ -2927,6 +3166,47 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   personInfo: { flex: 1, gap: 2 },
+  friendsTabs: { marginHorizontal: -SPACING.xl, marginBottom: SPACING.lg },
+  suggestHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md },
+  suggestHint: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular, textAlign: 'center', marginTop: SPACING.xs },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md },
+  personRowName: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.semibold },
+  personRowSub: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular },
+  personRowReason: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
+  followPill: {
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    minWidth: 92,
+    alignItems: 'center',
+  },
+  followPillText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.semibold },
+  qrWrap: { alignItems: 'center', paddingTop: SPACING.lg, gap: SPACING.xs },
+  qrCard: { padding: SPACING.lg, borderRadius: 20, borderWidth: 1, marginBottom: SPACING.md },
+  qrName: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.family.semibold },
+  inviteBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  inviteText: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular },
+  inviteButton: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    borderRadius: 999,
+    paddingVertical: SPACING.md,
+  },
+  inviteButtonText: { color: '#fff', fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
   personName: {
     fontSize: FONTS.sizes.md,
     fontFamily: FONTS.family.semibold,
