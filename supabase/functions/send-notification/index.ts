@@ -86,6 +86,62 @@ async function verifyRecipientsAllowed(
     return { ids: likeRow ? [comment.user_id] : [], sessionId: comment.session_id }
   }
 
+  if (type === 'mention') {
+    // Someone was @mentioned in a comment. The caller must have written the
+    // comment, each recipient's username must really appear in it, and each
+    // recipient must be able to see the post (same rule as sessions RLS) with
+    // no block either way. sessionId comes from the comment, not the client.
+    if (!commentId) return { ids: [], sessionId: undefined }
+    const { data: comment } = await adminClient
+      .from('session_comments')
+      .select('user_id, session_id, text')
+      .eq('id', commentId)
+      .maybeSingle()
+    if (!comment || comment.user_id !== callerId) return { ids: [], sessionId: undefined }
+    const mentioned = new Set(
+      [...String(comment.text ?? '').matchAll(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]{3,20})(?![A-Za-z0-9_])/g)]
+        .map(m => m[2].toLowerCase())
+    )
+    if (!mentioned.size) return { ids: [], sessionId: comment.session_id }
+    const { data: people } = await adminClient
+      .from('profiles')
+      .select('id, username')
+      .in('id', recipientIds.slice(0, 10))
+    const candidates = (people ?? [])
+      .filter((p: any) => p.id !== callerId && p.username && mentioned.has(String(p.username).toLowerCase()))
+      .map((p: any) => p.id as string)
+    if (!candidates.length) return { ids: [], sessionId: comment.session_id }
+
+    const { data: session } = await adminClient
+      .from('sessions')
+      .select('user_id, deleted_at')
+      .eq('id', comment.session_id)
+      .maybeSingle()
+    if (!session || session.deleted_at) return { ids: [], sessionId: comment.session_id }
+    const ownerId: string = session.user_id
+    const { data: owner } = await adminClient.from('profiles').select('is_private').eq('id', ownerId).maybeSingle()
+    const ownerPublic = owner ? owner.is_private === false : false
+
+    const allowed: string[] = []
+    for (const id of candidates) {
+      const { data: blockedWithCaller } = await adminClient.rpc('is_blocked', { a: callerId, b: id })
+      if (blockedWithCaller) continue
+      if (id === ownerId) { allowed.push(id); continue }
+      const { data: blockedWithOwner } = await adminClient.rpc('is_blocked', { a: id, b: ownerId })
+      if (blockedWithOwner) continue
+      if (ownerPublic) { allowed.push(id); continue }
+      const { data: follows } = await adminClient
+        .from('friendships')
+        .select('id')
+        .eq('sender_id', id)
+        .eq('receiver_id', ownerId)
+        .eq('status', 'accepted')
+        .limit(1)
+      if (follows && follows.length > 0) allowed.push(id)
+    }
+    return { ids: allowed, sessionId: comment.session_id }
+  }
+
   if (type === 'follow_request') {
     const { data: rows } = await adminClient
       .from('friendships')
@@ -304,6 +360,7 @@ Deno.serve(async (req) => {
       type === 'session_tag'    ? 'session_tag'    :
       type === 'like'           ? 'likes'          :
       type === 'comment'        ? 'comments'       :
+      type === 'mention'        ? 'comments'       :
       type === 'new_follower'            ? 'new_follower' :
       type === 'follow_request_accepted' ? 'new_follower' :
       type === 'follow_request'          ? 'new_follower' :
@@ -373,6 +430,11 @@ Deno.serve(async (req) => {
         title = 'Follow request accepted'
         body = `${senderName} accepted your follow request`
         data = { senderId: effectiveSenderId, type }
+        break
+      case 'mention':
+        title = 'You were mentioned'
+        body = `${senderName} mentioned you in a comment`
+        data = { sessionId, type }
         break
       case 'comment_like':
         title = 'Comment liked'

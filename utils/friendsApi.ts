@@ -659,9 +659,15 @@ export async function getSessionComments(sessionId: string): Promise<SessionComm
   }));
 }
 
-export async function addSessionComment(sessionId: string, userId: string, text: string): Promise<void> {
-  const { error } = await supabase.from('session_comments').insert({ session_id: sessionId, user_id: userId, text });
+// Returns the new comment's id (used for @mention notifications)
+export async function addSessionComment(sessionId: string, userId: string, text: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('session_comments')
+    .insert({ session_id: sessionId, user_id: userId, text })
+    .select('id')
+    .single();
   if (error) throw new Error(error.message);
+  return (data as any)?.id ?? null;
 }
 
 export async function deleteSessionComment(commentId: string): Promise<void> {

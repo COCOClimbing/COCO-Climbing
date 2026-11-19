@@ -20,7 +20,7 @@ import {
   likeSession, unlikeSession,
   SessionLike, SessionComment,
 } from '../utils/friendsApi';
-import { sendCommentLikeNotification } from '../utils/notifications';
+import { sendCommentLikeNotification, sendMentionNotifications } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
 
@@ -238,14 +238,16 @@ export default function SessionCard({
 
   async function handleSendSessionComment(text: string): Promise<boolean> {
     if (!currentUserId || !text.trim()) return false;
+    let commentId: string | null = null;
     try {
-      await addSessionComment(day.sessionId, currentUserId, text.trim());
+      commentId = await addSessionComment(day.sessionId, currentUserId, text.trim());
     } catch (err: any) {
       Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
       return false;
     }
     const updated = await getSessionComments(day.sessionId);
     setSessionComments(updated);
+    sendMentionNotifications(text.trim(), commentId, day.sessionId, currentUserId).catch(() => {});
     return true;
   }
 

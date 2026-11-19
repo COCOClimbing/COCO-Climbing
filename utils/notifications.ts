@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { useNav } from './NavigationContext';
-import { getProfileById } from './friendsApi';
+import { getProfileById, findProfileByUsername } from './friendsApi';
+import { extractMentions } from './mentions';
 
 const NOTIFIED_CACHE_PREFIX = 'tag_notif_sent:';
 const EAS_PROJECT_ID = '4e4e63a8-46b2-4df5-9a79-53ebe1b594c5';
@@ -146,8 +147,29 @@ export async function sendCommentLikeNotification(commentAuthorId: string, liker
   await sendNotification('comment_like', commentAuthorId, likerId, { sessionId, commentId });
 }
 
+// Notifies everyone @mentioned in a just-posted comment. skipIds: people already
+// told about this comment another way (the post's owner gets "commented on
+// your session"). The server re-checks that each person is really mentioned
+// in the comment and can see the post.
+export async function sendMentionNotifications(
+  text: string,
+  commentId: string | null,
+  sessionId: string,
+  senderId: string,
+  skipIds: string[] = []
+): Promise<void> {
+  if (!commentId) return;
+  const usernames = extractMentions(text);
+  if (!usernames.length) return;
+  const profiles = await Promise.all(usernames.map(u => findProfileByUsername(u).catch(() => null)));
+  const skip = new Set([senderId, ...skipIds]);
+  const ids = [...new Set(profiles.filter((p): p is NonNullable<typeof p> => !!p).map(p => p.id))].filter(id => !skip.has(id));
+  if (!ids.length) return;
+  await sendNotification('mention', ids, senderId, { sessionId, commentId });
+}
+
 const PROFILE_NOTIFICATION_TYPES = new Set(['new_follower', 'follow_request_accepted']);
-const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like', 'comment']);
+const SESSION_NOTIFICATION_TYPES = new Set(['session_tag', 'like', 'comment_like', 'comment', 'mention']);
 
 // Shared by push-notification tap routing and the in-app notification list,
 // so both navigate identically for a given notification type.

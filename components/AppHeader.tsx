@@ -184,6 +184,7 @@ export default function AppHeader() {
       case 'like': return 'heart';
       case 'comment': return 'chatbubble';
       case 'comment_like': return 'heart';
+      case 'mention': return 'at';
       case 'new_follower': return 'person-add';
       case 'follow_request': return 'person-add-outline';
       case 'follow_request_accepted': return 'checkmark-circle';

@@ -8,7 +8,10 @@ import Avatar from './Avatar';
 import LikesAvatarRow, { Liker } from './LikesAvatarRow';
 import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING } from '../utils/theme';
+import { getFollowing, findProfileByUsername } from '../utils/friendsApi';
 import type { SessionComment } from '../utils/friendsApi';
+import MentionText from './MentionText';
+import { mentionQueryAt } from '../utils/mentions';
 
 type ProfileRef = { id: string; name: string; username: string; avatar_url: string | null };
 
@@ -64,6 +67,9 @@ export default function DiscussionScreen({
   const [sending, setSending] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [inputHeight, setInputHeight] = useState<number | undefined>(undefined);
+  // @mention suggestions: people you follow plus everyone in this thread
+  const [cursor, setCursor] = useState(0);
+  const [following, setFollowing] = useState<ProfileRef[]>([]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   // A profile tapped on this page opens once the page has slid away — opening
@@ -83,6 +89,46 @@ export default function DiscussionScreen({
       setKeyboardHeight(0);
     };
   }, [visible]);
+
+  // Loaded once per open, only when the comment box is usable
+  useEffect(() => {
+    if (!visible || readOnly || !currentUserId) return;
+    let cancelled = false;
+    getFollowing(currentUserId)
+      .then(list => { if (!cancelled) setFollowing(list.map(p => ({ id: p.id, name: p.name, username: p.username, avatar_url: p.avatar_url ?? null }))); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [visible, readOnly, currentUserId]);
+
+  const mention = mentionQueryAt(text, cursor);
+  const mentionMatches: ProfileRef[] = (() => {
+    if (!mention) return [];
+    const pool = new Map<string, ProfileRef>();
+    for (const c of comments) {
+      if (c.user_id !== currentUserId && c.profile?.username) {
+        pool.set(c.user_id, { id: c.user_id, name: c.profile.name, username: c.profile.username, avatar_url: c.profile.avatar_url ?? null });
+      }
+    }
+    for (const p of following) if (p.username && p.id !== currentUserId) pool.set(p.id, p);
+    const q = mention.query.toLowerCase();
+    return [...pool.values()]
+      .filter(p => !q || p.username.toLowerCase().startsWith(q) || p.name.toLowerCase().split(/\s+/).some(w => w.startsWith(q)))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 5);
+  })();
+
+  function insertMention(p: ProfileRef) {
+    if (!mention) return;
+    const insert = `@${p.username} `;
+    const next = text.slice(0, mention.start) + insert + text.slice(cursor);
+    setText(next);
+    setCursor(mention.start + insert.length);
+  }
+
+  async function openMention(username: string) {
+    const profile = await findProfileByUsername(username).catch(() => null);
+    if (profile) openProfile({ id: profile.id, name: profile.name, username: profile.username, avatar_url: profile.avatar_url ?? null });
+  }
 
   function openProfile(profile: ProfileRef) {
     if (profile.id === currentUserId) return;
@@ -175,7 +221,12 @@ export default function DiscussionScreen({
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={[styles.commentText, { color: colors.textPrimary }]}>{c.text}</Text>
+                  <MentionText
+                    text={c.text}
+                    style={[styles.commentText, { color: colors.textPrimary }]}
+                    accentColor={colors.accent}
+                    onPressMention={openMention}
+                  />
                   <TouchableOpacity onPress={() => onLikeComment(c)} disabled={readOnly} activeOpacity={0.7} style={styles.likeBtn} hitSlop={6}>
                     <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#e05c4a' : colors.textSecondary} />
                     <Text style={[styles.likeLabel, { color: liked ? '#e05c4a' : colors.textSecondary }]}>
@@ -190,6 +241,21 @@ export default function DiscussionScreen({
       </ScrollView>
 
       {/* Sits above the tab bar, or right on top of the keyboard while typing. */}
+      {/* Name suggestions while typing an @mention, just above the comment box */}
+      {!readOnly && mentionMatches.length > 0 && (
+        <View style={[styles.suggestions, { backgroundColor: colors.bg, borderTopColor: colors.border }]}>
+          {mentionMatches.map(p => (
+            <TouchableOpacity key={p.id} style={styles.suggestion} onPress={() => insertMention(p)} activeOpacity={0.7}>
+              <Avatar name={p.name} avatarUrl={p.avatar_url} size={32} backgroundColor={colors.accentSoft} textColor={colors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.suggestionName, { color: colors.textPrimary }]} numberOfLines={1}>{p.name}</Text>
+                <Text style={[styles.suggestionUser, { color: colors.textMuted }]} numberOfLines={1}>@{p.username}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {readOnly ? <View style={{ height: tabBarSpace }} /> : <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: keyboardHeight > 0 ? keyboardHeight + SPACING.sm : tabBarSpace }]}>
         <View style={styles.inputWrap}>
           <Text
@@ -207,6 +273,7 @@ export default function DiscussionScreen({
             placeholderTextColor={colors.textMuted}
             value={text}
             onChangeText={setText}
+            onSelectionChange={e => setCursor(e.nativeEvent.selection.end)}
             multiline
             scrollEnabled={(inputHeight ?? 0) > INPUT_MAX_HEIGHT}
           />
@@ -242,4 +309,8 @@ const styles = StyleSheet.create({
   input: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.regular, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 0 },
   mirror: { position: 'absolute', left: 0, right: 0, opacity: 0 },
   send: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold, paddingBottom: 4 },
+  suggestions: { borderTopWidth: 1, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm },
+  suggestionName: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.semibold },
+  suggestionUser: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.family.regular },
 });

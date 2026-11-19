@@ -92,7 +92,7 @@ import {
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import ShakaIcon from '../components/ShakaIcon';
 import { supabase } from '../utils/supabase';
-import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
+import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification, sendMentionNotifications } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
 import { MediaBox } from '../components/TrainingEntry';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
@@ -2014,8 +2014,9 @@ export default function FriendsScreen() {
 
   async function handleSendComment(sessionKey: string, sessionId: string, text: string): Promise<boolean> {
     if (!user || !text.trim()) return false;
+    let commentId: string | null = null;
     try {
-      await addSessionComment(sessionId, user.id, text.trim());
+      commentId = await addSessionComment(sessionId, user.id, text.trim());
     } catch (err: any) {
       Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
       return false;
@@ -2026,6 +2027,8 @@ export default function FriendsScreen() {
     if (entry && entry.friend.id !== user.id) {
       sendCommentNotification(entry.friend.id, user.id, sessionId).catch(() => {});
     }
+    // The post's owner already gets "commented on your session"
+    sendMentionNotifications(text.trim(), commentId, sessionId, user.id, entry ? [entry.friend.id] : []).catch(() => {});
     return true;
   }
 

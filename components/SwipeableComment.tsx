@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import SwipeToDelete from './SwipeToDelete';
 import Avatar from './Avatar';
+import MentionText from './MentionText';
 import { FONTS, SPACING } from '../utils/theme';
 
 export default function SwipeableComment({
@@ -59,7 +60,7 @@ export default function SwipeableComment({
         <View style={{ flex: 1 }}>
           <Text style={[swipeCommentStyles.name, { color: colors.textPrimary }]}>
             <Text onPress={onNamePress}>{c.profile?.name ?? 'Unknown'}</Text>{' '}
-            <Text style={[swipeCommentStyles.text, { color: colors.textSecondary }]}>{c.text}</Text>
+            <MentionText text={c.text} style={[swipeCommentStyles.text, { color: colors.textSecondary }]} accentColor={colors.accent} />
           </Text>
           <Text style={[swipeCommentStyles.time, { color: colors.textMuted }]}>
             {formatDistanceToNow(parseISO(c.created_at), { addSuffix: true })}

@@ -20,7 +20,7 @@ import {
   likeSession, unlikeSession, getFriendRecentClimbs,
   SessionLike, SessionComment, SessionSummary,
 } from '../utils/friendsApi';
-import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification } from '../utils/notifications';
+import { sendLikeNotification, sendCommentNotification, sendCommentLikeNotification, sendMentionNotifications } from '../utils/notifications';
 import { reportContent } from '../utils/moderationApi';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
@@ -223,8 +223,9 @@ export default function ActivityCard({
 
   async function handleSendSessionComment(text: string): Promise<boolean> {
     if (!currentUserId || !text.trim() || !entry.sessionId) return false;
+    let commentId: string | null = null;
     try {
-      await addSessionComment(entry.sessionId, currentUserId, text.trim());
+      commentId = await addSessionComment(entry.sessionId, currentUserId, text.trim());
     } catch (err: any) {
       Alert.alert('Could not post comment', err?.message ?? 'Unknown error');
       return false;
@@ -234,6 +235,8 @@ export default function ActivityCard({
     if (entry.friend.id !== currentUserId) {
       sendCommentNotification(entry.friend.id, currentUserId, entry.sessionId).catch(() => {});
     }
+    // The post's owner already gets "commented on your session"
+    sendMentionNotifications(text.trim(), commentId, entry.sessionId, currentUserId, [entry.friend.id]).catch(() => {});
     return true;
   }
 
