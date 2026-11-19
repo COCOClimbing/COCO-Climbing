@@ -55,6 +55,8 @@ import {
   searchByUsername,
   getClimbersAtMyGyms,
   getSuggestedClimbers,
+  getSessionSummaryById,
+  daysSinceSession,
   sendFriendRequest,
   getPendingRequests,
   getAcceptedFriends,
@@ -998,7 +1000,7 @@ export default function FriendsScreen() {
   const tabBarSpace = useTabBarSpace();
   const detailTopInset = useDetailTopInset();
   const { colors } = useTheme();
-  const { navigate, screen, returnTo, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, clearPendingActivitySessionId } = useNav();
+  const { navigate, screen, returnTo, setReturnTo, friendsOpen, openFriends, closeFriends, navCount, tabResetCount, pendingFriendProfile, clearPendingFriendProfile, pendingActivitySessionId, pendingActivityComments, clearPendingActivitySessionId } = useNav();
   const { user, pendingRequestCount, refreshPendingCount, profileName, avatarUrl, localAvatarUri, username } = useAuth();
   const myAvatar = localAvatarUri ?? avatarUrl;
   const insets = useSafeAreaInsets();
@@ -1107,19 +1109,23 @@ export default function FriendsScreen() {
   // forever).
   const cardOffsets = useRef<Record<string, number>>({});
   const scrollToCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_AUTO_EXTEND_DAYS = 90;
+  const resolvingSessionRef = useRef<string | null>(null);
+  const topInsetRef = useRef(0);
   useEffect(() => {
     if (!pendingActivitySessionId || screen !== 'friends') return;
     const sessionId = pendingActivitySessionId;
     const sessionKey = `sid-${sessionId}`;
+    const openComments = pendingActivityComments;
     const existing = activityFeed.find(e => e.sessionId === sessionId);
     if (existing) {
       let attempts = 0;
       const tryScroll = () => {
         const y = cardOffsets.current[sessionKey];
         if (y !== undefined) {
-          feedScrollRef.current?.scrollTo({ y: Math.max(0, y - SPACING.lg), animated: true });
+          // The app header floats over the feed, so stop the card just below it
+          feedScrollRef.current?.scrollTo({ y: Math.max(0, y - topInsetRef.current - SPACING.sm), animated: true });
           clearPendingActivitySessionId();
+          if (openComments) setTimeout(() => openDiscussion(sessionKey, sessionId, false), 350);
         } else if (attempts < 5) {
           attempts += 1;
           scrollToCardTimeoutRef.current = setTimeout(tryScroll, 50);
@@ -1132,17 +1138,21 @@ export default function FriendsScreen() {
         if (scrollToCardTimeoutRef.current) clearTimeout(scrollToCardTimeoutRef.current);
       };
     }
-    // Not found yet.
+    // Not in the loaded feed: someone you don't follow (an @mention), or older
+    // than the feed goes back. Load just that post and open it as a page.
     if (!everLoadedFeedRef.current) return; // wait for the first load to finish
-    if (daysLoaded >= MAX_AUTO_EXTEND_DAYS) {
-      clearPendingActivitySessionId(); // searched far enough back — give up silently
-      return;
-    }
-    if (loadingMoreRef.current) return; // an extend is already in flight (manual scroll or a prior tap) — this effect re-fires once activityFeed updates
-    loadingMoreRef.current = true;
-    const next = daysLoaded + 7;
-    setDaysLoaded(next);
-    loadFeed(next, false).finally(() => { loadingMoreRef.current = false; });
+    if (resolvingSessionRef.current === sessionId) return;
+    resolvingSessionRef.current = sessionId;
+    clearPendingActivitySessionId();
+    getSessionSummaryById(sessionId)
+      .then(async entry => {
+        if (!entry) return;
+        await handleOpenSession(entry);
+        // Let the post page appear before sliding the comments in over it
+        if (openComments) setTimeout(() => openDiscussion(sessionKey, sessionId, false), 350);
+      })
+      .catch(() => {})
+      .finally(() => { resolvingSessionRef.current = null; });
   }, [pendingActivitySessionId, screen, activityFeed]);
 
   // Tapping Activity tab while already on it returns to main feed
@@ -1911,6 +1921,8 @@ export default function FriendsScreen() {
 
   async function handleOpenSession(entry: SessionSummary) {
     const sessionKey = entry.sessionId ? `sid-${entry.sessionId}` : `fid-${entry.friend.id}|${entry.sessionDate}`;
+    // Posts outside the feed have no likes/comments loaded yet
+    if (entry.sessionId && !likesMap[sessionKey]) loadLikesAndComments(sessionKey, entry.sessionId);
     let climbs = entry.friend.id === user?.id ? undefined : sessionClimbsMap[sessionKey];
     if (!climbs) {
       setLoadingClimbsFor(sessionKey);
@@ -1922,7 +1934,8 @@ export default function FriendsScreen() {
             ? localClimbs.filter(c => c.sessionId === entry.sessionId)
             : localClimbs.filter(c => (c.date ?? '').slice(0, 10) === entry.sessionDate);
         } else {
-          const fetched = await getFriendRecentClimbs(entry.friend.id, daysLoaded);
+          // Far enough back to reach this post, even if it's older than the feed
+          const fetched = await getFriendRecentClimbs(entry.friend.id, Math.max(daysLoaded, daysSinceSession(entry.sessionDate)));
           const normDate = (d: string) => (d ?? '').slice(0, 10);
           mapped = fetched
             .filter((c: any) => entry.sessionId ? c.session_id === entry.sessionId : normDate(c.date) === normDate(entry.sessionDate))
@@ -1999,7 +2012,7 @@ export default function FriendsScreen() {
       likeSession(sessionId, user.id).catch(() => {
         setLikesMap(prev => ({ ...prev, [sessionKey]: likes }));
       });
-      const entry = activityFeed.find(e => e.sessionId === sessionId);
+      const entry = findPostEntry(sessionId);
       if (entry && entry.friend.id !== user.id) {
         sendLikeNotification(entry.friend.id, user.id, sessionId).catch(() => {});
       }
@@ -2023,7 +2036,7 @@ export default function FriendsScreen() {
     }
     const updated = await getSessionComments(sessionId);
     setCommentsMap(prev => ({ ...prev, [sessionKey]: updated }));
-    const entry = activityFeed.find(e => e.sessionId === sessionId);
+    const entry = findPostEntry(sessionId);
     if (entry && entry.friend.id !== user.id) {
       sendCommentNotification(entry.friend.id, user.id, sessionId).catch(() => {});
     }
@@ -2154,6 +2167,7 @@ export default function FriendsScreen() {
 
   const feedVisible = screen === 'friends' && !!user && !viewingFriend && !viewingSession && !loadingFeed && activityFeed.length > 0;
   const { onScroll: onHeaderScroll, topInset } = useHeaderScroll(feedVisible);
+  topInsetRef.current = topInset;
 
   // Guest view
   if (!user) {
@@ -2179,6 +2193,123 @@ export default function FriendsScreen() {
   // Show friend detail sub-screen when a friend is selected
   // Top of a post (who, when, where, title, notes, partners, stats). Shared by
   // the feed card and the opened activity so the two always match.
+  // A post's full comment thread. Rendered by the feed and by the session page,
+  // so it also works for posts opened outside the feed (e.g. from a mention).
+  function renderDiscussion() {
+    const entry = discussionKey ? findPostEntry(discussionKey.replace(/^sid-/, '')) : undefined;
+    if (entry) lastDiscussionEntry.current = entry;
+    const shown = entry ?? lastDiscussionEntry.current;
+    const key = shown?.sessionId ? `sid-${shown.sessionId}` : '';
+    const likes = likesMap[key] ?? [];
+    return (
+      <DiscussionScreen
+        visible={!!entry}
+        onClose={() => setDiscussionKey(null)}
+        subtitle={shown ? `${shown.friend.id === user?.id ? 'You' : shown.friend.name} · ${formatRelativeDate(shown.sessionDate)}` : undefined}
+        likes={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+        comments={commentsMap[key] ?? []}
+        commentLikesMap={commentLikesMap}
+        currentUserId={user?.id ?? ''}
+        myAvatar={myAvatar ?? null}
+        isPostOwner={shown?.friend.id === user?.id}
+        autoFocus={discussionFocus}
+        colors={colors}
+        onSend={text => shown?.sessionId ? handleSendComment(key, shown.sessionId, text) : Promise.resolve(false)}
+        onDeleteComment={c => shown?.sessionId && handleDeleteComment(key, shown.sessionId, c.id)}
+        onReportComment={reportComment}
+        onLikeComment={c => shown?.sessionId && handleCommentLike(c.id, shown.sessionId)}
+        onViewProfile={p => openFriendProfile(p, 'activity')}
+      />
+    );
+  }
+
+  // The post for a session id: from the feed, or the session page that's open
+  function findPostEntry(sessionId: string): SessionSummary | undefined {
+    return activityFeed.find(e => e.sessionId === sessionId)
+      ?? (viewingSession?.entry.sessionId === sessionId ? viewingSession.entry : undefined);
+  }
+
+  // Likes, like/comment/share buttons and the first few comments of a post.
+  // Shared by feed cards and the session page (posts opened outside the feed).
+  function renderPostSocial(entry: SessionSummary, sessionKey: string) {
+    const likes = likesMap[sessionKey] ?? [];
+    const comments = commentsMap[sessionKey] ?? [];
+    const liked = likes.some(l => l.user_id === user?.id);
+    return (
+      <>
+        {/* Like/comment counts */}
+        {(likes.length > 0 || comments.length > 0) && (
+          <View style={styles.cardCounts}>
+            <LikesAvatarRow
+              likers={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
+              onPressLiker={(l) => openFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl }, 'activity')}
+              currentUserId={user?.id}
+              colors={colors}
+            />
+            {comments.length > 0 && (
+              <Text style={[styles.cardCountTxt, { color: colors.textMuted }]} onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}>
+                {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+              </Text>
+            )}
+          </View>
+        )}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.cardActionBtn}
+            activeOpacity={0.7}
+            onPress={() => entry.sessionId && handleLike(sessionKey, entry.sessionId)}
+          >
+            <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cardActionBtn}
+            activeOpacity={0.7}
+            onPress={() => openDiscussion(sessionKey, entry.sessionId, true)}
+          >
+            <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cardActionBtn}
+            activeOpacity={0.7}
+            onPress={() => setShareEntry(entry)}
+          >
+            <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* First few comments — the rest are on the Discussion page */}
+        {comments.length > 0 && (
+          <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
+            {comments.slice(0, 3).map(c => (
+              <SwipeableComment
+                key={c.id}
+                c={c}
+                isOwn={c.user_id === user?.id || entry.friend.id === user?.id}
+                onDelete={() => entry.sessionId && handleDeleteComment(sessionKey, entry.sessionId, c.id)}
+                onReport={(c.user_id !== user?.id && entry.friend.id !== user?.id) ? () => reportComment(c) : () => {}}
+                onLike={() => entry.sessionId && handleCommentLike(c.id, entry.sessionId)}
+                onNamePress={() => {
+                  if (c.user_id === user?.id) return;
+                  openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
+                }}
+                onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}
+                colors={colors}
+                commentAvatarUrl={c.user_id === user?.id ? myAvatar : (c.profile?.avatar_url ?? null)}
+                likedByUserIds={commentLikesMap[c.id] ?? []}
+                currentUserId={user?.id ?? ''}
+              />
+            ))}
+            {comments.length > 3 && (
+              <TouchableOpacity onPress={() => openDiscussion(sessionKey, entry.sessionId, false)} activeOpacity={0.7}>
+                <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View all {comments.length} comments</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </>
+    );
+  }
+
   function renderPostTop(entry: SessionSummary, inDetail: boolean) {
     const isOutdoor = entry.environment === 'outdoor';
     return (
@@ -2380,6 +2511,8 @@ export default function FriendsScreen() {
               </PhotoGroup>
             </ScrollView></TabSwipeGuard>
           )}
+          {/* Likes, like/comment/share and comments, above the climbs so they're in reach */}
+          {entry.sessionId && renderPostSocial(entry, `sid-${entry.sessionId}`)}
           {/* Climbs */}
           {climbs.length === 0
             ? <Text style={[styles.cardNoClimbs, { color: colors.textMuted }]}>No climbs found</Text>
@@ -2387,6 +2520,7 @@ export default function FriendsScreen() {
           }
           {trainingOnly && climbs.length > 1 && <MediaBox uris={sessionOnlyPhotos} />}
         </ScrollView>
+        {renderDiscussion()}
         {photoViewerModal}
         <ClimbDetailModal visible={!!detailClimb} climb={detailClimb} onClose={() => setDetailClimb(null)} />
       </DetailScreen>
@@ -2487,84 +2621,7 @@ export default function FriendsScreen() {
                 </TouchableOpacity>
 
                 {/* ── Like / Comment / Share ── */}
-                {(() => {
-                  const likes = likesMap[sessionKey] ?? [];
-                  const comments = commentsMap[sessionKey] ?? [];
-                  const liked = likes.some(l => l.user_id === user?.id);
-                  return (
-                    <>
-                      {/* Like/comment counts */}
-                      {(likes.length > 0 || comments.length > 0) && (
-                        <View style={styles.cardCounts}>
-                          <LikesAvatarRow
-                            likers={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
-                            onPressLiker={(l) => openFriendProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl }, 'activity')}
-                            currentUserId={user?.id}
-                            colors={colors}
-                          />
-                          {comments.length > 0 && (
-                            <Text style={[styles.cardCountTxt, { color: colors.textMuted }]} onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}>
-                              {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                      <View style={styles.cardActions}>
-                        <TouchableOpacity
-                          style={styles.cardActionBtn}
-                          activeOpacity={0.7}
-                          onPress={() => entry.sessionId && handleLike(sessionKey, entry.sessionId)}
-                        >
-                          <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardActionBtn}
-                          activeOpacity={0.7}
-                          onPress={() => openDiscussion(sessionKey, entry.sessionId, true)}
-                        >
-                          <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardActionBtn}
-                          activeOpacity={0.7}
-                          onPress={() => setShareEntry(entry)}
-                        >
-                          <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* First few comments — the rest are on the Discussion page */}
-                      {comments.length > 0 && (
-                        <View style={[styles.commentSection, { borderTopColor: colors.border }]}>
-                          {comments.slice(0, 3).map(c => (
-                            <SwipeableComment
-                              key={c.id}
-                              c={c}
-                              isOwn={c.user_id === user?.id || entry.friend.id === user?.id}
-                              onDelete={() => entry.sessionId && handleDeleteComment(sessionKey, entry.sessionId, c.id)}
-                              onReport={(c.user_id !== user?.id && entry.friend.id !== user?.id) ? () => reportComment(c) : () => {}}
-                              onLike={() => entry.sessionId && handleCommentLike(c.id, entry.sessionId)}
-                              onNamePress={() => {
-                                if (c.user_id === user?.id) return;
-                                openFriendProfile({ id: c.user_id, name: c.profile?.name ?? 'Unknown', username: c.profile?.username ?? '', avatar_url: c.profile?.avatar_url ?? null }, 'activity');
-                              }}
-                              onPress={() => openDiscussion(sessionKey, entry.sessionId, false)}
-                              colors={colors}
-                              commentAvatarUrl={c.user_id === user?.id ? myAvatar : (c.profile?.avatar_url ?? null)}
-                              likedByUserIds={commentLikesMap[c.id] ?? []}
-                              currentUserId={user?.id ?? ''}
-                            />
-                          ))}
-                          {comments.length > 3 && (
-                            <TouchableOpacity onPress={() => openDiscussion(sessionKey, entry.sessionId, false)} activeOpacity={0.7}>
-                              <Text style={[styles.commentShowMore, { color: colors.textMuted }]}>View all {comments.length} comments</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      )}
-                    </>
-                  );
-                })()}
+                {renderPostSocial(entry, sessionKey)}
               </View>
             );
           })}
@@ -2581,33 +2638,7 @@ export default function FriendsScreen() {
       ))}
 
       {/* Full comment thread for a post */}
-      {(() => {
-        const entry = discussionKey ? activityFeed.find(e => e.sessionId && `sid-${e.sessionId}` === discussionKey) : undefined;
-        if (entry) lastDiscussionEntry.current = entry;
-        const shown = entry ?? lastDiscussionEntry.current;
-        const key = shown?.sessionId ? `sid-${shown.sessionId}` : '';
-        const likes = likesMap[key] ?? [];
-        return (
-          <DiscussionScreen
-            visible={!!entry}
-            onClose={() => setDiscussionKey(null)}
-            subtitle={shown ? `${shown.friend.id === user?.id ? 'You' : shown.friend.name} · ${formatRelativeDate(shown.sessionDate)}` : undefined}
-            likes={likes.map(l => ({ id: l.id ?? l.user_id, userId: l.user_id, name: l.profile?.name ?? 'Unknown', avatarUrl: l.user_id === user?.id ? (myAvatar ?? null) : (l.profile?.avatar_url ?? null) }))}
-            comments={commentsMap[key] ?? []}
-            commentLikesMap={commentLikesMap}
-            currentUserId={user?.id ?? ''}
-            myAvatar={myAvatar ?? null}
-            isPostOwner={shown?.friend.id === user?.id}
-            autoFocus={discussionFocus}
-            colors={colors}
-            onSend={text => shown?.sessionId ? handleSendComment(key, shown.sessionId, text) : Promise.resolve(false)}
-            onDeleteComment={c => shown?.sessionId && handleDeleteComment(key, shown.sessionId, c.id)}
-            onReportComment={reportComment}
-            onLikeComment={c => shown?.sessionId && handleCommentLike(c.id, shown.sessionId)}
-            onViewProfile={p => openFriendProfile(p, 'activity')}
-          />
-        );
-      })()}
+      {renderDiscussion()}
 
       {/* ── Photo viewer ── */}
       {photoViewerModal}

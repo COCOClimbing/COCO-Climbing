@@ -199,7 +199,8 @@ export async function routeNotificationTap(
   }
 
   if (SESSION_NOTIFICATION_TYPES.has(type) && opts.sessionId) {
-    nav.viewActivitySession(opts.sessionId);
+    // A mention is about a comment, so open the comments as well
+    nav.viewActivitySession(opts.sessionId, type === 'mention');
   }
 }
 

@@ -42,25 +42,39 @@ async function verifyRecipientsAllowed(
     if (!sessionId) return { ids: [], sessionId }
     const { data: session } = await adminClient
       .from('sessions')
-      .select('user_id')
+      .select('user_id, deleted_at')
       .eq('id', sessionId)
       .maybeSingle()
-    if (!session) return { ids: [], sessionId }
+    if (!session || session.deleted_at) return { ids: [], sessionId }
     // The recipient must be the session's owner — like/comment only ever
     // notify a session owner about activity on their own session.
     const owned = recipientIds.filter(id => id === session.user_id)
     if (!owned.length) return { ids: [], sessionId }
     if (session.user_id === callerId) return { ids: owned, sessionId } // liking/commenting your own session
-    // Mutual follows create two separate accepted rows (A→B and B→A), so this
-    // can legitimately match more than one row — .maybeSingle() would error
-    // on that (returning data: null) and silently drop the notification.
-    const { data: friendship } = await adminClient
-      .from('friendships')
+    // Owners hear about likes and comments from anyone who can see the post,
+    // following or not (public posts can be found through suggestions and
+    // mentions). In place of a follow, require the like/comment to really
+    // exist — so a caller can't push-spam an owner they haven't interacted
+    // with — and no block either way.
+    const { data: blocked } = await adminClient.rpc('is_blocked', { a: callerId, b: session.user_id })
+    if (blocked) return { ids: [], sessionId }
+    if (type === 'like') {
+      const { data: like } = await adminClient
+        .from('session_likes')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('user_id', callerId)
+        .limit(1)
+      return { ids: (like && like.length > 0) ? owned : [], sessionId }
+    }
+    const { data: comment } = await adminClient
+      .from('session_comments')
       .select('id')
-      .eq('status', 'accepted')
-      .or(`and(sender_id.eq.${callerId},receiver_id.eq.${session.user_id}),and(sender_id.eq.${session.user_id},receiver_id.eq.${callerId})`)
+      .eq('session_id', sessionId)
+      .eq('user_id', callerId)
+      .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .limit(1)
-    return { ids: (friendship && friendship.length > 0) ? owned : [], sessionId }
+    return { ids: (comment && comment.length > 0) ? owned : [], sessionId }
   }
 
   if (type === 'comment_like') {

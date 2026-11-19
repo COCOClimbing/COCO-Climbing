@@ -86,6 +86,29 @@ const SUMMARY_PHOTO_HEIGHT = 220;
 // used by a friend's profile view, which only ever needs this one person's
 // sessions. Deliberately duplicated rather than shared with loadFeed to
 // avoid any risk of regressing the already-shipped main feed.
+// Days from a session date ("yyyy-MM-dd…") until today, plus a little slack
+export function daysSinceSession(date: string): number {
+  const d = new Date(`${(date ?? '').slice(0, 10)}T00:00:00`);
+  const days = Math.ceil((Date.now() - d.getTime()) / 86400000);
+  return Number.isFinite(days) ? Math.max(1, days + 2) : 30;
+}
+
+// One post as a feed entry, for opening a session that isn't in your feed —
+// e.g. a notification about someone you don't follow (an @mention). Returns
+// null if it's gone or you can't see it.
+export async function getSessionSummaryById(sessionId: string): Promise<SessionSummary | null> {
+  const { data: row } = await supabase
+    .from('sessions')
+    .select('id, user_id, date')
+    .eq('id', sessionId)
+    .maybeSingle();
+  if (!row) return null;
+  const owner = await getProfileById(row.user_id);
+  if (!owner) return null;
+  const summaries = await getFriendSessionSummaries(owner, daysSinceSession(row.date));
+  return summaries.find(s => s.sessionId === sessionId) ?? null;
+}
+
 export async function getFriendSessionSummaries(friend: FriendProfile, daysBack: number): Promise<SessionSummary[]> {
   const normDate = (d: string) => (d ?? '').slice(0, 10);
   const summaries: SessionSummary[] = [];

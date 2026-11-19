@@ -166,7 +166,7 @@ export default function AppHeader() {
     setNotifVisible(false);
     // These open another full page, which must wait until this one has slid
     // away (opening a page while another closes froze the app before).
-    if ((n.type === 'follow_request' || n.type === 'report') && Platform.OS === 'ios') {
+    if ((n.type === 'follow_request' || n.type === 'report' || n.type === 'mention') && Platform.OS === 'ios') {
       pendingSheetTapRef.current = n;
       return;
     }

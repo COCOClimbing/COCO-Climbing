@@ -22,6 +22,8 @@ interface NavContextType {
   pendingFriendProfile: PendingFriendProfile | null;
   pendingSessionId: string | null;
   pendingActivitySessionId: string | null;
+  // Open that post's comments too (a tapped @mention notification)
+  pendingActivityComments: boolean;
   // Admin page (sessions feed / reports), or null when closed. Lives here so a
   // report notification tap can open it from anywhere.
   adminView: AdminView | null;
@@ -37,7 +39,7 @@ interface NavContextType {
   clearPendingFriendProfile: () => void;
   navigateToSession: (sessionId: string) => void;
   clearPendingSessionId: () => void;
-  viewActivitySession: (sessionId: string) => void;
+  viewActivitySession: (sessionId: string, openComments?: boolean) => void;
   clearPendingActivitySessionId: () => void;
   openAdmin: (view: AdminView) => void;
   closeAdmin: () => void;
@@ -56,6 +58,7 @@ const NavContext = createContext<NavContextType>({
   pendingFriendProfile: null,
   pendingSessionId: null,
   pendingActivitySessionId: null,
+  pendingActivityComments: false,
   adminView: null,
   navigate: () => {},
   openDrawer: () => {},
@@ -86,6 +89,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [pendingFriendProfile, setPendingFriendProfile] = useState<PendingFriendProfile | null>(null);
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [pendingActivitySessionId, setPendingActivitySessionId] = useState<string | null>(null);
+  const [pendingActivityComments, setPendingActivityComments] = useState(false);
   const [adminView, setAdminView] = useState<AdminView | null>(null);
 
   function navigate(s: ScreenId) {
@@ -130,8 +134,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     setPendingSessionId(null);
   }
 
-  function viewActivitySession(sessionId: string) {
+  function viewActivitySession(sessionId: string, openComments = false) {
     setPendingActivitySessionId(sessionId);
+    setPendingActivityComments(openComments);
     setScreen('friends');
     setDrawerOpen(false);
     setNavCount(c => c + 1);
@@ -139,6 +144,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
   function clearPendingActivitySessionId() {
     setPendingActivitySessionId(null);
+    setPendingActivityComments(false);
   }
 
   return (
@@ -153,6 +159,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       pendingFriendProfile,
       pendingSessionId,
       pendingActivitySessionId,
+      pendingActivityComments,
       adminView,
       navigate,
       openDrawer: () => setDrawerOpen(true),
