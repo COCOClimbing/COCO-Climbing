@@ -87,9 +87,7 @@ import {
   finishedSessions,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
-
-const SHAKA_OUTLINE = require('../assets/icons/shaka-outline.png');
-const SHAKA_FILL = require('../assets/icons/shaka-fill.png');
+import ShakaIcon from '../components/ShakaIcon';
 import { supabase } from '../utils/supabase';
 import { sendLikeNotification, sendCommentNotification, sendFollowRequestNotification, sendNewFollowerNotification, sendFollowRequestAcceptedNotification, sendCommentLikeNotification } from '../utils/notifications';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
@@ -2355,12 +2353,7 @@ export default function FriendsScreen() {
                           activeOpacity={0.7}
                           onPress={() => entry.sessionId && handleLike(sessionKey, entry.sessionId)}
                         >
-                          <View style={styles.shakaIcon}>
-                            {liked && (
-                              <Image source={SHAKA_FILL} style={[styles.shakaImg, { tintColor: colors.accent }]} />
-                            )}
-                            <Image source={SHAKA_OUTLINE} style={[styles.shakaImg, { tintColor: colors.textPrimary }]} />
-                          </View>
+                          <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.cardActionBtn}
@@ -2866,18 +2859,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: SPACING.md,
-  },
-  shakaIcon: {
-    width: 26,
-    height: 26,
-  },
-  shakaImg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 26,
-    height: 26,
-    resizeMode: 'contain',
   },
   fab: {
     position: 'absolute',

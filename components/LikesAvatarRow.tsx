@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { FONTS, SPACING } from '../utils/theme';
 import Avatar from './Avatar';
+import BoldIcon from './BoldIcon';
+import PressGrow from './PressGrow';
 
 export interface Liker {
   id: string;
@@ -70,9 +72,9 @@ export default function LikesAvatarRow({
         <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Likes</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} activeOpacity={0.7}>
-              <Text style={[styles.modalDone, { color: colors.accent }]}>Done</Text>
-            </TouchableOpacity>
+            <PressGrow onPress={() => setModalVisible(false)} style={[styles.modalDone, { backgroundColor: colors.accent }]} accessibilityLabel="Done">
+              {pressed => <BoldIcon name="checkmark" size={24} color="#fff" weight={pressed ? 0.5 : 0} />}
+            </PressGrow>
           </View>
           <ScrollView contentContainerStyle={styles.modalList}>
             {likers.map(l => {
@@ -117,7 +119,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   modalTitle: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.bold },
-  modalDone: { fontSize: FONTS.sizes.md, fontFamily: FONTS.family.medium },
+  modalDone: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   modalList: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
   modalRow: {
     flexDirection: 'row',

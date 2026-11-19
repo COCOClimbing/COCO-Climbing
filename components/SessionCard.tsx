@@ -5,6 +5,7 @@ import {
 import { PhotoGroup, useGroupedPhoto, preloadPhotos } from './PhotoGroup';
 import { StreakBanner } from './StreakBadge';
 import { Ionicons } from '@expo/vector-icons';
+import ShakaIcon from './ShakaIcon';
 import { FONTS, SPACING, CLIMB_TYPES } from '../utils/theme';
 import { DaySession, sessionStats, sessionTimeOfDay, sessionStartTime, isTrainingClimb, TRAINING_KIND_LABEL } from '../utils/sessionHelpers';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
@@ -438,7 +439,7 @@ export default function SessionCard({
       {!condensed && (
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
-            <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
+            <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => openDiscussion(true)}>
             <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />

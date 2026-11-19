@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Keyboard, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import ShakaIcon from './ShakaIcon';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import PushScreen from './PushScreen';
 import Avatar from './Avatar';
@@ -133,7 +134,7 @@ export default function DiscussionScreen({
       >
         {likes.length > 0 && (
           <View style={styles.likesRow}>
-            <Ionicons name="thumbs-up-outline" size={22} color={colors.textPrimary} />
+            <ShakaIcon size={24} color={colors.textPrimary} />
             <LikesAvatarRow
               likers={likes}
               onPressLiker={l => openProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}

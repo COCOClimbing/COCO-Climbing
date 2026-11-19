@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, TextInput, Keyboard, Modal, Dimensions, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import ShakaIcon from './ShakaIcon';
 import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import ClimbCard from './ClimbCard';
 import { defaultSessionTitle, trainingKind } from '../utils/sessionHelpers';
@@ -434,7 +435,7 @@ export default function ActivityCard({
       {/* Actions */}
       {!readOnly && <View style={styles.cardActions}>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={handleLikeToggle}>
-          <Ionicons name={liked ? 'thumbs-up' : 'thumbs-up-outline'} size={24} color={liked ? colors.accent : colors.textPrimary} />
+          <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.cardActionBtn} activeOpacity={0.7} onPress={() => openDiscussion(true)}>
           <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
