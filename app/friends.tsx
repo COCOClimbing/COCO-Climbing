@@ -110,6 +110,7 @@ import { useTabSwipe, TabSwipeGuard } from '../utils/useTabSwipe';
 import PushScreen from '../components/PushScreen';
 import DiscussionScreen from '../components/DiscussionScreen';
 import VideoPlaceholder, { isVideoUri } from '../components/VideoPlaceholder';
+import BoldIcon from '../components/BoldIcon';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2262,21 +2263,21 @@ export default function FriendsScreen() {
             activeOpacity={0.7}
             onPress={() => entry.sessionId && handleLike(sessionKey, entry.sessionId)}
           >
-            <ShakaIcon size={26} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
+            <ShakaIcon size={28} color={colors.textPrimary} fillColor={liked ? colors.accent : undefined} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardActionBtn}
             activeOpacity={0.7}
             onPress={() => openDiscussion(sessionKey, entry.sessionId, true)}
           >
-            <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
+            <BoldIcon name="chatbubble-outline" size={24} color={colors.textPrimary} weight={0.1} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardActionBtn}
             activeOpacity={0.7}
             onPress={() => setShareEntry(entry)}
           >
-            <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
+            <BoldIcon name="share-outline" size={24} color={colors.textPrimary} weight={0.1} />
           </TouchableOpacity>
         </View>
 

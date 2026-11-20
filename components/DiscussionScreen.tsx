@@ -180,7 +180,7 @@ export default function DiscussionScreen({
       >
         {likes.length > 0 && (
           <View style={styles.likesRow}>
-            <ShakaIcon size={24} color={colors.textPrimary} />
+            <ShakaIcon size={26} color={colors.textPrimary} />
             <LikesAvatarRow
               likers={likes}
               onPressLiker={l => openProfile({ id: l.userId, name: l.name, username: '', avatar_url: l.avatarUrl })}
