@@ -33,6 +33,7 @@ import { getMyGalleryPhotos } from '../utils/gallery';
 import { useTabSwipe } from '../utils/useTabSwipe';
 import UnderlineTabs, { UnderlineTab } from '../components/UnderlineTabs';
 import PhotoGallery from '../components/PhotoGallery';
+import PhotoViewer, { usePhotoOrigins } from '../components/PhotoViewer';
 import PushScreen from '../components/PushScreen';
 import EditProfileModal from '../components/EditProfileModal';
 import { StreakChip } from '../components/StreakBadge';
@@ -56,6 +57,9 @@ export default function AccountScreen() {
   const tabSwipe = useTabSwipe<ProfileTab>(PROFILE_TABS.map(t => t.id), profileTab, setProfileTab);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [galleryUris, setGalleryUris] = useState<string[] | null>(null);
+  // Tap your photo to see it full-screen; long-press (or tap with no photo) to change it
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const { origins: avatarOrigins, register: registerAvatar } = usePhotoOrigins();
   const [followListModal, setFollowListModal] = useState<'following' | 'followers' | null>(null);
   const [followTab, setFollowTab] = useState<'following' | 'followers'>('following');
   const [followingList, setFollowingList] = useState<FriendProfile[]>([]);
@@ -349,7 +353,12 @@ export default function AccountScreen() {
       <View style={styles.profileHeader}>
         {/* Top row: avatar + name/username/hometown */}
         <View style={styles.profileTop}>
-          <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8}>
+          <TouchableOpacity
+            ref={(localAvatarUri ?? avatarUrl) ? registerAvatar((localAvatarUri ?? avatarUrl)!) : undefined}
+            onPress={() => (localAvatarUri ?? avatarUrl) ? setAvatarViewerOpen(true) : handlePickPhoto()}
+            onLongPress={handlePickPhoto}
+            activeOpacity={0.8}
+          >
             <View style={[styles.avatarCircle, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
               {(localAvatarUri ?? avatarUrl) ? (
                 <Image source={{ uri: localAvatarUri ?? avatarUrl! }} style={styles.avatarImage} />
@@ -416,6 +425,9 @@ export default function AccountScreen() {
         </View>
       </View>
       <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
+      {avatarViewerOpen && (localAvatarUri ?? avatarUrl) && (
+        <PhotoViewer uris={[(localAvatarUri ?? avatarUrl)!]} initialIndex={0} origins={avatarOrigins} onClose={() => setAvatarViewerOpen(false)} />
+      )}
 
       {/* Last 30 days, then a Progress / Gallery toggle */}
       {climbStats && <ClimbStatsSection stats={climbStats} colors={colors} part="month" />}

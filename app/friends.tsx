@@ -231,6 +231,10 @@ function FriendDetailView({
   const handleViewProfile = onViewProfile ?? viewFriendProfile;
   const isSelf = user?.id === friend.id;
   const insets = useSafeAreaInsets();
+  // Tap the profile photo to see it full-screen (only when there's a real photo, not initials)
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const { origins: avatarOrigins, register: registerAvatar } = usePhotoOrigins();
+  const avatarPhotoUrl = friend.avatar_url && /^(https?|file):\/\//.test(friend.avatar_url) ? friend.avatar_url : null;
   const scrollRef = useRef<ScrollView>(null);
   const tabBarSpace = useTabBarSpace();
   // Swipe in from the left edge to close the profile (below the back button).
@@ -615,6 +619,9 @@ function FriendDetailView({
   const friendBtnFilled = friendStatus === 'none' || friendStatus === 'pending_received';
   // Private profiles stay locked until the follow is accepted (RLS returns no climbs/sessions anyway)
   const isLocked = !isSelf && !!friend.is_private && friendStatus !== 'accepted';
+  // Follower/following lists follow the same rule: public profiles are open to anyone,
+  // private ones only once you follow them (get_followers/get_following enforce this server-side too)
+  const canViewFollowLists = !isLocked;
 
   const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
@@ -644,7 +651,14 @@ function FriendDetailView({
         {/* ── Profile header (account-style) ── */}
         <View style={detailStyles.profileHeader}>
           <View style={detailStyles.profileTop}>
-            <ProfileAvatar name={friend.name} avatarUrl={friend.avatar_url} size={80} colors={colors} />
+            <TouchableOpacity
+              ref={avatarPhotoUrl ? registerAvatar(avatarPhotoUrl) : undefined}
+              disabled={!avatarPhotoUrl}
+              onPress={() => setAvatarViewerOpen(true)}
+              activeOpacity={0.8}
+            >
+              <ProfileAvatar name={friend.name} avatarUrl={friend.avatar_url} size={80} colors={colors} />
+            </TouchableOpacity>
             <View style={detailStyles.profileInfo}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={[detailStyles.profileName, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>{friend.name}</Text>
@@ -675,13 +689,13 @@ function FriendDetailView({
           {/* Following / Followers + friend action button */}
           <View style={detailStyles.profileBottom}>
             <View style={detailStyles.countsRow}>
-              <TouchableOpacity style={detailStyles.countItem} activeOpacity={friendStatus === 'accepted' ? 0.7 : 1} onPress={() => friendStatus === 'accepted' && openListSheet('following')}>
+              <TouchableOpacity style={detailStyles.countItem} activeOpacity={canViewFollowLists ? 0.7 : 1} onPress={() => canViewFollowLists && openListSheet('following')}>
                 <Text style={[detailStyles.countLabel, { color: colors.textMuted }]}>Following</Text>
-                <Text style={[detailStyles.countNumber, { color: friendStatus === 'accepted' ? colors.accent : colors.textPrimary }]}>{counts.following}</Text>
+                <Text style={[detailStyles.countNumber, { color: canViewFollowLists ? colors.accent : colors.textPrimary }]}>{counts.following}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={detailStyles.countItem} activeOpacity={friendStatus === 'accepted' ? 0.7 : 1} onPress={() => friendStatus === 'accepted' && openListSheet('followers')}>
+              <TouchableOpacity style={detailStyles.countItem} activeOpacity={canViewFollowLists ? 0.7 : 1} onPress={() => canViewFollowLists && openListSheet('followers')}>
                 <Text style={[detailStyles.countLabel, { color: colors.textMuted }]}>Followers</Text>
-                <Text style={[detailStyles.countNumber, { color: friendStatus === 'accepted' ? colors.accent : colors.textPrimary }]}>{counts.followers}</Text>
+                <Text style={[detailStyles.countNumber, { color: canViewFollowLists ? colors.accent : colors.textPrimary }]}>{counts.followers}</Text>
               </TouchableOpacity>
             </View>
             {user && user.id !== friend.id && (
@@ -860,6 +874,10 @@ function FriendDetailView({
       {/* Round back button, like the app header's — floats over the profile
           and stays put while it scrolls. */}
       <FloatingBackButton onPress={onBack} style={[detailStyles.backBtn, { top: insets.top + SPACING.sm }]} />
+
+      {avatarViewerOpen && avatarPhotoUrl && (
+        <PhotoViewer uris={[avatarPhotoUrl]} initialIndex={0} origins={avatarOrigins} clipTo={scrollRef} onClose={() => setAvatarViewerOpen(false)} />
+      )}
 
       {/* Followers / Following page — slides in like the app's other pages */}
       <PushScreen visible={listSheetOpen} title={friend.name} onBack={() => setListSheetOpen(false)} onDismiss={() => setListSheetProfile(null)}>
