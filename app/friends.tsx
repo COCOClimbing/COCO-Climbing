@@ -109,6 +109,7 @@ import { useEdgeSwipeBack } from '../utils/useEdgeSwipeBack';
 import { useTabSwipe, TabSwipeGuard } from '../utils/useTabSwipe';
 import PushScreen from '../components/PushScreen';
 import DiscussionScreen from '../components/DiscussionScreen';
+import VideoPlaceholder, { isVideoUri } from '../components/VideoPlaceholder';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,8 @@ function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; in
   const { opacity, onDone } = useGroupedPhoto(uri);
   useEffect(() => { if (failed) onDone(); }, [failed]);
 
+  // Videos need COCO 1.1.7; show an update tile instead of skipping them
+  if (isVideoUri(uri)) return <VideoPlaceholder style={{ width: Math.round(PHOTO_HEIGHT * 0.75), height: PHOTO_HEIGHT, borderRadius: 10 }} />;
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>

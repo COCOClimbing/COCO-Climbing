@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } fr
 import { useTheme } from '../utils/ThemeContext';
 import { FONTS, SPACING } from '../utils/theme';
 import PhotoViewer, { usePhotoOrigins } from './PhotoViewer';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
 const COLUMNS = 3;
 const GAP = 2;
@@ -37,7 +38,9 @@ export default function PhotoGallery({ uris, loading, emptyText }: {
           activeOpacity={0.85}
           style={{ width: size, height: size, marginRight: i % COLUMNS === COLUMNS - 1 ? 0 : GAP, marginBottom: GAP }}
         >
-          <Image source={{ uri }} style={[styles.thumb, { backgroundColor: colors.bgElevated }]} />
+          {isVideoUri(uri)
+            ? <VideoPlaceholder compact style={styles.thumb} />
+            : <Image source={{ uri }} style={[styles.thumb, { backgroundColor: colors.bgElevated }]} />}
         </TouchableOpacity>
       ))}
       {viewerIndex !== null && (

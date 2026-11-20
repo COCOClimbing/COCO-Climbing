@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ScrollView, Image, Animated, Easing } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -131,12 +132,16 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
       >
         <GestureDetector gesture={Gesture.Simultaneous(doubleTap, swipeDown)}>
           <Animated.View style={{ width, height, justifyContent: 'center', transform: [{ translateX: tx }, { translateY: ty }, { scale }] }}>
-            <Image
-              source={{ uri }}
-              style={{ width, height: height * IMAGE_HEIGHT_RATIO }}
-              resizeMode="contain"
-              onLoad={e => { imageSize.current = e.nativeEvent.source; }}
-            />
+            {isVideoUri(uri) ? (
+              <VideoPlaceholder style={{ width, height: height * IMAGE_HEIGHT_RATIO }} />
+            ) : (
+              <Image
+                source={{ uri }}
+                style={{ width, height: height * IMAGE_HEIGHT_RATIO }}
+                resizeMode="contain"
+                onLoad={e => { imageSize.current = e.nativeEvent.source; }}
+              />
+            )}
           </Animated.View>
         </GestureDetector>
       </ScrollView>

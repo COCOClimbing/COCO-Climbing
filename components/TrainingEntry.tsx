@@ -6,6 +6,7 @@ import { useTheme } from '../utils/ThemeContext';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { GradeBadge } from './UI';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 interface Props {
   climb: Climb;
   // Shows an Edit button (own entries). There's no tap-through otherwise: this
@@ -94,14 +95,16 @@ export function MediaBox({ uris, types }: { uris: string[]; types?: ('photo' | '
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   if (uris.length === 0) return null;
 
-  const isPhoto = (i: number) => (types?.[i] ?? 'photo') === 'photo';
+  const isPhoto = (i: number) => (types?.[i] ?? 'photo') === 'photo' && !isVideoUri(uris[i]);
   const photos = uris.filter((_, i) => isPhoto(i));
 
   return (
     <View style={[styles.box, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MEDIA</Text>
       <TabSwipeGuard><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm }}>
-        {uris.map((uri, i) => (
+        {uris.map((uri, i) => isVideoUri(uri) ? (
+          <VideoPlaceholder key={i} style={styles.media} />
+        ) : (
           <TouchableOpacity
             key={i}
             activeOpacity={0.85}

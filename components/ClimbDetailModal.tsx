@@ -9,6 +9,7 @@ import { useTabBarSpace } from './BottomTabBar';
 import { FONTS, SPACING, CLIMB_TYPES, CLIMB_OUTCOMES, HOLD_COLORS, Climb } from '../utils/theme';
 import { GradeBadge, OutcomeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
 interface Props {
   visible: boolean;
@@ -154,7 +155,9 @@ export default function ClimbDetailModal({ visible, climb: climbProp, onClose, o
               <View style={[ss.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                 <Text style={[ss.sectionLabel, { color: colors.textMuted, fontFamily: FONTS.family.regular }]}>MEDIA</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {uris.map((uri, i) => (
+                  {uris.map((uri, i) => isVideoUri(uri) ? (
+                    <VideoPlaceholder key={i} style={[ss.media, i < uris.length - 1 && { marginRight: SPACING.sm }]} />
+                  ) : (
                     <Image
                       key={i}
                       source={{ uri }}

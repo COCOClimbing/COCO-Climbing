@@ -25,6 +25,7 @@ import { reportContent } from '../utils/moderationApi';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
 import { StreakBanner } from './StreakBadge';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
 const PHOTO_HEIGHT = 220;
 
@@ -41,6 +42,8 @@ function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; in
     );
   }, [uri, initialWidth]);
 
+  // Videos need COCO 1.1.7; show an update tile instead of skipping them
+  if (isVideoUri(uri)) return <VideoPlaceholder style={{ width: Math.round(PHOTO_HEIGHT * 0.75), height: PHOTO_HEIGHT, borderRadius: 10 }} />;
   if (failed || imgWidth === null) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>

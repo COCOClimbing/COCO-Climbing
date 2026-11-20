@@ -29,6 +29,7 @@ import { Pill, Divider, HoldColorDot } from './UI';
 import GradePicker, { GradeSystem } from './GradePicker';
 import FriendPicker from './FriendPicker';
 import LocationPicker from './LocationPicker';
+import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
 interface Props {
   visible: boolean;
@@ -1036,7 +1037,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                     delayLongPress={400}
                     style={{ marginRight: SPACING.sm }}
                   >
-                    <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                    {isVideoUri(item.uri)
+                      ? <VideoPlaceholder style={styles.mediaThumbnail} />
+                      : <Image source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity

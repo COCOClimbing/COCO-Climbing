@@ -7,6 +7,22 @@ import { uploadMedia, listMediaKeys, deleteMedia, shrinkPhotoForUpload } from '.
 const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
 const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
 const R2_PUBLIC_BASE_URL = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev';
+
+// The storage key of one of our uploaded files, from its public link — or null
+// if the link isn't one of ours. Keys look like "<user id>/<file>", e.g.
+// "<uuid>/session_abc_0.jpg". Read from the link's path, not its domain:
+// media is on r2.dev today and will move to COCO's own domain, and a cleanup
+// that only recognised the r2.dev address would treat files on the new domain
+// as unused and DELETE them. This keeps working for any domain we serve from.
+const MEDIA_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/]+$/i;
+export function mediaKeyFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(/^https?:\/\/[^/?#]+\/([^?#]+)/i);
+  if (!m) return null;
+  let key = m[1];
+  try { key = decodeURIComponent(key); } catch { /* keep as-is */ }
+  return MEDIA_KEY_RE.test(key) ? key : null;
+}
 const R2_ORPHAN_RECOVERY_FLAG = 'coco_r2_recovery_v1';
 
 // Returns true if a URL points to deleted Supabase Storage (bucket was wiped)
@@ -327,12 +343,8 @@ export async function deleteR2MediaUrls(urls: string[]): Promise<void> {
   if (!httpUrls.length) return;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
-  const prefix = `${R2_PUBLIC_BASE_URL}/`;
-  await Promise.all(
-    httpUrls
-      .filter(u => u.startsWith(prefix))
-      .map(u => deleteMedia(u.slice(prefix.length), session.access_token).catch(() => {}))
-  );
+  const keys = httpUrls.map(mediaKeyFromUrl).filter((k): k is string => !!k);
+  await Promise.all(keys.map(k => deleteMedia(k, session.access_token).catch(() => {})));
 }
 
 export async function deleteClimbFromCloud(id: string): Promise<void> {
@@ -725,14 +737,15 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
     supabase.from('profiles').select('avatar_url').eq('id', userId).single(),
   ]);
 
-  const prefix = `${R2_PUBLIC_BASE_URL}/`;
   const validKeys = new Set<string>();
+  const keep = (url: string | null | undefined) => {
+    const key = mediaKeyFromUrl(url);
+    if (key) validKeys.add(key);
+  };
 
   (mediaRes.data ?? []).forEach((row: any) => {
-    (row.media_uris ?? []).forEach((url: string) => {
-      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
-    });
-    if (row.media_uri?.startsWith(prefix)) validKeys.add(row.media_uri.slice(prefix.length));
+    (row.media_uris ?? []).forEach(keep);
+    keep(row.media_uri);
   });
 
   // Avatars were never included here, so every avatar.jpg looked orphaned and
@@ -742,7 +755,7 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
   // fixed, reserved filename (handles today's already-broken/stale DB values
   // where the row still points at whatever got deleted).
   const avatarUrl: string | undefined = profileRes.data?.avatar_url;
-  if (avatarUrl?.startsWith(prefix)) validKeys.add(avatarUrl.slice(prefix.length));
+  keep(avatarUrl);
   validKeys.add(`${userId}/avatar.jpg`);
 
   // Also keep anything referenced on this device. A climb/session whose cloud
@@ -751,9 +764,7 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
   // permanently deleted before the next sync could save the reference.
   const [localClimbs, localSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
   [...localClimbs, ...localSessions].forEach(item => {
-    [...(item.mediaUris ?? []), ...(item.mediaUri ? [item.mediaUri] : [])].forEach(url => {
-      if (url.startsWith(prefix)) validKeys.add(url.slice(prefix.length));
-    });
+    [...(item.mediaUris ?? []), ...(item.mediaUri ? [item.mediaUri] : [])].forEach(keep);
   });
 
   const orphaned = allKeys.filter(k => !validKeys.has(k));

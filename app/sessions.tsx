@@ -35,6 +35,7 @@ import { DaySession, sessionStats, mergeClimbs, sessionTimeOfDay, formatSessionL
 import SessionCard, { prefetchSessionCards } from '../components/SessionCard';
 import { SessionStatsBlock } from '../components/SessionBreakdown';
 import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from '../components/PhotoViewer';
+import VideoPlaceholder, { isVideoUri } from '../components/VideoPlaceholder';
 
 // Defined at module scope so it never remounts when SessionsScreen re-renders.
 // Owns the keyboardDidShow listener so scroll fires reliably after keyboard animation.
@@ -1115,7 +1116,9 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                     delayLongPress={400}
                     style={{ marginRight: SPACING.sm }}
                   >
-                    <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                    {isVideoUri(item.uri)
+                      ? <VideoPlaceholder style={styles.mediaThumbnail} />
+                      : <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -1348,7 +1351,9 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                     delayLongPress={400}
                     style={{ marginRight: SPACING.sm }}
                   >
-                    <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />
+                    {isVideoUri(item.uri)
+                      ? <VideoPlaceholder style={styles.mediaThumbnail} />
+                      : <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
