@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   ScrollView, Alert, Dimensions,
@@ -8,9 +8,10 @@ import * as Sharing from 'expo-sharing';
 let RNShare: any = null;
 try { RNShare = require('react-native-share').default; } catch (_) {}
 
-import SessionShareCard from './SessionShareCard';
-import SessionShareCardVertical from './SessionShareCardVertical';
-import SessionShareCardStrava from './SessionShareCardStrava';
+import EssentialsCard from './share/EssentialsCard';
+import RecapCard from './share/RecapCard';
+import HomageCard from './share/HomageCard';
+import { computeShareStats } from './share/shareStats';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS, SPACING, Climb } from '../utils/theme';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
@@ -38,20 +39,57 @@ interface Props {
 
 const FACEBOOK_APP_ID = '2188945488595075';
 
+// All three designs are transparent stickers: white type meant to sit over
+// the climber's own photo or video in a story.
 const SHARE_CARDS = [
-  { label: 'Card',                hint: null,                            transparent: false, vertical: true,  strava: false, stravasolid: false, instagramMode: 'background' as const },
-  { label: 'Transparent Card',    hint: 'Save & place as story sticker', transparent: true,  vertical: true,  strava: false, stravasolid: false, instagramMode: 'sticker' as const },
-  { label: 'Sticker',             hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: true,  instagramMode: 'sticker' as const },
-  { label: 'Transparent Sticker', hint: 'Save & place as story sticker', transparent: false, vertical: false, strava: true,  stravasolid: false, instagramMode: 'sticker' as const },
-];
+  { label: 'The Essentials', kind: 'essentials', layout: 'vertical' },
+  { label: 'The Essentials', kind: 'essentials', layout: 'horizontal' },
+  { label: 'Session Recap',  kind: 'recap',      layout: 'vertical' },
+  { label: 'Session Recap',  kind: 'recap',      layout: 'horizontal' },
+  { label: 'Homage',         kind: 'homage',     layout: 'vertical' },
+] as const;
+const STICKER_HINT = 'Save & place as story sticker';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+
+// Shrinks a card's on-screen preview to fit its page without changing the
+// card's own layout, so the ViewShot capture inside stays full size. The card
+// keeps its natural size in normal flow; negative margins give back the space
+// the scale-down frees. (Absolute positioning made the card re-measure against
+// the shrunken box and collapse to a sliver.)
+function FitPreview({ maxHeight, children }: { maxHeight: number; children: React.ReactNode }) {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const scale = size ? Math.min(1, maxHeight / size.h, (SCREEN_WIDTH - 32) / size.w) : 1;
+  const trimV = size ? (size.h * (1 - scale)) / 2 : 0;
+  return (
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+      <View
+        onLayout={e => {
+          const { width, height } = e.nativeEvent.layout;
+          if (!size || size.w !== width || size.h !== height) setSize({ w: width, h: height });
+        }}
+        style={{ transform: [{ scale }], marginVertical: -trimV }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 export default function ShareModal({ visible, data, accentColor, onDismiss }: Props) {
   const [cardIndex, setCardIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const cardRefs = useRef<(ViewShot | null)[]>([]);
   const preCapturedUri = useRef<string | null>(null);
+  const [pageHeight, setPageHeight] = useState(10000);
+  const stats = useMemo(() => (data ? computeShareStats(data) : null), [data]);
+
+  // The carousel remounts at the first card each time the sheet opens, so the
+  // index must too — otherwise the dots and Share pointed at the last card
+  // viewed in a previous opening while the first card was on screen.
+  useEffect(() => {
+    if (visible) setCardIndex(0);
+  }, [visible]);
 
   // Pre-capture the current card in the background after the modal finishes opening,
   // so tapping Share doesn't have to wait for capture on the critical path.
@@ -77,12 +115,10 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
       const ref = cardRefs.current[cardIndex];
       const uri = preCapturedUri.current ?? await (ref as any)?.capture();
       if (!uri) { Alert.alert('Error', 'Card not ready yet. Try again.'); return; }
-      const mode = SHARE_CARDS[cardIndex].instagramMode;
-      await RNShare.shareSingle({
+            await RNShare.shareSingle({
         social: RNShare.Social.INSTAGRAM_STORIES,
         appId: FACEBOOK_APP_ID,
-        backgroundImage: mode === 'background' ? uri : undefined,
-        stickerImage: mode === 'sticker' ? uri : undefined,
+        stickerImage: uri,
         backgroundTopColor: '#0A0A0A',
         backgroundBottomColor: '#0A0A0A',
         attributionURL: 'https://apps.apple.com/app/id6762497120',
@@ -123,61 +159,23 @@ export default function ShareModal({ visible, data, accentColor, onDismiss }: Pr
           onMomentumScrollEnd={e => {
             setCardIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
           }}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={{ alignItems: 'center' }}
+          style={{ flex: 1 }}
+          onLayout={e => setPageHeight(e.nativeEvent.layout.height - 64)}
+          contentContainerStyle={{ alignItems: 'stretch' }}
         >
           {SHARE_CARDS.map((card, i) => (
             <View key={i} style={styles.cardPage}>
-              <ViewShot ref={ref => { cardRefs.current[i] = ref; }} options={{ format: 'png', quality: 1 }}>
-                {data && (card.strava ? (
-                  <SessionShareCardStrava
-                    date={data.date}
-                    accentColor={accentColor}
-                    solid={card.stravasolid}
-                    climbs={data.climbs}
-                    climbCount={data.climbCount}
-                    sendCount={data.sendCount}
-                    flashCount={data.flashCount}
-                    hardestGrade={data.hardestGrade}
-                    climbType={data.climbType}
-                    friendName={data.friendName}
-                    location={data.location}
-                    climbingWith={data.climbingWith}
-                  />
-                ) : card.vertical ? (
-                  <SessionShareCardVertical
-                    date={data.date}
-                    accentColor={accentColor}
-                    variant={card.transparent ? 'transparent' : 'solid'}
-                    climbs={data.climbs}
-                    climbCount={data.climbCount}
-                    sendCount={data.sendCount}
-                    flashCount={data.flashCount}
-                    hardestGrade={data.hardestGrade}
-                    climbType={data.climbType}
-                    friendName={data.friendName}
-                    location={data.location}
-                    title={data.title}
-                    climbingWith={data.climbingWith}
-                  />
-                ) : (
-                  <SessionShareCard
-                    date={data.date}
-                    accentColor={accentColor}
-                    transparent={card.transparent}
-                    climbs={data.climbs}
-                    climbCount={data.climbCount}
-                    sendCount={data.sendCount}
-                    flashCount={data.flashCount}
-                    hardestGrade={data.hardestGrade}
-                    climbType={data.climbType}
-                    friendName={data.friendName}
-                    location={data.location}
-                  />
-                ))}
-              </ViewShot>
+              <FitPreview maxHeight={pageHeight - 48}>
+                <ViewShot ref={ref => { cardRefs.current[i] = ref; }} options={{ format: 'png', quality: 1 }}>
+                  {stats && (
+                    card.kind === 'essentials' ? <EssentialsCard stats={stats} layout={card.layout} />
+                    : card.kind === 'recap' ? <RecapCard stats={stats} layout={card.layout} />
+                    : <HomageCard stats={stats} />
+                  )}
+                </ViewShot>
+              </FitPreview>
               <Text style={styles.cardLabel}>{card.label}</Text>
-              <Text style={styles.cardHint}>{card.hint ?? ''}</Text>
+              <Text style={styles.cardHint}>{STICKER_HINT}</Text>
             </View>
           ))}
         </ScrollView>
@@ -222,8 +220,8 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 160,
-    paddingBottom: SPACING.xl,
+    paddingTop: 64,   // clear the Dynamic Island; tall cards (Recap) need the room
+    paddingBottom: SPACING.sm,
   },
   cardLabel: {
     marginTop: SPACING.sm,
