@@ -354,7 +354,7 @@ export default function AccountScreen() {
         {/* Top row: avatar + name/username/hometown */}
         <View style={styles.profileTop}>
           <TouchableOpacity
-            ref={(localAvatarUri ?? avatarUrl) ? registerAvatar((localAvatarUri ?? avatarUrl)!) : undefined}
+            ref={(localAvatarUri ?? avatarUrl) ? registerAvatar((localAvatarUri ?? avatarUrl)!, 40) : undefined}
             onPress={() => (localAvatarUri ?? avatarUrl) ? setAvatarViewerOpen(true) : handlePickPhoto()}
             onLongPress={handlePickPhoto}
             activeOpacity={0.8}

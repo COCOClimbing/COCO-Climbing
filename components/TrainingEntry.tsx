@@ -111,7 +111,7 @@ export function MediaBox({ uris, types }: { uris: string[]; types?: ('photo' | '
             disabled={!isPhoto(i)}
             onPress={() => setViewerIndex(photos.indexOf(uri))}
           >
-            <Image ref={register(uri)} source={{ uri }} style={styles.media} resizeMode="cover" />
+            <Image ref={register(uri, 8)} source={{ uri }} style={styles.media} resizeMode="cover" />
           </TouchableOpacity>
         ))}
       </ScrollView></TabSwipeGuard>

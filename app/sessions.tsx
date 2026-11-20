@@ -1118,7 +1118,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                   >
                     {isVideoUri(item.uri)
                       ? <VideoPlaceholder style={styles.mediaThumbnail} />
-                      : <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
+                      : <Image ref={registerPhoto(item.uri, 8)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -1353,7 +1353,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
                   >
                     {isVideoUri(item.uri)
                       ? <VideoPlaceholder style={styles.mediaThumbnail} />
-                      : <Image ref={registerPhoto(item.uri)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
+                      : <Image ref={registerPhoto(item.uri, 8)} source={{ uri: item.uri }} style={styles.mediaThumbnail} resizeMode="cover" />}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity

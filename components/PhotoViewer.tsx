@@ -21,11 +21,12 @@ const measure = (el: Measurable) => new Promise<{ x: number; y: number; width: n
 
 // Where each photo's thumbnail sits on screen, keyed by uri, so a swiped-away photo
 // can shrink back onto it. Attach `register(uri)` as the thumbnail's ref and pass
-// `origins` to PhotoViewer.
+// `origins` to PhotoViewer. Pass the thumbnail's corner radius so the photo rounds
+// its corners into the same shape as it lands.
 export function usePhotoOrigins() {
   const origins = useRef(new Map<string, Measurable>()).current;
-  const register = (uri: string) => (el: Measurable | null) => {
-    if (el) origins.set(uri, el);
+  const register = (uri: string, radius = 0) => (el: Measurable | null) => {
+    if (el) { (el as any).__photoRadius = radius; origins.set(uri, el); }
     else origins.delete(uri);
   };
   return { origins, register };
@@ -76,7 +77,7 @@ export default function PhotoViewer({ uris, initialIndex, onClose, origins, clip
     if (!visible) return null;
     clipTop.setValue(top);
     clipBottom.setValue(height - bottom);
-    return r;
+    return { ...r, radius: (el as any).__photoRadius ?? 0 };
   };
   const topInset = Animated.multiply(clip, clipTop);
   const bottomInset = Animated.multiply(clip, clipBottom);

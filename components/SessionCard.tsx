@@ -402,7 +402,7 @@ export default function SessionCard({
             <NaturalPhoto
               key={idx}
               uri={item.uri}
-              viewRef={registerPhoto(item.uri)}
+              viewRef={registerPhoto(item.uri, 10)}
               onPress={() => { setViewerUris(allMedia.map(m => m.uri)); setViewerIndex(idx); }}
             />
           ))}

@@ -3,7 +3,7 @@ import { ScrollView, Image, Animated, Easing } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 
-export type Rect = { x: number; y: number; width: number; height: number };
+export type Rect = { x: number; y: number; width: number; height: number; radius?: number };
 
 interface Props {
   uri: string;
@@ -37,6 +37,12 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
   const tx = useRef(new Animated.Value(0)).current;
   const ty = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  // Crop window around the photo (pre-scale coords). Untouched until a landing, when
+  // it narrows to the thumbnail's shape and rounds its corners as the photo shrinks.
+  // Layout props can't use the native driver, so this lives on its own inner view.
+  const cropW = useRef(new Animated.Value(width)).current;
+  const cropH = useRef(new Animated.Value(height * IMAGE_HEIGHT_RATIO)).current;
+  const cropRadius = useRef(new Animated.Value(0)).current;
 
   // Native double-tap recognizer — a JS tap timer misses the second tap once the
   // ScrollView is zoomed. Own root view because the viewers render inside a Modal.
@@ -81,6 +87,16 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
       // Land the photo on its thumbnail: centre on it, scaled to cover it
       const shown = displayedSize();
       const s = Math.max(origin.width / shown.width, origin.height / shown.height);
+      cropW.setValue(shown.width);
+      cropH.setValue(shown.height);
+      cropRadius.setValue(0);
+      const crop = (v: Animated.Value, toValue: number) =>
+        Animated.timing(v, { toValue, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+      Animated.parallel([
+        crop(cropW, origin.width / s),
+        crop(cropH, origin.height / s),
+        crop(cropRadius, (origin.radius ?? 0) / s),
+      ]).start();
       settle(origin.x + origin.width / 2 - width / 2, origin.y + origin.height / 2 - height / 2, s, 1, onDismiss, 1);
     } else {
       // Thumbnail not on screen — just drop it out the bottom
@@ -131,7 +147,8 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
         scrollEventThrottle={16}
       >
         <GestureDetector gesture={Gesture.Simultaneous(doubleTap, swipeDown)}>
-          <Animated.View style={{ width, height, justifyContent: 'center', transform: [{ translateX: tx }, { translateY: ty }, { scale }] }}>
+          <Animated.View style={{ width, height, justifyContent: 'center', alignItems: 'center', transform: [{ translateX: tx }, { translateY: ty }, { scale }] }}>
+            <Animated.View style={{ width: cropW, height: cropH, borderRadius: cropRadius, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
             {isVideoUri(uri) ? (
               <VideoPlaceholder style={{ width, height: height * IMAGE_HEIGHT_RATIO }} />
             ) : (
@@ -142,6 +159,7 @@ export default function ZoomablePhoto({ uri, width, height, onDismiss, progress,
                 onLoad={e => { imageSize.current = e.nativeEvent.source; }}
               />
             )}
+            </Animated.View>
           </Animated.View>
         </GestureDetector>
       </ScrollView>

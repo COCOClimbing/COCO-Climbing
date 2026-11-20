@@ -652,7 +652,7 @@ function FriendDetailView({
         <View style={detailStyles.profileHeader}>
           <View style={detailStyles.profileTop}>
             <TouchableOpacity
-              ref={avatarPhotoUrl ? registerAvatar(avatarPhotoUrl) : undefined}
+              ref={avatarPhotoUrl ? registerAvatar(avatarPhotoUrl, 40) : undefined}
               disabled={!avatarPhotoUrl}
               onPress={() => setAvatarViewerOpen(true)}
               activeOpacity={0.8}
@@ -2528,7 +2528,7 @@ export default function FriendsScreen() {
             >
               <PhotoGroup uris={stripPhotos}>
               {stripPhotos.map((uri, i) => (
-                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(stripPhotos); setViewerIndex(i); setViewerVisible(true); }} />
+                <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri, 10)} onPress={() => { setViewerPhotos(stripPhotos); setViewerIndex(i); setViewerVisible(true); }} />
               ))}
               </PhotoGroup>
             </ScrollView></TabSwipeGuard>
@@ -2624,7 +2624,7 @@ export default function FriendsScreen() {
                   >
                     <PhotoGroup uris={entry.sessionPhotos}>
                     {entry.sessionPhotos.map((uri, i) => (
-                      <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
+                      <NaturalPhoto key={i} uri={uri} initialWidth={entry.photoWidths?.[uri]} viewRef={registerPhoto(uri, 10)} onPress={() => { setViewerPhotos(entry.sessionPhotos!); setViewerIndex(i); setViewerVisible(true); }} />
                     ))}
                     </PhotoGroup>
                   </ScrollView></TabSwipeGuard>
