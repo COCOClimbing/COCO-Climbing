@@ -3,6 +3,10 @@ import { gradeToNum, isCustomGrade, CHART_STYLES, Discipline } from '../../utils
 import { isTrainingClimb } from '../../utils/sessionHelpers';
 import type { ShareData } from '../ShareModal';
 
+// Just the climb fields the cards read. Your own sessions pass full Climbs;
+// feed entries (friends' and your own posts) pass this slimmer shape.
+export type ShareClimb = Pick<Climb, 'type' | 'outcome' | 'grade' | 'gradeSystem' | 'attempts'>;
+
 // Everything a share card can show, worked out once from either a full climb
 // list (your own sessions) or the summary counts a friend's feed entry carries.
 export interface ShareStats {
@@ -26,7 +30,7 @@ function typeLabel(id?: string | null): string | null {
 }
 
 // The type with the most climbs; ties go to whichever was logged first.
-function topType(climbs: Climb[]): string | undefined {
+function topType(climbs: ShareClimb[]): string | undefined {
   const counts: Record<string, number> = {};
   climbs.forEach(c => { counts[c.type] = (counts[c.type] ?? 0) + 1; });
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -44,7 +48,7 @@ const SHORT_LABEL: Record<string, string> = {
 
 // A rope session that mixes rope types (e.g. Sport + TR + Auto) just says
 // "Ropes"; one rope type keeps its own name.
-function sideLabel(d: Discipline, climbs: Climb[], short: boolean): string {
+function sideLabel(d: Discipline, climbs: ShareClimb[], short: boolean): string {
   if (d === 'rope' && new Set(climbs.map(c => c.type)).size > 1) return 'Ropes';
   // Boulder and Board together: spelled out alone, but just "Boulder" in a
   // boulder + rope title so it stays short ("Boulder + Ropes").
@@ -53,7 +57,7 @@ function sideLabel(d: Discipline, climbs: Climb[], short: boolean): string {
   return (short ? (top && SHORT_LABEL[top]) : typeLabel(top)) ?? 'Climbing';
 }
 
-function hardestSend(climbs: Climb[]): string | null {
+function hardestSend(climbs: ShareClimb[]): string | null {
   return [...climbs]
     .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isCustomGrade(c.gradeSystem))
     .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0]?.grade ?? null;
@@ -84,7 +88,7 @@ export function computeShareStats(data: ShareData): ShareStats {
 
   // Group by discipline so a boulder + rope session gets a two-part title and a
   // hardest grade for each, rather than comparing V grades against YDS.
-  const byDiscipline: Partial<Record<Discipline, Climb[]>> = {};
+  const byDiscipline: Partial<Record<Discipline, ShareClimb[]>> = {};
   graded.forEach(c => {
     const d = disciplineOf(c.type);
     if (d) (byDiscipline[d] ??= []).push(c);

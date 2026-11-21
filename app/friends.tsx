@@ -90,6 +90,7 @@ import {
   getProfileById,
   getOpenSessionIds,
   finishedSessions,
+  toShareClimb,
 } from '../utils/friendsApi';
 import { blockUser, unblockUser, getBlockedUserIds, getBlockedByUserIds, reportContent } from '../utils/moderationApi';
 import ShakaIcon from '../components/ShakaIcon';
@@ -949,6 +950,7 @@ function FriendDetailView({
             : shareFriendEntry
             ? {
                 date: shareFriendEntry.sessionDate,
+                climbs: shareFriendEntry.climbs,
                 climbCount: shareFriendEntry.climbCount,
                 sendCount: shareFriendEntry.sends,
                 flashCount: shareFriendEntry.flashes,
@@ -1375,7 +1377,7 @@ export default function FriendsScreen() {
         ];
         const climbEnvs = [...new Set(sessionClimbs.map(c => c.environment).filter(Boolean))];
         const environment = climbEnvs.length === 1 ? climbEnvs[0] : s.environment;
-        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: sessionStartTime(s.startedAt, sessionClimbs), climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
+        summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: sessionStartTime(s.startedAt, sessionClimbs), climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, climbs: sessionClimbs, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
       // Add sessions where the current user was tagged (even if not following the poster)
@@ -1467,6 +1469,7 @@ export default function FriendsScreen() {
           hardestGradeSystem,
           environment: s.environment ?? 'indoor',
           climbType: climbs[0]?.type ?? undefined,
+          climbs: climbs.map(toShareClimb),
           training: trainingKind(climbs),
           sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined,
           sessionId: s.id,
@@ -1558,7 +1561,7 @@ export default function FriendsScreen() {
             const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
             const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
             const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
-            summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
+            summaries.push({ friend: f, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, climbs: sessionClimbs.map(toShareClimb), training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
           }
         } catch { continue; }
       }
@@ -2670,6 +2673,7 @@ export default function FriendsScreen() {
         visible={!!shareEntry}
         data={shareEntry ? {
           date: shareEntry.sessionDate,
+          climbs: shareEntry.climbs,
           climbCount: shareEntry.climbCount,
           sendCount: shareEntry.sends,
           flashCount: shareEntry.flashes,

@@ -11,14 +11,14 @@ try { RNShare = require('react-native-share').default; } catch (_) {}
 import EssentialsCard from './share/EssentialsCard';
 import RecapCard from './share/RecapCard';
 import HomageCard from './share/HomageCard';
-import { computeShareStats } from './share/shareStats';
+import { computeShareStats, ShareClimb } from './share/shareStats';
 import { Ionicons } from '@expo/vector-icons';
-import { FONTS, SPACING, Climb } from '../utils/theme';
+import { FONTS, SPACING } from '../utils/theme';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
 
 export interface ShareData {
   date: string;
-  climbs?: Climb[];
+  climbs?: ShareClimb[];
   location?: string;
   title?: string;
   climbCount?: number;

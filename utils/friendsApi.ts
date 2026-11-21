@@ -5,6 +5,12 @@ import { getGradeDifficulty } from './theme';
 import { isCustomGrade } from './gradeUtils';
 import { trainingKind, TrainingKind, climbCount, sessionStartTime } from './sessionHelpers';
 import { format } from 'date-fns';
+import type { ShareClimb } from '../components/share/shareStats';
+
+// A climb (database row or local Climb), cut down to what share cards read.
+export function toShareClimb(c: any): ShareClimb {
+  return { type: c.type, outcome: c.outcome, grade: c.grade ?? '', gradeSystem: c.grade_system ?? c.gradeSystem, attempts: c.attempts ?? 1 };
+}
 
 export interface FriendProfile {
   id: string;
@@ -47,6 +53,10 @@ export type SessionSummary = {
   hardestGradeSystem: string | null;
   environment?: string;
   climbType?: string;
+  // The session's climbs, slimmed to what share cards need, so sharing a feed
+  // post gets the same Type ("Boulder + TR", "Ropes"), Hardest and Attempts
+  // as sharing from Sessions.
+  climbs?: ShareClimb[];
   training?: TrainingKind | null; // set when the session is only hangboard/lift
   partners?: { id: string; name: string; avatar_url?: string | null }[];
   sessionPhotos?: string[];
@@ -189,7 +199,7 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
     const sessionNotes = friendSessionId ? (sessionNotesMap.get(friendSessionId) ?? undefined) : undefined;
     const sessionTitle = friendSessionId ? (sessionTitleMap.get(friendSessionId) ?? undefined) : undefined;
     const sessionLocation = friendSessionId ? (sessionLocationMap.get(friendSessionId) ?? undefined) : undefined;
-    summaries.push({ friend, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
+    summaries.push({ friend, sessionDate, sessionTime: firstClimbTime, climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, climbs: sessionClimbs.map(toShareClimb), training: trainingKind(sessionClimbs), sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, sessionId: friendSessionId, partners, notes: sessionNotes, title: sessionTitle, location: sessionLocation });
   }
 
   summaries.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
