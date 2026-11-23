@@ -27,6 +27,7 @@ import { TabSwipeGuard } from '../utils/useTabSwipe';
 import { StreakBanner } from './StreakBadge';
 import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 import BoldIcon from './BoldIcon';
+import { sessionTypeSummary, stackTypeLabel } from './share/shareStats';
 
 const PHOTO_HEIGHT = 220;
 
@@ -112,6 +113,13 @@ export default function ActivityCard({
   entry, colors, currentUserId, myAvatar, daysBack, displayGrade, onShare, onViewProfile, readOnly,
 }: ActivityCardProps) {
   const isOutdoor = entry.environment === 'outdoor';
+  // Same Type label and per-side Hardest as the share cards ("Boulder + TR",
+  // "V4 / 5.11a"), with each grade in the viewer's system. Falls back to the
+  // single-type summary for training-only posts or entries without climbs.
+  const typeSummary = entry.climbs ? sessionTypeSummary(entry.climbs) : null;
+  const hardestLabel = typeSummary && typeSummary.hardest.length
+    ? typeSummary.hardest.map(h => displayGrade(h.grade, h.gradeSystem)).join(' / ')
+    : entry.hardestGrade ? displayGrade(entry.hardestGrade, entry.hardestGradeSystem) : null;
 
   const [climbsExpanded, setClimbsExpanded] = useState(false);
   // Climb/lift/hang opened from the expanded list (read-only)
@@ -353,8 +361,8 @@ export default function ActivityCard({
       {/* Stats */}
       <View style={styles.cardStatsRow}>
         <View style={styles.cardStat}>
-          <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
-            {CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—'}
+          <Text style={[styles.cardStatNum, { color: colors.textPrimary }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+            {stackTypeLabel(typeSummary?.typeLabel) ?? CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—'}
           </Text>
           <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
         </View>
@@ -363,11 +371,11 @@ export default function ActivityCard({
           <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{entry.climbCount}</Text>
           <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Climbs</Text>
         </View>
-        {entry.hardestGrade ? (
+        {hardestLabel ? (
           <>
             <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
             <View style={styles.cardStat}>
-              <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
+              <Text style={[styles.cardStatNum, { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{hardestLabel}</Text>
               <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
             </View>
           </>
@@ -539,7 +547,7 @@ const styles = StyleSheet.create({
   partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   partnerName: { fontSize: 12, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
-  cardStat: { flex: 1, alignItems: 'center' },
+  cardStat: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
   cardStatNum: { fontSize: 18, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
   cardStatLbl: { fontSize: 12, fontFamily: FONTS.family.regular },
   cardStatDivider: { width: 1, height: 32 },

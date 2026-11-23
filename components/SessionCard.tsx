@@ -25,6 +25,7 @@ import PhotoViewer, { usePhotoOrigins, PhotoClipContext } from './PhotoViewer';
 import { TabSwipeGuard } from '../utils/useTabSwipe';
 import VideoPlaceholder, { isVideoUri } from './VideoPlaceholder';
 import BoldIcon from './BoldIcon';
+import { sessionTypeSummary, stackTypeLabel } from './share/shareStats';
 
 const PHOTO_HEIGHT = 220;
 
@@ -167,7 +168,10 @@ export default function SessionCard({
   // A lift/hangboard-only session shows its training type and no climb count.
   const trainingOnly = training !== null;
   const typeSource = hardest ?? day.climbs.find(c => !isTrainingClimb(c));
-  const climbTypeLabel = training ? TRAINING_KIND_LABEL[training] : (CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—');
+  // Same Type label and per-side Hardest as the share cards ("Boulder + TR", "V4 / 5.11a").
+  const typeSummary = sessionTypeSummary(day.climbs);
+  const climbTypeLabel = training ? TRAINING_KIND_LABEL[training] : (stackTypeLabel(typeSummary?.typeLabel) ?? CLIMB_TYPES.find(t => t.id === typeSource?.type)?.label ?? '—');
+  const hardestLabel = typeSummary?.hardest.length ? typeSummary.hardest.map(h => h.grade).join(' / ') : hardest?.grade;
 
   const cached = socialCache[day.sessionId];
   const [sessionLikes, setSessionLikes] = useState<SessionLike[]>(cached?.likes ?? []);
@@ -353,7 +357,7 @@ export default function SessionCard({
         ) : (
           <>
             <View style={styles.cardStat}>
-              <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>{climbTypeLabel}</Text>
+              <Text style={[styles.cardStatNum, { color: colors.textPrimary }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{climbTypeLabel}</Text>
               <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
             </View>
             {/* Empty columns keep Type in the same left-hand spot as on climbing cards */}
@@ -376,7 +380,7 @@ export default function SessionCard({
               <>
                 <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.cardStat}>
-                  <Text style={[styles.cardStatNum, { color: colors.accent }]}>{hardest.grade}</Text>
+                  <Text style={[styles.cardStatNum, { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{hardestLabel}</Text>
                   <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
                 </View>
               </>
@@ -560,7 +564,7 @@ const styles = StyleSheet.create({
   partnerAvatarText: { fontSize: 9, fontFamily: FONTS.family.bold },
   partnerName: { fontSize: 12, fontFamily: FONTS.family.medium },
   cardStatsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, gap: 0 },
-  cardStat: { flex: 1, alignItems: 'center' },
+  cardStat: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
   cardStatNum: { fontSize: 18, fontFamily: FONTS.family.bold, letterSpacing: -0.3, marginBottom: 2, textAlign: 'center' },
   cardStatLbl: { fontSize: 12, fontFamily: FONTS.family.regular },
   cardStatDivider: { width: 1, height: 32 },

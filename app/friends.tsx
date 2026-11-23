@@ -44,6 +44,7 @@ import SwipeableComment from '../components/SwipeableComment';
 import LikesAvatarRow from '../components/LikesAvatarRow';
 import SessionCard from '../components/SessionCard';
 import ActivityCard from '../components/ActivityCard';
+import { sessionTypeSummary, stackTypeLabel } from '../components/share/shareStats';
 import { formatRelativeDate } from '../utils/formatRelativeDate';
 import { format } from 'date-fns';
 import {
@@ -2337,6 +2338,12 @@ export default function FriendsScreen() {
 
   function renderPostTop(entry: SessionSummary, inDetail: boolean) {
     const isOutdoor = entry.environment === 'outdoor';
+    // Same Type label and per-side Hardest as the share cards ("Boulder + TR",
+    // "V4 / 5.11a"), each grade in the viewer's system.
+    const typeSummary = entry.climbs ? sessionTypeSummary(entry.climbs) : null;
+    const hardestLabel = typeSummary && typeSummary.hardest.length
+      ? typeSummary.hardest.map(h => displayGrade(h.grade, h.gradeSystem)).join(' / ')
+      : entry.hardestGrade ? displayGrade(entry.hardestGrade, entry.hardestGradeSystem) : null;
     return (
       <>
     {/* ── Header: avatar + name + date + env + more menu ── */}
@@ -2410,8 +2417,8 @@ export default function FriendsScreen() {
     {/* ── Stats ── */}
     <TouchableOpacity style={styles.cardStatsRow} onPress={inDetail ? undefined : () => handleToggleSession(entry)} disabled={inDetail} activeOpacity={0.75}>
       <View style={styles.cardStat}>
-        <Text style={[styles.cardStatNum, { color: colors.textPrimary }]}>
-          {entry.training ? TRAINING_KIND_LABEL[entry.training] : (CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
+        <Text style={[styles.cardStatNum, { color: colors.textPrimary }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {entry.training ? TRAINING_KIND_LABEL[entry.training] : (stackTypeLabel(typeSummary?.typeLabel) ?? CLIMB_TYPES.find(t => t.id === entry.climbType)?.label ?? '—')}
         </Text>
         <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Type</Text>
       </View>
@@ -2432,11 +2439,11 @@ export default function FriendsScreen() {
           </View>
         </>
       )}
-      {entry.hardestGrade ? (
+      {hardestLabel ? (
         <>
           <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
           <View style={styles.cardStat}>
-            <Text style={[styles.cardStatNum, { color: colors.accent }]}>{displayGrade(entry.hardestGrade, entry.hardestGradeSystem)}</Text>
+            <Text style={[styles.cardStatNum, { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{hardestLabel}</Text>
             <Text style={[styles.cardStatLbl, { color: colors.textSecondary }]}>Hardest</Text>
           </View>
         </>
@@ -3093,7 +3100,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     gap: 0,
   },
-  cardStat: { flex: 1, alignItems: 'center' },
+  cardStat: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
   cardStatNum: {
     fontSize: 18,
     fontFamily: FONTS.family.bold,

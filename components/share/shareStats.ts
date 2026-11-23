@@ -57,10 +57,39 @@ function sideLabel(d: Discipline, climbs: ShareClimb[], short: boolean): string 
   return (short ? (top && SHORT_LABEL[top]) : typeLabel(top)) ?? 'Climbing';
 }
 
-function hardestSend(climbs: ShareClimb[]): string | null {
+function hardestSendClimb(climbs: ShareClimb[]): ShareClimb | null {
   return [...climbs]
     .filter(c => (c.outcome === 'send' || c.outcome === 'flash') && !isCustomGrade(c.gradeSystem))
-    .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0]?.grade ?? null;
+    .sort((a, b) => gradeToNum(b.grade, b.gradeSystem) - gradeToNum(a.grade, a.gradeSystem))[0] ?? null;
+}
+
+function hardestSend(climbs: ShareClimb[]): string | null {
+  return hardestSendClimb(climbs)?.grade ?? null;
+}
+
+// Type label and the hardest send on each side (boulder, then rope), for
+// places that format grades themselves, e.g. feed posts converting to the
+// viewer's grade system. Null when there are no graded climbs (training only).
+export function sessionTypeSummary(climbs: ShareClimb[]): {
+  typeLabel: string;
+  hardest: { grade: string; gradeSystem: string }[];
+} | null {
+  const graded = climbs.filter(c => !isTrainingClimb(c));
+  const byDiscipline: Partial<Record<Discipline, ShareClimb[]>> = {};
+  graded.forEach(c => {
+    const d = disciplineOf(c.type);
+    if (d) (byDiscipline[d] ??= []).push(c);
+  });
+  const disciplines = (['boulder', 'rope'] as Discipline[]).filter(d => byDiscipline[d]?.length);
+  if (disciplines.length === 0) return null;
+  const typeLabel = disciplines.length > 1
+    ? disciplines.map(d => sideLabel(d, byDiscipline[d]!, true)).join(' + ')
+    : sideLabel(disciplines[0], byDiscipline[disciplines[0]]!, false);
+  const hardest = disciplines
+    .map(d => hardestSendClimb(byDiscipline[d]!))
+    .filter((c): c is ShareClimb => !!c)
+    .map(c => ({ grade: c.grade, gradeSystem: c.gradeSystem }));
+  return { typeLabel, hardest };
 }
 
 export function computeShareStats(data: ShareData): ShareStats {
@@ -119,4 +148,9 @@ export function computeShareStats(data: ShareData): ShareStats {
     hardest: hardestParts.length ? hardestParts.join(' / ') : null,
     location: data.location,
   };
+}
+
+// Two-part labels break after the "+" for narrow columns: "Boulder +" over "Ropes".
+export function stackTypeLabel(label?: string | null): string | null {
+  return label ? label.replace(' + ', ' +\n') : null;
 }
