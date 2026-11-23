@@ -3,7 +3,10 @@
 -- Server side of utils/streaks.ts; keep the two in step.
 -- A Monday–Sunday week counts when it has at least one session (not deleted)
 -- with at least one logged entry (climbs, lift and hangboard all count).
--- The streak is the run of counted weeks in a row.
+-- The streak is the run of counted weeks in a row, capped by the time it
+-- actually covers: least(weeks in a row, (last - first session) days / 7 + 1).
+-- 2026-11-23: added the cap, so a Saturday and the next Monday (two days
+-- apart) no longer make a "2 week streak". Weekly climbers see no change.
 --
 -- Both functions are SECURITY INVOKER, so sessions/climbs RLS still applies:
 -- a viewer only gets streaks for people whose sessions they can already see.
@@ -38,7 +41,9 @@ SECURITY INVOKER
 SET search_path = public
 AS $$
   WITH weeks AS (
-    SELECT DISTINCT wk FROM public.streak_sessions WHERE user_id = target_user_id
+    SELECT wk, min(left(date, 10)::date) AS first_day, max(left(date, 10)::date) AS last_day
+    FROM public.streak_sessions WHERE user_id = target_user_id
+    GROUP BY wk
   ),
   anchor AS (
     SELECT CASE
@@ -49,12 +54,19 @@ AS $$
   ),
   -- Gaps and islands: weeks in a row share the same (wk - n*7)
   numbered AS (
-    SELECT wk, wk - (row_number() OVER (ORDER BY wk))::int * 7 AS grp FROM weeks
-  )
-  SELECT COALESCE((
-    SELECT count(*)::int FROM numbered
+    SELECT wk, first_day, last_day,
+           wk - (row_number() OVER (ORDER BY wk))::int * 7 AS grp
+    FROM weeks
+  ),
+  run AS (
+    SELECT * FROM numbered
     WHERE grp = (SELECT n.grp FROM numbered n, anchor a WHERE n.wk = a.wk)
       AND wk <= (SELECT wk FROM anchor)
+  )
+  SELECT COALESCE((
+    SELECT least(count(*)::int, (max(last_day) - min(first_day)) / 7 + 1)
+    FROM run
+    HAVING count(*) > 0
   ), 0);
 $$;
 
@@ -79,28 +91,25 @@ AS $$
     SELECT ss.* FROM public.streak_sessions ss JOIN owners o USING (user_id)
   ),
   weeks AS (
-    SELECT DISTINCT user_id, wk FROM owned
+    SELECT user_id, wk, min(left(date, 10)::date) AS first_day, max(left(date, 10)::date) AS last_day
+    FROM owned GROUP BY user_id, wk
   ),
   numbered AS (
-    SELECT user_id, wk,
+    SELECT user_id, wk, first_day, last_day,
            wk - (row_number() OVER (PARTITION BY user_id ORDER BY wk))::int * 7 AS grp
     FROM weeks
-  ),
-  ranked AS (
-    SELECT user_id, wk,
-           row_number() OVER (PARTITION BY user_id, grp ORDER BY wk)::int AS streak
-    FROM numbered
   ),
   firsts AS (
     SELECT DISTINCT ON (user_id, wk) user_id, wk, id
     FROM owned
     ORDER BY user_id, wk, left(date, 10), started_at NULLS LAST, id
   ),
-  -- Last week of each run, with the run's length
+  -- Last week of each run, with the run's capped length
   run_ends AS (
-    SELECT user_id, max(wk) AS wk, max(streak) AS streak
-    FROM ranked r JOIN numbered n USING (user_id, wk)
-    GROUP BY user_id, n.grp
+    SELECT user_id, max(wk) AS wk,
+           least(count(*)::int, (max(last_day) - min(first_day)) / 7 + 1) AS streak
+    FROM numbered
+    GROUP BY user_id, grp
   )
   SELECT f.id, e.streak
   FROM firsts f
