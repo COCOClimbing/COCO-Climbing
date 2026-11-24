@@ -32,28 +32,26 @@ import { sessionTypeSummary, stackTypeLabel } from './share/shareStats';
 const PHOTO_HEIGHT = 220;
 
 function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
+  // Holds a portrait-shaped spot until the photo's real shape is known, so
+  // the post doesn't jump when it arrives (see NaturalPhoto in friends.tsx)
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (initialWidth) return;
-    Image.getSize(
-      uri,
-      (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)),
-      () => setFailed(true),
-    );
-  }, [uri, initialWidth]);
+  const shownWidth = imgWidth ?? Math.round(PHOTO_HEIGHT * 0.75);
 
   // Videos need COCO 1.1.7; show an update tile instead of skipping them
   if (isVideoUri(uri)) return <VideoPlaceholder style={{ width: Math.round(PHOTO_HEIGHT * 0.75), height: PHOTO_HEIGHT, borderRadius: 10 }} />;
-  if (failed || imgWidth === null) return null;
+  if (failed) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
+      <View ref={viewRef} style={{ width: shownWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)' }}>
         <Image
           source={{ uri }}
-          style={{ width: imgWidth, height: PHOTO_HEIGHT }}
+          style={{ width: shownWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
+          onLoad={e => {
+            const { width: w, height: h } = e.nativeEvent.source ?? {};
+            if (!imgWidth && w && h) setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
+          }}
           onError={() => setFailed(true)}
         />
       </View>

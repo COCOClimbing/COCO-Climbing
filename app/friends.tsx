@@ -157,32 +157,32 @@ const PHOTO_HEIGHT = 220;
 const PRELOAD_POSTS = 2;
 
 function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
+  // Until the photo's real shape is known it holds a portrait-shaped spot, so
+  // the post keeps its photo row from the start and nothing below it moves
+  // when the photo arrives. Its true width comes from the download itself
+  // (onLoad), not a separate size lookup.
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (initialWidth) return;
-    Image.getSize(
-      uri,
-      (w, h) => setImgWidth(Math.round(PHOTO_HEIGHT * w / h)),
-      () => setFailed(true),
-    );
-  }, [uri, initialWidth]);
+  const shownWidth = imgWidth ?? Math.round(PHOTO_HEIGHT * 0.75);
 
   const { opacity, onDone } = useGroupedPhoto(uri);
   useEffect(() => { if (failed) onDone(); }, [failed]);
 
   // Videos need COCO 1.1.7; show an update tile instead of skipping them
   if (isVideoUri(uri)) return <VideoPlaceholder style={{ width: Math.round(PHOTO_HEIGHT * 0.75), height: PHOTO_HEIGHT, borderRadius: 10 }} />;
-  if (failed || imgWidth === null) return null;
+  if (failed) return null;
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <Animated.View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
+      <Animated.View ref={viewRef} style={{ width: shownWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
         <Image
           source={{ uri }}
-          style={{ width: imgWidth, height: PHOTO_HEIGHT }}
+          style={{ width: shownWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
-          onLoad={onDone}
+          onLoad={e => {
+            const { width: w, height: h } = e.nativeEvent.source ?? {};
+            if (!imgWidth && w && h) setImgWidth(Math.round(PHOTO_HEIGHT * w / h));
+            onDone();
+          }}
           onError={() => setFailed(true)}
         />
       </Animated.View>
@@ -1582,18 +1582,14 @@ export default function FriendsScreen() {
         setDaysLoaded(14);
         return loadFeed(14, showLoading);
       }
-      // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size
-      // immediately. The first few posts' photos are downloaded too, so they
-      // appear with the feed instead of one by one; the rest just get sizes
-      // and download in the background.
+      // The first posts' photos are downloaded before the feed shows, so they
+      // appear with it. Later posts' photos are NOT queued here: iOS only
+      // loads a few images at a time, and queuing every photo in the feed up
+      // front made the avatars, the applaud icon and the top post's photos
+      // wait behind them (blank on screen). They load in screen order as
+      // their posts render, and hold their space until then (NaturalPhoto).
       const topUris = [...new Set(deduped.slice(0, PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))];
-      const restUris = [...new Set(deduped.slice(PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))].filter(u => !topUris.includes(u));
       const widthCache: Record<string, number> = {};
-      // Later posts' photos download in the background and size themselves
-      // when they render (NaturalPhoto). The feed used to wait for every one
-      // of them to download just to learn its size, with no time limit, which
-      // held the whole feed back on slow or distant connections.
-      restUris.forEach(uri => { Image.prefetch(uri).catch(() => {}); });
       const feedSessionIds = deduped.map(e => e.sessionId).filter((id): id is string => !!id);
       // Likes and comments load alongside the photos, so each post shows
       // up complete instead of its buttons and counts filling in afterward.
