@@ -79,6 +79,7 @@ import {
   likeSession,
   unlikeSession,
   getSessionComments,
+  getSocialForSessions,
   addSessionComment,
   deleteSessionComment,
   getCommentLikes,
@@ -1582,31 +1583,28 @@ export default function FriendsScreen() {
       const topUris = [...new Set(deduped.slice(0, PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))];
       const restUris = [...new Set(deduped.slice(PRELOAD_POSTS).flatMap(e => e.sessionPhotos ?? []))].filter(u => !topUris.includes(u));
       const widthCache: Record<string, number> = {};
+      // Later posts' photos download in the background and size themselves
+      // when they render (NaturalPhoto). The feed used to wait for every one
+      // of them to download just to learn its size, with no time limit, which
+      // held the whole feed back on slow or distant connections.
       restUris.forEach(uri => { Image.prefetch(uri).catch(() => {}); });
+      const feedSessionIds = deduped.map(e => e.sessionId).filter((id): id is string => !!id);
       // Likes and comments load alongside the photos, so each post shows
       // up complete instead of its buttons and counts filling in afterward.
-      const [, , social, streaks] = await Promise.all([
+      const [, socialBySession, streaks] = await Promise.all([
         // Capped so a slow connection can't hold the whole feed back.
         Promise.race([
           preloadPhotos(topUris, PHOTO_HEIGHT).then(w => { Object.assign(widthCache, w); }),
           new Promise<void>(resolve => setTimeout(resolve, 5000)),
         ]),
-        Promise.all(
-          restUris.map(uri => new Promise<void>(resolve => {
-            Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
-          }))
-        ),
-        Promise.all(
-          deduped.filter(e => e.sessionId).map(async e => {
-            const [likes, comments] = await Promise.all([
-              getSessionLikes(e.sessionId!).catch(() => [] as SessionLike[]),
-              getSessionComments(e.sessionId!).catch(() => [] as SessionComment[]),
-            ]);
-            return { key: `sid-${e.sessionId}`, likes, comments };
-          })
-        ),
-        getSessionStreaks(deduped.map(e => e.sessionId).filter((id): id is string => !!id)),
+        getSocialForSessions(feedSessionIds).catch(() => ({ likes: {}, comments: {} } as Awaited<ReturnType<typeof getSocialForSessions>>)),
+        getSessionStreaks(feedSessionIds),
       ]);
+      const social = feedSessionIds.map(id => ({
+        key: `sid-${id}`,
+        likes: socialBySession.likes[id] ?? ([] as SessionLike[]),
+        comments: socialBySession.comments[id] ?? ([] as SessionComment[]),
+      }));
       const commentIds = social.flatMap(x => x.comments.map(c => c.id));
       const commentLikes = commentIds.length > 0 ? await getCommentLikes(commentIds).catch(() => ({})) : {};
       const dedupedWithWidths = deduped.map(e => ({

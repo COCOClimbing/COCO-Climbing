@@ -15,7 +15,7 @@ import SwipeableComment from './SwipeableComment';
 import DiscussionScreen from './DiscussionScreen';
 import LikesAvatarRow from './LikesAvatarRow';
 import {
-  getSessionLikes, getSessionComments, getCommentLikes,
+  getSessionLikes, getSessionComments, getCommentLikes, getSocialForSessions,
   addSessionComment, deleteSessionComment, likeComment, unlikeComment,
   likeSession, unlikeSession,
   SessionLike, SessionComment,
@@ -54,13 +54,26 @@ export async function prefetchSessionCards(days: DaySession[], timeoutMs = 5000)
     // Downloads the photos too (not just their sizes) so they're cached and
     // show up with the card rather than filling in one by one afterward.
     preloadPhotos(uris, PHOTO_HEIGHT).then(widths => { Object.assign(photoWidthCache, widths); }),
-    ...needSocial.map(async d => {
+    // All sessions' likes and comments in a few requests, not three per card
+    (async () => {
+      if (needSocial.length === 0) return;
       try {
-        const [likes, comments] = await Promise.all([getSessionLikes(d.sessionId), getSessionComments(d.sessionId)]);
-        const commentLikes = comments.length > 0 ? await getCommentLikes(comments.map(c => c.id)).catch(() => ({})) : {};
-        socialCache[d.sessionId] = { likes, comments, commentLikes, at: Date.now() };
+        const ids = needSocial.map(d => d.sessionId);
+        const { likes, comments } = await getSocialForSessions(ids);
+        const allCommentIds = ids.flatMap(id => (comments[id] ?? []).map(c => c.id));
+        const commentLikes: Record<string, string[]> = allCommentIds.length > 0 ? await getCommentLikes(allCommentIds).catch(() => ({})) : {};
+        const at = Date.now();
+        for (const id of ids) {
+          const cs = comments[id] ?? [];
+          socialCache[id] = {
+            likes: likes[id] ?? [],
+            comments: cs,
+            commentLikes: Object.fromEntries(cs.filter(c => commentLikes[c.id]).map(c => [c.id, commentLikes[c.id]])),
+            at,
+          };
+        }
       } catch {}
-    }),
+    })(),
   ]);
   await Promise.race([work, new Promise<void>(resolve => setTimeout(resolve, timeoutMs))]);
 }

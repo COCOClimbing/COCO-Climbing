@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Linking, Animated, Easing } f
 import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
 import { supabase } from '../utils/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 Sentry.init({
   dsn: 'https://83a0125fccfc61e3326563839294f07e@o4511210669801472.ingest.us.sentry.io/4511210674126848',
@@ -59,8 +60,14 @@ async function checkAndApplyUpdate() {
     const check = await Updates.checkForUpdateAsync();
     if (check.isAvailable) {
       await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-      return; // this JS context is tearing down — the new bundle re-runs its own check
+      // A fresh install is still on the bundle it shipped with, which can
+      // predate sync fixes sent as updates, so it reloads right away (see
+      // utils/updateGate.ts). Everyone else gets the downloaded update the
+      // next time the app opens: reloading mid-use made the app load twice.
+      if (Updates.isEmbeddedLaunch) {
+        await Updates.reloadAsync();
+        return; // this JS context is tearing down — the new bundle re-runs its own check
+      }
     }
   } catch (e) {
     Sentry.captureException(e);
@@ -143,10 +150,23 @@ function AppShell({ onReady }: { onReady: () => void }) {
       return;
     }
     async function checkOnboarding() {
-      const profile = await getCloudProfile(userId!);
+      // The splash waits on this. Someone who has finished onboarding on this
+      // phone is remembered, so their launches don't wait on a network call.
+      const cacheKey = `coco_onboarded_${userId}`;
+      if ((await AsyncStorage.getItem(cacheKey).catch(() => null)) === '1') {
+        setOnboardingDone(true);
+        return;
+      }
+      // Capped so a slow connection can't hold the splash; falls back to the
+      // local onboarding prefs below.
+      const profile = await Promise.race([
+        getCloudProfile(userId!).catch(() => null),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 4000)),
+      ]);
       // Treat as onboarded if the flag is set OR if the profile already exists
       // (covers users created before the onboarded column was added)
       if (profile?.onboarded || profile?.name) {
+        AsyncStorage.setItem(cacheKey, '1').catch(() => {});
         setOnboardingDone(true);
         return;
       }

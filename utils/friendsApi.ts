@@ -208,11 +208,15 @@ export async function getFriendSessionSummaries(friend: FriendProfile, daysBack:
   const allUris = [...new Set(summaries.flatMap(e => e.sessionPhotos ?? []))];
   const widthCache: Record<string, number> = {};
   const [, streaks] = await Promise.all([
-    Promise.all(
-      allUris.map(uri => new Promise<void>(resolve => {
-        Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(SUMMARY_PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
-      }))
-    ),
+    // Capped: photos not sized by then size themselves when they render
+    Promise.race([
+      Promise.all(
+        allUris.map(uri => new Promise<void>(resolve => {
+          Image.getSize(uri, (w, h) => { widthCache[uri] = Math.round(SUMMARY_PHOTO_HEIGHT * w / h); resolve(); }, () => resolve());
+        }))
+      ),
+      new Promise<void>(resolve => setTimeout(resolve, 3000)),
+    ]),
     getSessionStreaks(summaries.map(e => e.sessionId).filter((id): id is string => !!id)),
   ]);
   return summaries.map(e => ({
@@ -690,6 +694,54 @@ export async function getSessionComments(sessionId: string): Promise<SessionComm
     ...c,
     profile: (profiles ?? []).find(p => p.id === c.user_id) ?? { name: 'Unknown', username: '', avatar_url: null },
   }));
+}
+
+// Likes and comments for many sessions in three requests in total (likes,
+// comments, then one profiles lookup), instead of three per session. On a
+// distant or slow connection the per-session version meant dozens of round
+// trips before the feed could show.
+export async function getSocialForSessions(sessionIds: string[]): Promise<{
+  likes: Record<string, SessionLike[]>;
+  comments: Record<string, SessionComment[]>;
+}> {
+  const likes: Record<string, SessionLike[]> = {};
+  const comments: Record<string, SessionComment[]> = {};
+  const ids = [...new Set(sessionIds)];
+  for (const id of ids) { likes[id] = []; comments[id] = []; }
+  if (ids.length === 0) return { likes, comments };
+
+  // Chunked so the id list never makes the request URL too long
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  const [likeRows, commentRows] = await Promise.all([
+    Promise.all(chunks.map(c => supabase.from('session_likes').select('*').in('session_id', c)))
+      .then(rs => rs.flatMap(r => (r.data ?? []) as SessionLike[])),
+    Promise.all(chunks.map(c => supabase.from('session_comments')
+      .select('id, session_id, user_id, text, created_at')
+      .in('session_id', c)
+      .order('created_at', { ascending: true })))
+      .then(rs => rs.flatMap(r => (r.data ?? []) as SessionComment[])),
+  ]);
+
+  const userIds = [...new Set([...likeRows, ...commentRows].map(r => r.user_id))];
+  const profileMap = new Map<string, { name: string; username: string; avatar_url: string | null }>();
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, name, username, avatar_url')
+      .in('id', userIds);
+    for (const p of profiles ?? []) profileMap.set(p.id, p);
+  }
+
+  for (const l of likeRows) {
+    const p = profileMap.get(l.user_id);
+    (likes[l.session_id] ??= []).push({ ...l, profile: p ? { name: p.name, avatar_url: p.avatar_url } : { name: 'Unknown', avatar_url: null } });
+  }
+  commentRows.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const c of commentRows) {
+    (comments[c.session_id] ??= []).push({ ...c, profile: profileMap.get(c.user_id) ?? { name: 'Unknown', username: '', avatar_url: null } });
+  }
+  return { likes, comments };
 }
 
 // Returns the new comment's id (used for @mention notifications)
