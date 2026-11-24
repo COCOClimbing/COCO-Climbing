@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert
+  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import PressGrow from './PressGrow';
+import BoldIcon from './BoldIcon';
 import { useTheme } from '../utils/ThemeContext';
 import { FONTS, SPACING, CLIMB_TYPES, CLIMB_STYLES, HOLD_COLORS, ENVIRONMENTS, ClimbTypeId, StyleId, HoldColorId } from '../utils/theme';
 import { generateId, saveNamedProject, NamedProject, getAllClimbs, saveClimb, projectEnvironment } from '../utils/storage';
@@ -122,16 +125,21 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[ss.container, { backgroundColor: colors.bg }]}>
+          {/* Same header as Log/Edit Climb: round back (cancel) and check (save) */}
           <View style={[ss.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={onClose} style={ss.headerBtn}>
-              <Text style={[ss.cancelTxt, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>Cancel</Text>
-            </TouchableOpacity>
+            <PressGrow onPress={onClose} style={[ss.roundBtn, { backgroundColor: colors.bgCard }]} accessibilityLabel="Cancel">
+              {pressed => <BoldIcon name="chevron-back" size={24} color={colors.textPrimary} weight={pressed ? 0.5 : 0} />}
+            </PressGrow>
             <Text style={[ss.title, { color: colors.textPrimary, fontFamily: FONTS.family.bold }]}>{isEditing ? 'Edit Project' : 'New Project'}</Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving} style={ss.headerBtn}>
-              <Text style={[ss.saveTxt, { color: colors.accent, fontFamily: FONTS.family.bold }]}>
-                {saving ? '...' : 'Save'}
-              </Text>
-            </TouchableOpacity>
+            <PressGrow onPress={handleSave} style={[ss.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} accessibilityLabel="Save">
+              {pressed => saving
+                ? <ActivityIndicator size="small" color="#fff" />
+                : (
+                  <Svg width={24} height={24} viewBox="0 0 512 512">
+                    <Path d="M416 128L192 384l-96-96" fill="none" stroke="#fff" strokeWidth={pressed ? 60 : 48} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                )}
+            </PressGrow>
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.content} keyboardShouldPersistTaps="handled">
@@ -142,14 +150,15 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               placeholderTextColor={colors.textMuted}
               value={name}
               onChangeText={setName}
-              autoFocus
+              // Only jump to the keyboard for a new project, not when editing
+              autoFocus={!isEditing}
             />
 
             <Text style={[ss.label, { color: colors.textMuted }]}>ENVIRONMENT</Text>
             <View style={ss.row}>
               {ENVIRONMENTS.map(env => (
                 <Pill key={env.id} label={env.label} selected={environment === env.id}
-                  onPress={() => setEnvironment(env.id)} small />
+                  onPress={() => setEnvironment(env.id)} />
               ))}
             </View>
 
@@ -169,7 +178,6 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
                       }
                     }
                   }}
-                  small
                 />
               ))}
             </View>
@@ -191,7 +199,6 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               {CLIMB_STYLES.map(s => (
                 <Pill key={s.id} label={s.label} selected={selectedStyles.includes(s.id as StyleId)}
                   onPress={() => toggleStyle(s.id as StyleId)}
-                  small
                 />
               ))}
             </View>
@@ -252,10 +259,11 @@ const ss = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1,
   },
-  headerBtn: { padding: SPACING.sm, minWidth: 60 },
+  roundBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
+  },
   title: { fontSize: FONTS.sizes.lg },
-  cancelTxt: { fontSize: FONTS.sizes.md },
-  saveTxt: { fontSize: FONTS.sizes.md, textAlign: 'right' },
   content: { padding: SPACING.lg },
   label: { fontSize: FONTS.sizes.xs, letterSpacing: 1.5, marginBottom: SPACING.md },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.md },
