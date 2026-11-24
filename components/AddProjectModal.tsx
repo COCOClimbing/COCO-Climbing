@@ -4,9 +4,9 @@ import {
   TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert
 } from 'react-native';
 import { useTheme } from '../utils/ThemeContext';
-import { FONTS, SPACING, CLIMB_TYPES, CLIMB_STYLES, ClimbTypeId, StyleId } from '../utils/theme';
-import { generateId, saveNamedProject, NamedProject, getAllClimbs, saveClimb } from '../utils/storage';
-import { Pill, Divider } from './UI';
+import { FONTS, SPACING, CLIMB_TYPES, CLIMB_STYLES, HOLD_COLORS, ENVIRONMENTS, ClimbTypeId, StyleId, HoldColorId } from '../utils/theme';
+import { generateId, saveNamedProject, NamedProject, getAllClimbs, saveClimb, projectEnvironment } from '../utils/storage';
+import { Pill, Divider, HoldColorDot } from './UI';
 import GradePicker from './GradePicker';
 
 interface Props {
@@ -34,6 +34,8 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
   const [grade, setGrade] = useState('V3');
   const [location, setLocation] = useState('');
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
+  const [holdColor, setHoldColor] = useState<HoldColorId | undefined>();
+  const [environment, setEnvironment] = useState<'indoor' | 'outdoor'>('indoor');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -45,6 +47,15 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
       setGrade(existingProject.grade);
       setGradeSystem(inferGradeSystem(existingProject.grade));
       setSelectedStyles((existingProject.styles ?? []) as StyleId[]);
+      setHoldColor(existingProject.holdColor as HoldColorId | undefined);
+      setEnvironment(existingProject.environment ?? 'indoor');
+      if (!existingProject.environment) {
+        // Older project: use where it was last logged
+        getAllClimbs().then(all => {
+          const env = projectEnvironment(existingProject, all);
+          if (env) setEnvironment(env);
+        });
+      }
       setLocation('');
       setNotes('');
     } else if (visible && !existingProject) {
@@ -58,7 +69,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
 
   function reset() {
     setName(''); setClimbType('boulder'); setGradeSystem('v-scale');
-    setGrade('V3'); setLocation(''); setSelectedStyles([]); setNotes('');
+    setGrade('V3'); setLocation(''); setSelectedStyles([]); setHoldColor(undefined); setEnvironment('indoor'); setNotes('');
   }
 
   async function handleSave() {
@@ -67,15 +78,21 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
       return;
     }
     setSaving(true);
+    // Hold color only applies to indoor projects
+    const savedHold = environment === 'indoor' ? holdColor : undefined;
     try {
       if (isEditing && existingProject) {
-        await saveNamedProject({ ...existingProject, name: name.trim(), grade, type: climbType, styles: selectedStyles });
+        await saveNamedProject({ ...existingProject, name: name.trim(), grade, type: climbType, styles: selectedStyles, holdColor: savedHold, environment });
         // Update all linked climbs to match new grade/type
         const gs = inferGradeSystem(grade) as any;
         const all = await getAllClimbs();
         // One at a time: saveClimb rewrites the whole list, so parallel saves clobber each other
         for (const c of all.filter(c => c.projectId === existingProject.id)) {
-          await saveClimb({ ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles, projectName: name.trim() });
+          await saveClimb({
+            ...c, grade, gradeSystem: gs, type: climbType, styles: selectedStyles, projectName: name.trim(),
+            // Hold color only means something on indoor climbs
+            ...(c.environment === 'indoor' ? { holdColor: savedHold } : {}),
+          });
         }
       } else {
         const projectId = generateId();
@@ -85,6 +102,8 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
           grade,
           type: climbType,
           styles: selectedStyles,
+          holdColor: savedHold,
+          environment,
           createdAt: new Date().toISOString(),
         });
       }
@@ -125,6 +144,14 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               onChangeText={setName}
               autoFocus
             />
+
+            <Text style={[ss.label, { color: colors.textMuted }]}>ENVIRONMENT</Text>
+            <View style={ss.row}>
+              {ENVIRONMENTS.map(env => (
+                <Pill key={env.id} label={env.label} selected={environment === env.id}
+                  onPress={() => setEnvironment(env.id)} small />
+              ))}
+            </View>
 
             <Text style={[ss.label, { color: colors.textMuted }]}>TYPE</Text>
             <View style={ss.row}>
@@ -168,6 +195,28 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
                 />
               ))}
             </View>
+            {environment === 'indoor' && (<>
+            <Divider />
+
+            <Text style={[ss.label, { color: colors.textMuted }]}>HOLD COLOR (optional)</Text>
+            <View style={ss.row}>
+              {HOLD_COLORS.map(c => {
+                const selected = holdColor === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    onPress={() => setHoldColor(selected ? undefined : c.id)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${c.label} holds${selected ? ', selected' : ''}`}
+                    style={[ss.swatchWrap, { borderColor: selected ? colors.textPrimary : 'transparent' }]}
+                  >
+                    <HoldColorDot colorId={c.id} size={32} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            </>)}
             <Divider />
 
             <Text style={[ss.label, { color: colors.textMuted }]}>LOCATION (optional)</Text>
@@ -210,6 +259,7 @@ const ss = StyleSheet.create({
   content: { padding: SPACING.lg },
   label: { fontSize: FONTS.sizes.xs, letterSpacing: 1.5, marginBottom: SPACING.md },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: SPACING.md },
+  swatchWrap: { borderWidth: 3, borderRadius: 24, padding: 2, marginRight: SPACING.xs, marginBottom: SPACING.xs },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.lg },
   inputMulti: { height: 80, textAlignVertical: 'top' },
 });

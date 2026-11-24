@@ -17,7 +17,7 @@ import { useTheme } from '../utils/ThemeContext';
 import { boardLabel } from '../utils/sessionHelpers';
 import {
   saveClimb, createNewSession, generateId, getTodayISO,
-  saveLastClimbType, getLastClimbType, getAllNamedProjects, getAllClimbs, saveNamedProject,
+  saveLastClimbType, getLastClimbType, getAllNamedProjects, getAllClimbs, saveNamedProject, projectEnvironment,
   saveLastGradeSystem, getLastGradeSystem, saveLastGrade, getLastGrade, setActiveSessionId, getAllSessions, saveSession,
   saveLastOutcome, getLastOutcome,
   saveLastEnvironment, getLastEnvironment,
@@ -115,7 +115,10 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Project state
   const [selectedProjectId, setSelectedProjectId]   = useState<string | undefined>();
   const [newProjectName, setNewProjectName]         = useState('');
-  const [existingProjects, setExistingProjects]     = useState<{id: string, name: string, grade: string, type: string, styles?: string[], holdColor?: string}[]>([]);
+  const [existingProjects, setExistingProjects]     = useState<{id: string, name: string, grade: string, type: string, styles?: string[], holdColor?: string, environment?: 'indoor' | 'outdoor'}[]>([]);
+  // Only projects for the picked Indoor/Outdoor (unknown ones show in both)
+  const visibleProjects = existingProjects.filter(p =>
+    !p.environment || p.environment === environment || p.id === selectedProjectId);
 
   // Load named projects
   useEffect(() => {
@@ -128,7 +131,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         );
         setExistingProjects(projects
           .filter(p => !sentIds.has(p.id) || p.id === existingClimb?.projectId)
-          .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type, styles: p.styles, holdColor: p.holdColor })));
+          .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type, styles: p.styles, holdColor: p.holdColor, environment: projectEnvironment(p, allClimbs) })));
       });
       // Board + angle used earlier in this session (latest Board climb with a board name)
       const boardSessionId = existingClimb?.sessionId || defaultSessionId;
@@ -405,7 +408,11 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setRouteName(''); setBoardName(''); setBoardAngle('');
     }
   }
+  // Set when Save opened the name card because the project had no name:
+  // naming it then finishes the save
+  const saveAfterNameRef = useRef(false);
   function askProjectName() {
+    saveAfterNameRef.current = false;
     promptNameValue.current = routeName || '';
     setNamePromptOpen(true);
   }
@@ -413,6 +420,13 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     const trimmed = promptNameValue.current.trim();
     if (!trimmed) return;
     setNamePromptOpen(false);
+    if (saveAfterNameRef.current) {
+      saveAfterNameRef.current = false;
+      setSelectedProjectId(undefined);
+      setNewProjectName(trimmed);
+      handleSave(trimmed);
+      return;
+    }
     setSelectedProjectId(undefined);
     setNewProjectName(trimmed);
     setIsProject(true);
@@ -437,7 +451,15 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     return url as string;
   }
 
-  async function handleSave() {
+  async function handleSave(nameOverride?: string) {
+    const newName = (typeof nameOverride === 'string' ? nameOverride : newProjectName).trim();
+    // A project needs a name: ask for one instead of saving an unnamed project
+    if (!editProjectMode && isProject && !selectedProjectId && !newName) {
+      saveAfterNameRef.current = true;
+      promptNameValue.current = routeName || '';
+      setNamePromptOpen(true);
+      return;
+    }
     if (!isTraining && gradeSystem === 'custom' && !grade.trim()) {
       Alert.alert('Enter a grade', 'Type the grade your gym uses, or pick another grade system.');
       return;
@@ -446,6 +468,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
     // Hold color can only be picked indoors; elsewhere the project keeps the one it has
     const canPickHold = environment === 'indoor' && !isTraining;
     const projectHoldColor = canPickHold ? holdColor : undefined;
+    const projectEnv: 'indoor' | 'outdoor' = environment === 'outdoor' ? 'outdoor' : 'indoor';
     try {
       // In editProjectMode, only update the project registry + linked climbs — no session touch
       if (editProjectMode && existingClimb?.projectId) {
@@ -481,27 +504,28 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       let projId = selectedProjectId;
       let projName = selectedProjectId
         ? existingProjects.find(p => p.id === selectedProjectId)?.name
-        : newProjectName.trim() || undefined;
+        : newName || undefined;
 
-      if (isProject && newProjectName.trim() && !selectedProjectId) {
+      if (isProject && newName && !selectedProjectId) {
         projId = generateId();
         await saveNamedProject({
           id: projId,
-          name: newProjectName.trim(),
+          name: newName,
           grade,
           type: climbType,
           styles: selectedStyles,
           holdColor: projectHoldColor,
+          environment: projectEnv,
           createdAt: new Date().toISOString(),
         });
       } else if (isProject && selectedProjectId) {
-        // Keep the project's styles and hold color in step with this attempt
+        // Keep the project's styles, hold color and indoor/outdoor in step with this attempt
         const np = (await getAllNamedProjects()).find(p => p.id === selectedProjectId);
         const sameStyles = np && (np.styles ?? []).length === selectedStyles.length
           && selectedStyles.every(s => (np.styles ?? []).includes(s));
         const nextHold = canPickHold ? holdColor : np?.holdColor;
-        if (np && (!sameStyles || np.holdColor !== nextHold)) {
-          await saveNamedProject({ ...np, styles: selectedStyles, holdColor: nextHold });
+        if (np && (!sameStyles || np.holdColor !== nextHold || np.environment !== projectEnv)) {
+          await saveNamedProject({ ...np, styles: selectedStyles, holdColor: nextHold, environment: projectEnv });
         }
       }
 
@@ -621,7 +645,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 </Text>
               )}
             </View>
-            <PressGrow onPress={handleSave} style={[styles.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} accessibilityLabel="Save">
+            <PressGrow onPress={() => handleSave()} style={[styles.roundBtn, { backgroundColor: colors.accent }, saving && { opacity: 0.6 }]} disabled={saving} accessibilityLabel="Save">
               {pressed => saving
                 ? <ActivityIndicator size="small" color="#fff" />
                 : (
@@ -682,9 +706,15 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
                 <Section id="env" active={activeSection === 'env'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>ENVIRONMENT</Text>
                 <View style={styles.row}>
+                  {/* Indoor/Outdoor stays picked alongside Project: it decides which
+                      projects are listed (and whether hold color applies) */}
                   {ENVIRONMENTS.map(env => (
-                    <Pill key={env.id} label={env.label} selected={environment === env.id && !isProject}
-                      onPress={() => { setEnvironment(env.id); setIsProject(false); }} />
+                    <Pill key={env.id} label={env.label} selected={environment === env.id}
+                      onPress={() => {
+                        setEnvironment(env.id);
+                        const sel = existingProjects.find(p => p.id === selectedProjectId);
+                        if (sel?.environment && sel.environment !== env.id) setSelectedProjectId(undefined);
+                      }} />
                   ))}
                   <Pill
                     label="Project"
@@ -707,9 +737,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               <>
                 <Section id="project" active={activeSection === 'project'} onActivate={setActiveSection}>
                 <Text style={[styles.label, { color: colors.textMuted }]}>PROJECT</Text>
-                {existingProjects.length > 0 && (
+                {visibleProjects.length > 0 && (
                   <View style={styles.row}>
-                    {existingProjects.map(p => (
+                    {visibleProjects.map(p => (
                       <Pill
                         key={p.id}
                         label={`${p.name} (${p.grade})`}
@@ -1087,7 +1117,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       {/* Project name card — same look as the end-session "Before you wrap up" card */}
       {namePromptOpen && (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.namePromptBackdrop}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNamePromptOpen(false)} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { saveAfterNameRef.current = false; setNamePromptOpen(false); }} />
           <View style={[styles.namePromptCard, { backgroundColor: colors.bgCard }]}>
             <Text style={[styles.namePromptHeading, { color: colors.textPrimary }]}>{namePrompt === 'board' ? 'Which board?' : 'Name your project'}</Text>
             <Text style={[styles.namePromptSub, { color: colors.textMuted }]}>
@@ -1124,7 +1154,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
               </View>
             )}
             <View style={styles.namePromptActions}>
-              <TouchableOpacity style={[styles.namePromptSecondary, { borderColor: colors.border }]} onPress={() => setNamePromptOpen(false)} activeOpacity={0.7}>
+              <TouchableOpacity style={[styles.namePromptSecondary, { borderColor: colors.border }]} onPress={() => { saveAfterNameRef.current = false; setNamePromptOpen(false); }} activeOpacity={0.7}>
                 <Text style={[styles.namePromptSecondaryText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.namePromptPrimary, { backgroundColor: colors.accent }]} onPress={namePrompt === 'board' ? saveBoardName : saveProjectName} activeOpacity={0.8}>

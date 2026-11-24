@@ -564,7 +564,20 @@ export interface NamedProject {
   type: string;
   styles?: string[];
   holdColor?: string;  // gym hold color, carried onto each new attempt
+  environment?: 'indoor' | 'outdoor';
   createdAt: string;
+}
+
+// Indoor/outdoor for a project. Older projects didn't store it, so fall back to
+// where it was last logged; undefined means unknown (offer it in both lists).
+export function projectEnvironment(
+  p: NamedProject, climbs: { projectId?: string; environment: string; date: string }[],
+): 'indoor' | 'outdoor' | undefined {
+  if (p.environment) return p.environment;
+  const last = climbs
+    .filter(c => c.projectId === p.id && (c.environment === 'indoor' || c.environment === 'outdoor'))
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  return last?.environment as 'indoor' | 'outdoor' | undefined;
 }
 
 export async function getAllNamedProjects(): Promise<NamedProject[]> {

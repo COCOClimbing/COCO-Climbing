@@ -6,9 +6,9 @@ import {
 import { useTheme } from '../utils/ThemeContext';
 import PushScreen from './PushScreen';
 import { useTabBarSpace } from './BottomTabBar';
-import { FONTS, SPACING, CLIMB_TYPES, Climb } from '../utils/theme';
+import { FONTS, SPACING, CLIMB_TYPES, HOLD_COLORS, Climb, HoldColorId } from '../utils/theme';
 import { getAllClimbs, getAllSessions, NamedProject } from '../utils/storage';
-import { GradeBadge } from './UI';
+import { GradeBadge, HoldColorDot } from './UI';
 import { format, parseISO } from 'date-fns';
 
 interface Props {
@@ -132,9 +132,20 @@ export default function ProjectDetailModal({ visible, project: projectProp, refr
           <View style={ss.summaryRow}>
             <GradeBadge grade={project.grade} outcome="project" />
             <View style={ss.summaryInfo}>
-              <Text style={[ss.summaryType, { color: colors.textSecondary, fontFamily: FONTS.family.medium }]}>
-                {typeInfo?.label ?? project.type}
-              </Text>
+              <View style={ss.summaryTypeRow}>
+                <Text style={[ss.summaryType, { color: colors.textSecondary, fontFamily: FONTS.family.medium }]}>
+                  {typeInfo?.label ?? project.type}
+                </Text>
+                {project.holdColor ? (
+                  <>
+                    <Text style={[ss.summaryType, { color: colors.textMuted }]}>·</Text>
+                    <HoldColorDot colorId={project.holdColor as HoldColorId} />
+                    <Text style={[ss.summaryType, { color: colors.textSecondary, fontFamily: FONTS.family.medium }]}>
+                      {HOLD_COLORS.find(c => c.id === project.holdColor)?.label}
+                    </Text>
+                  </>
+                ) : null}
+              </View>
               <Text style={[ss.summaryDays, { color: colors.accent, fontFamily: FONTS.family.semibold }]}>
                 {uniqueDays.length} {uniqueDays.length === 1 ? 'day' : 'days'} worked
                 {'  ·  '}
@@ -218,6 +229,7 @@ const ss = StyleSheet.create({
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   summaryInfo: { flex: 1 },
   summaryType: { fontSize: FONTS.sizes.sm, marginBottom: 2 },
+  summaryTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryDays: { fontSize: FONTS.sizes.sm },
   scrollContent: { padding: SPACING.lg },
   empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: SPACING.xl },

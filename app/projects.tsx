@@ -4,7 +4,7 @@ import { FONTS, SPACING, Climb, CLIMB_TYPES } from '../utils/theme';
 import { useTheme } from '../utils/ThemeContext';
 import { useTabBarSpace } from '../components/BottomTabBar';
 import { getAllClimbs, saveClimb, deleteClimb, getAllNamedProjects, deleteNamedProject, getAllSessions, NamedProject, setProjectsRefreshCallback } from '../utils/storage';
-import { EmptyState, GradeBadge } from '../components/UI';
+import { EmptyState, GradeBadge, HoldColorDot } from '../components/UI';
 import { useOnTabReturn } from '../utils/HeaderScroll';
 import SwipeableProjectCard from '../components/SwipeableProjectCard';
 import AddProjectModal from '../components/AddProjectModal';
@@ -64,7 +64,7 @@ export default function ProjectsScreen() {
       .map(p => ({
         id: p.id, projectId: p.id, projectName: p.name, date: p.createdAt,
         sessionId: '', type: p.type as any, outcome: 'project' as any,
-        styles: (p as any).styles ?? [], environment: 'outdoor' as any, grade: p.grade,
+        styles: (p as any).styles ?? [], holdColor: p.holdColor as any, environment: 'outdoor' as any, grade: p.grade,
         gradeSystem: (p.grade.startsWith('V') || p.grade === 'VB' ? 'v-scale' : 'yds') as any,
         attempts: 0,
       }));
@@ -153,10 +153,13 @@ export default function ProjectsScreen() {
             <Text style={[styles.projectType, { color: colors.textMuted }]}>{typeInfo?.label}</Text>
           </View>
           <View style={styles.projectCenter}>
-            {(item.projectName || item.routeName)
-              ? <Text style={[styles.projectName, { color: colors.textPrimary, fontFamily: FONTS.family.semibold }]} numberOfLines={1}>{item.projectName || item.routeName}</Text>
-              : <Text style={[styles.projectNameEmpty, { color: colors.textMuted }]}>Unnamed project</Text>
-            }
+            <View style={styles.projectNameRow}>
+              {item.holdColor ? <HoldColorDot colorId={item.holdColor} /> : null}
+              {(item.projectName || item.routeName)
+                ? <Text style={[styles.projectName, { color: colors.textPrimary, fontFamily: FONTS.family.semibold, flexShrink: 1 }]} numberOfLines={1}>{item.projectName || item.routeName}</Text>
+                : <Text style={[styles.projectNameEmpty, { color: colors.textMuted }]}>Unnamed project</Text>
+              }
+            </View>
             <Text style={[styles.projectAge, { color: colors.textMuted }]}>
               {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
             </Text>
@@ -306,6 +309,7 @@ const styles = StyleSheet.create({
   },
   pastCard: { opacity: 0.9 },
   projectLeft: { alignItems: 'center', gap: SPACING.xs },
+  projectNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   projectType: { fontSize: FONTS.sizes.xs, marginTop: 4, textAlign: 'center' },
   projectCenter: { flex: 1 },
   projectName: { fontSize: FONTS.sizes.md, marginBottom: 2 },

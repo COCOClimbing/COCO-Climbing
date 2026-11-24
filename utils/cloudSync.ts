@@ -444,17 +444,18 @@ function projectToRow(p: NamedProject, userId: string) {
     type: p.type,
     styles: p.styles ?? [],
     created_at_local: p.createdAt,
-    // Only sent when set (see supabase_project_hold_color.sql)
+    // Only sent when set (see supabase_project_hold_color.sql / _environment.sql)
     ...(p.holdColor ? { hold_color: p.holdColor } : {}),
+    ...(p.environment ? { environment: p.environment } : {}),
   };
 }
 
-// If the projects.hold_color column isn't in the database yet, the upsert fails;
-// retry without it so the project itself still syncs.
+// If a newer column (hold_color, environment) isn't in the database yet, the
+// upsert fails; retry without them so the project itself still syncs.
 async function upsertProjectRows(rows: Record<string, any>[]): Promise<void> {
   const { error } = await supabase.from('projects').upsert(rows, { onConflict: 'id' });
-  if (error && rows.some(r => 'hold_color' in r)) {
-    const stripped = rows.map(({ hold_color, ...rest }) => rest);
+  if (error && rows.some(r => 'hold_color' in r || 'environment' in r)) {
+    const stripped = rows.map(({ hold_color, environment, ...rest }) => rest);
     await supabase.from('projects').upsert(stripped, { onConflict: 'id' });
   }
 }
@@ -549,6 +550,7 @@ function rowToProject(row: any): NamedProject {
     type: row.type,
     styles: row.styles ?? [],
     holdColor: row.hold_color ?? undefined,
+    environment: row.environment ?? undefined,
     createdAt: row.created_at_local,
   };
 }
