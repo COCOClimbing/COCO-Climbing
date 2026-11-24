@@ -154,7 +154,7 @@ type FriendWithActivity = FriendProfile & {
 
 const PHOTO_HEIGHT = 220;
 // Posts at the top of the feed whose photos download before it's shown.
-const PRELOAD_POSTS = 5;
+const PRELOAD_POSTS = 2;
 
 function NaturalPhoto({ uri, initialWidth, onPress, viewRef }: { uri: string; initialWidth?: number; onPress: () => void; viewRef?: (el: View | null) => void }) {
   const [imgWidth, setImgWidth] = useState<number | null>(initialWidth ?? null);
@@ -1033,7 +1033,8 @@ export default function FriendsScreen() {
 
   // Activity feed state
   const [activityFeed, setActivityFeed] = useState<SessionSummary[]>([]);
-  const [daysLoaded, setDaysLoaded] = useState(14);
+  // First load covers a week; scrolling down loads 7 more days at a time
+  const [daysLoaded, setDaysLoaded] = useState(7);
   const [loadingMore, setLoadingMore] = useState(false);
   const [caughtUp, setCaughtUp] = useState(false);
   const [preferredBoulder, setPreferredBoulder] = useState('v-scale');
@@ -1297,12 +1298,17 @@ export default function FriendsScreen() {
     try {
       const normDate = (d: string) => (d ?? '').slice(0, 10);
 
-      const [accepted, allSessions, allClimbs, blocked, blockedBy] = await Promise.all([
+      // Network steps run in three rounds; everything in a round goes out at
+      // once. Each round costs a full round trip, which on mobile data is the
+      // bulk of the wait. (These used to be six rounds, one after another.)
+      const [accepted, allSessions, allClimbs, blocked, blockedBy, taggedSessions] = await Promise.all([
         getFollowing(user.id),
         getAllSessions(),
         getAllClimbs(),
         getBlockedUserIds(user.id),
         getBlockedByUserIds(user.id),
+        // Sessions where the current user was tagged (even if not following the poster)
+        getTaggedSessions(user.id, days),
       ]);
       setBlockedIds(blocked);
       setBlockedByIds(blockedBy);
@@ -1322,14 +1328,24 @@ export default function FriendsScreen() {
 
       // Fetch own session/climb media from DB — guaranteed R2 URLs, bypasses stale local cache
       const recentSessionIds = recentSessions.map(s => s.id);
-      const [{ data: dbOwnSessions }, { data: dbOwnClimbs }] = await Promise.all(
+      const validTagged = taggedSessions.filter(({ session: s, profile }) => profile && !allExcluded.includes(s.user_id) && s.user_id !== user.id);
+      const taggedSessionIds = validTagged.map(({ session: s }) => s.id);
+      const followedIds = acceptedFiltered.map(f => f.id);
+      // Own media, tagged-session climbs and followed friends' climbs + sessions
+      // don't depend on each other, so they go out together.
+      const [{ data: dbOwnSessions }, { data: dbOwnClimbs }, taggedClimbsResult, friendsClimbsRaw, friendsSessionsRaw] = await Promise.all([
         recentSessionIds.length > 0
-          ? [
-              supabase.from('sessions').select('id, media_uris').in('id', recentSessionIds),
-              supabase.from('climbs').select('id, media_uris').in('session_id', recentSessionIds),
-            ]
-          : [Promise.resolve({ data: [] }), Promise.resolve({ data: [] })]
-      );
+          ? supabase.from('sessions').select('id, media_uris').in('id', recentSessionIds)
+          : Promise.resolve({ data: [] as any[] }),
+        recentSessionIds.length > 0
+          ? supabase.from('climbs').select('id, media_uris').in('session_id', recentSessionIds)
+          : Promise.resolve({ data: [] as any[] }),
+        taggedSessionIds.length > 0
+          ? supabase.from('climbs').select('*').in('session_id', taggedSessionIds)
+          : Promise.resolve({ data: [] as any[] }),
+        getFriendsRecentClimbsBatch(followedIds, days),
+        getFriendsRecentSessionsBatch(followedIds, days),
+      ]);
       const dbSessionMedia: Record<string, string[]> = Object.fromEntries(
         (dbOwnSessions ?? []).map((r: any) => [r.id, ((r.media_uris ?? []) as string[]).filter(u => u.startsWith('http'))])
       );
@@ -1382,22 +1398,6 @@ export default function FriendsScreen() {
         summaries.push({ friend: selfProfile, sessionDate: normDate(s.date), sessionId: s.id, sessionTime: sessionStartTime(s.startedAt, sessionClimbs), climbCount: sessionClimbs.reduce((sum: number, c: any) => sum + climbCount(c), 0), sends, flashes, hardestGrade, hardestGradeSystem, environment, climbType, climbs: sessionClimbs, training: trainingKind(sessionClimbs), partners, sessionPhotos: sessionPhotos.length > 0 ? sessionPhotos : undefined, notes: s.notes ?? undefined, title: s.title ?? undefined, location: s.location ?? undefined });
       });
 
-      // Add sessions where the current user was tagged (even if not following the poster)
-      const taggedSessions = await getTaggedSessions(user.id, days);
-      const validTagged = taggedSessions.filter(({ session: s, profile }) => profile && !allExcluded.includes(s.user_id) && s.user_id !== user.id);
-
-      // Batch-fetch tagged-session climbs and followed friends' climbs + sessions all at
-      // once — none of these three queries depend on each other's results, so fire them
-      // concurrently instead of serializing the tagged-climbs query in front of the rest.
-      const taggedSessionIds = validTagged.map(({ session: s }) => s.id);
-      const followedIds = acceptedFiltered.map(f => f.id);
-      const [taggedClimbsResult, friendsClimbsRaw, friendsSessionsRaw] = await Promise.all([
-        taggedSessionIds.length > 0
-          ? supabase.from('climbs').select('*').in('session_id', taggedSessionIds)
-          : Promise.resolve({ data: [] as any[] }),
-        getFriendsRecentClimbsBatch(followedIds, days),
-        getFriendsRecentSessionsBatch(followedIds, days),
-      ]);
       const taggedClimbsRaw = taggedClimbsResult.data;
       const taggedClimbsMap = new Map<string, any[]>();
       (taggedClimbsRaw ?? []).forEach((c: any) => {
@@ -1576,6 +1576,12 @@ export default function FriendsScreen() {
         seen.add(k);
         return true;
       });
+      // A quiet week shouldn't look like an empty feed: reach back two weeks
+      // before showing anything (while the spinner is still up, so no jump).
+      if (deduped.length === 0 && days < 14) {
+        setDaysLoaded(14);
+        return loadFeed(14, showLoading);
+      }
       // Pre-fetch photo dimensions so NaturalPhoto renders at the correct size
       // immediately. The first few posts' photos are downloaded too, so they
       // appear with the feed instead of one by one; the rest just get sizes
@@ -1595,7 +1601,7 @@ export default function FriendsScreen() {
         // Capped so a slow connection can't hold the whole feed back.
         Promise.race([
           preloadPhotos(topUris, PHOTO_HEIGHT).then(w => { Object.assign(widthCache, w); }),
-          new Promise<void>(resolve => setTimeout(resolve, 5000)),
+          new Promise<void>(resolve => setTimeout(resolve, 1500)),
         ]),
         getSocialForSessions(feedSessionIds).catch(() => ({ likes: {}, comments: {} } as Awaited<ReturnType<typeof getSocialForSessions>>)),
         getSessionStreaks(feedSessionIds),
@@ -2590,7 +2596,7 @@ export default function FriendsScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingTop: SPACING.xl + topInset, paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="never"
-          refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={() => { setDaysLoaded(14); setCaughtUp(false); loadFeed(14); }} />}
+          refreshControl={<RefreshControl refreshing={loadingFeed} onRefresh={() => { setDaysLoaded(7); setCaughtUp(false); loadFeed(7); }} />}
           scrollEventThrottle={16}
           onScroll={e => {
             onHeaderScroll(e);
