@@ -24,7 +24,9 @@ function versionLabel(): string {
   const build = Application.nativeBuildVersion;
   let label = version ? `Version ${version}${build ? ` (${build})` : ''}` : 'Version unknown';
   if (!Updates.isEmbeddedLaunch && Updates.createdAt) {
-    label += ` · updated ${Updates.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    // Time too, in the phone's time zone, so same-day updates can be told apart
+    const d = Updates.createdAt;
+    label += ` · updated ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
   }
   return label;
 }

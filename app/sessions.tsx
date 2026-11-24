@@ -42,6 +42,10 @@ import VideoPlaceholder, { isVideoUri } from '../components/VideoPlaceholder';
 let _cachedDays: DaySession[] = [];
 // How many cards at the top of the list load complete before it's shown.
 const PREFETCH_CARDS = 8;
+// Session cards are added to the list this many at a time as you scroll, so
+// someone with a long history doesn't mount (and load photos and likes for)
+// every session they've ever logged at once.
+const SESSIONS_PAGE = 10;
 
 // Multiline input that sizes itself to its text. iOS's own multiline growth (and the
 // height onContentSizeChange reports) is unreliable on device: inputs either stayed one
@@ -227,8 +231,7 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
 
   const load = useCallback(async () => {
     await restoreActiveSession();
-    const sessions = await getAllSessions();
-    const allClimbs = await getAllClimbs();
+    const [sessions, allClimbs] = await Promise.all([getAllSessions(), getAllClimbs()]);
     const activeId = getActiveSessionId();
 
     const sessionIdsWithClimbs = new Set(allClimbs.map(c => c.sessionId));
@@ -264,7 +267,12 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
     // First load only (later reloads, e.g. after a save, show right away).
     // Only the top cards are on screen at first; the rest load their own
     // details as you scroll, so there's no need to wait on all of them.
-    if (!listReadyRef.current) await prefetchSessionCards(result.slice(0, PREFETCH_CARDS));
+    if (!listReadyRef.current) {
+      await prefetchSessionCards(result.slice(0, PREFETCH_CARDS));
+      // Everyone else's likes/comments in one batch in the background, so
+      // cards further down don't each fetch their own as they appear
+      prefetchSessionCards(result.slice(PREFETCH_CARDS), 30000, 0).catch(() => {});
+    }
     listReadyRef.current = true;
 
     _cachedDays = result;
@@ -319,6 +327,9 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   const activeSessionId = getActiveSessionId();
   const activeSession = activeSessionId ? (days.find(d => d.sessionId === activeSessionId) ?? null) : null;
   const listDays = days.filter(d => d.sessionId !== activeSessionId);
+  const listDaysRef = useRef(listDays);
+  listDaysRef.current = listDays;
+  const [visibleCount, setVisibleCount] = useState(SESSIONS_PAGE);
   // Calendar streak bands: weeks in a run of 2+, counting sessions with entries
   const streakWeeks = useMemo(
     () => streakBandWeeks(days.filter(d => d.climbs.length > 0).map(d => d.date)),
@@ -760,6 +771,9 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
   ) {
     scrollToSessionTimeoutsRef.current.forEach(clearTimeout);
     scrollToSessionTimeoutsRef.current = [];
+    // Make sure the card is part of the list (it's shown a page at a time)
+    const index = listDaysRef.current.findIndex(d => d.sessionId === sessionId);
+    if (index >= 0) setVisibleCount(c => (index >= c ? index + SESSIONS_PAGE : c));
     const y = sessionCardOffsets.current[sessionId];
     if (y === undefined) {
       // Not measured yet at all — keep waiting for the first onLayout.
@@ -1439,12 +1453,19 @@ export default function SessionsScreen({ calendarMode = false, onShowList }: { c
               contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
               scrollEnabled={listScrollEnabled}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              scrollEventThrottle={100}
+              onScroll={e => {
+                const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                if (contentSize.height - contentOffset.y - layoutMeasurement.height < 800 && visibleCount < listDays.length) {
+                  setVisibleCount(c => c + SESSIONS_PAGE);
+                }
+              }}
             >
               {ActiveSessionCard()}
               {listDays.length === 0 && !activeSession && (
                 <EmptyState icon="" title="No sessions yet" subtitle="Press + to log your first climb" />
               )}
-              {listDays.map(day => (
+              {listDays.slice(0, visibleCount).map(day => (
                 <View key={day.sessionId} onLayout={(e) => { sessionCardOffsets.current[day.sessionId] = e.nativeEvent.layout.y; }}>
                   <SessionCard
                     day={day}

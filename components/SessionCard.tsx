@@ -43,11 +43,13 @@ function sessionMediaUris(day: DaySession): string[] {
   return [...(day.mediaUris ?? []), ...climbUris];
 }
 
-// Loads photo sizes and likes/comments for these cards. Gives up after
-// `timeoutMs` (e.g. offline) so the list never waits forever; anything not
-// ready by then loads inside the card as before.
-export async function prefetchSessionCards(days: DaySession[], timeoutMs = 5000): Promise<void> {
-  const uris = [...new Set(days.flatMap(sessionMediaUris))].filter(u => photoWidthCache[u] === undefined);
+// Loads likes/comments for these cards, plus the photos of the first
+// `photoCards` of them (photos further down load as their cards render,
+// holding their space until then). Gives up after `timeoutMs` (e.g. offline)
+// so the list never waits long; anything not ready by then loads inside the
+// card as before.
+export async function prefetchSessionCards(days: DaySession[], timeoutMs = 1500, photoCards = 2): Promise<void> {
+  const uris = [...new Set(days.slice(0, photoCards).flatMap(sessionMediaUris))].filter(u => photoWidthCache[u] === undefined);
   const now = Date.now();
   const needSocial = days.filter(d => !socialCache[d.sessionId] || now - socialCache[d.sessionId].at > SOCIAL_FRESH_MS);
   const work = Promise.all([
@@ -124,14 +126,17 @@ function NaturalPhoto({ uri, onPress, viewRef }: { uri: string; onPress: () => v
 
   // Videos need COCO 1.1.7; show an update tile instead of skipping them
   if (isVideoUri(uri)) return <VideoPlaceholder style={{ width: Math.round(PHOTO_HEIGHT * 0.75), height: PHOTO_HEIGHT, borderRadius: 10 }} />;
-  if (failed || imgWidth === null) return null;
+  if (failed) return null;
+  // Until its size is known, a portrait-shaped spot holds the photo's place
+  // so the card doesn't jump when it arrives
+  const shownWidth = imgWidth ?? Math.round(PHOTO_HEIGHT * 0.75);
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-      <Animated.View ref={viewRef} style={{ width: imgWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
+      <Animated.View ref={viewRef} style={{ width: shownWidth, height: PHOTO_HEIGHT, borderRadius: 10, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.1)', opacity }}>
         <Image
           key={`${uri}-${retryCount}`}
           source={{ uri }}
-          style={{ width: imgWidth, height: PHOTO_HEIGHT }}
+          style={{ width: shownWidth, height: PHOTO_HEIGHT }}
           resizeMode="cover"
           onLoad={onDone}
           onError={() => {
