@@ -115,7 +115,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   // Project state
   const [selectedProjectId, setSelectedProjectId]   = useState<string | undefined>();
   const [newProjectName, setNewProjectName]         = useState('');
-  const [existingProjects, setExistingProjects]     = useState<{id: string, name: string, grade: string, type: string}[]>([]);
+  const [existingProjects, setExistingProjects]     = useState<{id: string, name: string, grade: string, type: string, styles?: string[], holdColor?: string}[]>([]);
 
   // Load named projects
   useEffect(() => {
@@ -128,7 +128,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
         );
         setExistingProjects(projects
           .filter(p => !sentIds.has(p.id) || p.id === existingClimb?.projectId)
-          .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type })));
+          .map(p => ({ id: p.id, name: p.name, grade: p.grade, type: p.type, styles: p.styles, holdColor: p.holdColor })));
       });
       // Board + angle used earlier in this session (latest Board climb with a board name)
       const boardSessionId = existingClimb?.sessionId || defaultSessionId;
@@ -302,7 +302,7 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
   }
 
   // When picking an existing project, auto-populate grade, type, etc.
-  function selectExistingProject(p: {id: string, name: string, grade: string, type: string}) {
+  function selectExistingProject(p: {id: string, name: string, grade: string, type: string, styles?: string[], holdColor?: string}) {
     setSelectedProjectId(p.id);
     setNewProjectName('');
     setGrade(p.grade);
@@ -313,6 +313,9 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       setGradeSystem('yds');
     }
     if (p.type) setClimbType(p.type as ClimbTypeId);
+    // Styles live on the project, so bring them back with it
+    if (p.styles?.length) setSelectedStyles(p.styles as StyleId[]);
+    if (p.holdColor) setHoldColor(p.holdColor as HoldColorId);
   }
 
   async function pickPhoto() {
@@ -440,13 +443,16 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
       return;
     }
     setSaving(true);
+    // Hold color can only be picked indoors; elsewhere the project keeps the one it has
+    const canPickHold = environment === 'indoor' && !isTraining;
+    const projectHoldColor = canPickHold ? holdColor : undefined;
     try {
       // In editProjectMode, only update the project registry + linked climbs — no session touch
       if (editProjectMode && existingClimb?.projectId) {
         const namedProjects = await getAllNamedProjects();
         const np = namedProjects.find(p => p.id === existingClimb.projectId);
         if (np) {
-          await saveNamedProject({ ...np, grade, type: climbType, styles: selectedStyles });
+          await saveNamedProject({ ...np, grade, type: climbType, styles: selectedStyles, holdColor: canPickHold ? holdColor : np.holdColor });
         }
         const all = await getAllClimbs();
         const gs = (grade.startsWith('V') || grade === 'VB' ? 'v-scale' : 'yds') as any;
@@ -484,8 +490,19 @@ export default function LogClimbModal({ visible, onClose, onSaved, existingClimb
           name: newProjectName.trim(),
           grade,
           type: climbType,
+          styles: selectedStyles,
+          holdColor: projectHoldColor,
           createdAt: new Date().toISOString(),
         });
+      } else if (isProject && selectedProjectId) {
+        // Keep the project's styles and hold color in step with this attempt
+        const np = (await getAllNamedProjects()).find(p => p.id === selectedProjectId);
+        const sameStyles = np && (np.styles ?? []).length === selectedStyles.length
+          && selectedStyles.every(s => (np.styles ?? []).includes(s));
+        const nextHold = canPickHold ? holdColor : np?.holdColor;
+        if (np && (!sameStyles || np.holdColor !== nextHold)) {
+          await saveNamedProject({ ...np, styles: selectedStyles, holdColor: nextHold });
+        }
       }
 
       await saveLastClimbType(climbType);

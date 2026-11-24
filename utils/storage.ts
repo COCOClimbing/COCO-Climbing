@@ -563,6 +563,7 @@ export interface NamedProject {
   grade: string;
   type: string;
   styles?: string[];
+  holdColor?: string;  // gym hold color, carried onto each new attempt
   createdAt: string;
 }
 

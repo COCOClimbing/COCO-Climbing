@@ -112,16 +112,7 @@ export async function uploadAllLocalData(userId: string): Promise<void> {
   }
 
   if (projects.length > 0) {
-    const rows = projects.map(p => ({
-      id: p.id,
-      user_id: userId,
-      name: p.name,
-      grade: p.grade,
-      type: p.type,
-      styles: p.styles ?? [],
-      created_at_local: p.createdAt,
-    }));
-    await supabase.from('projects').upsert(rows, { onConflict: 'id' });
+    await upsertProjectRows(projects.map(p => projectToRow(p, userId)));
   }
 }
 
@@ -444,16 +435,32 @@ export async function deleteSessionFromCloud(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function syncProjectToCloud(project: NamedProject, userId: string): Promise<void> {
-  await supabase.from('projects').upsert({
-    id: project.id,
+function projectToRow(p: NamedProject, userId: string) {
+  return {
+    id: p.id,
     user_id: userId,
-    name: project.name,
-    grade: project.grade,
-    type: project.type,
-    styles: project.styles ?? [],
-    created_at_local: project.createdAt,
-  }, { onConflict: 'id' });
+    name: p.name,
+    grade: p.grade,
+    type: p.type,
+    styles: p.styles ?? [],
+    created_at_local: p.createdAt,
+    // Only sent when set (see supabase_project_hold_color.sql)
+    ...(p.holdColor ? { hold_color: p.holdColor } : {}),
+  };
+}
+
+// If the projects.hold_color column isn't in the database yet, the upsert fails;
+// retry without it so the project itself still syncs.
+async function upsertProjectRows(rows: Record<string, any>[]): Promise<void> {
+  const { error } = await supabase.from('projects').upsert(rows, { onConflict: 'id' });
+  if (error && rows.some(r => 'hold_color' in r)) {
+    const stripped = rows.map(({ hold_color, ...rest }) => rest);
+    await supabase.from('projects').upsert(stripped, { onConflict: 'id' });
+  }
+}
+
+export async function syncProjectToCloud(project: NamedProject, userId: string): Promise<void> {
+  await upsertProjectRows([projectToRow(project, userId)]);
 }
 
 export async function deleteProjectFromCloud(id: string): Promise<void> {
@@ -541,6 +548,7 @@ function rowToProject(row: any): NamedProject {
     grade: row.grade,
     type: row.type,
     styles: row.styles ?? [],
+    holdColor: row.hold_color ?? undefined,
     createdAt: row.created_at_local,
   };
 }
