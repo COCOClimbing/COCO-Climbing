@@ -6,7 +6,8 @@ import { uploadMedia, listMediaKeys, deleteMedia, shrinkPhotoForUpload } from '.
 
 const SUPABASE_STORAGE_HOST = 'oexaqytotrxqbxmzqabu.supabase.co/storage';
 const R2_MIGRATION_FLAG = 'coco_r2_migration_v3';
-const R2_PUBLIC_BASE_URL = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev';
+// Was the r2.dev address until 2026-11-24; old links saved with it still work.
+const R2_PUBLIC_BASE_URL = 'https://media.cococlimbing.com';
 
 // The storage key of one of our uploaded files, from its public link — or null
 // if the link isn't one of ours. Keys look like "<user id>/<file>", e.g.
@@ -28,6 +29,32 @@ const R2_ORPHAN_RECOVERY_FLAG = 'coco_r2_recovery_v1';
 // Returns true if a URL points to deleted Supabase Storage (bucket was wiped)
 export function isDeadMediaUrl(url: string): boolean {
   return url.includes(SUPABASE_STORAGE_HOST);
+}
+
+// Photos moved from Cloudflare's rate-limited, uncached r2.dev address to
+// COCO's own domain on 2026-11-24 (same files, same paths). Links saved on
+// the phone still say r2.dev; this rewrites them once, before sync uploads
+// them, so the phone doesn't put the old address back in the database.
+const OLD_MEDIA_HOST = 'https://pub-e8f4259d0a3b483390deba3d351353b6.r2.dev/';
+const MEDIA_HOST_MIGRATION_FLAG = 'coco_media_host_v1';
+export function toCurrentMediaHost(uri: string): string;
+export function toCurrentMediaHost(uri: string | undefined): string | undefined;
+export function toCurrentMediaHost(uri: string | undefined): string | undefined {
+  return uri && uri.startsWith(OLD_MEDIA_HOST) ? `${R2_PUBLIC_BASE_URL}/${uri.slice(OLD_MEDIA_HOST.length)}` : uri;
+}
+export async function migrateLocalMediaHost(): Promise<void> {
+  if (await AsyncStorage.getItem(MEDIA_HOST_MIGRATION_FLAG)) return;
+  const [climbs, sessions, projects] = await Promise.all([getAllClimbs(), getAllSessions(), getAllNamedProjects()]);
+  const hasOld = (x: { mediaUri?: string; mediaUris?: string[] }) =>
+    !!x.mediaUri?.startsWith(OLD_MEDIA_HOST) || !!x.mediaUris?.some(u => u.startsWith(OLD_MEDIA_HOST));
+  const fix = <T extends { mediaUri?: string; mediaUris?: string[] }>(x: T): T =>
+    hasOld(x) ? { ...x, mediaUri: toCurrentMediaHost(x.mediaUri), mediaUris: x.mediaUris?.map(u => toCurrentMediaHost(u)) } : x;
+  const work: Promise<unknown>[] = [];
+  if (climbs.some(hasOld)) work.push(bulkSaveClimbs(climbs.map(fix)));
+  if (sessions.some(hasOld)) work.push(bulkSaveSessions(sessions.map(fix)));
+  if (projects.some(hasOld)) work.push(bulkSaveNamedProjects(projects.map(fix)));
+  await Promise.all(work);
+  await AsyncStorage.setItem(MEDIA_HOST_MIGRATION_FLAG, '1');
 }
 
 export async function migrateLocalMediaUrls(): Promise<boolean> {

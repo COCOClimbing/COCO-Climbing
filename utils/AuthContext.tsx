@@ -3,7 +3,7 @@ import { Alert, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase, adminDeleteUser } from './supabase';
 import { syncSessionCoords } from './sessionCoords';
-import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls, recoverOrphanedR2Media, cleanupOrphanedR2Media, cleanupOrphanedCloudRecords, cleanupOrphanedLocalRecords, processPendingDeletes } from './cloudSync';
+import { mergeData, upsertProfile, getCloudProfile, reuploadMissingMedia, migrateLocalMediaUrls, migrateLocalMediaHost, recoverOrphanedR2Media, cleanupOrphanedR2Media, cleanupOrphanedCloudRecords, cleanupOrphanedLocalRecords, processPendingDeletes } from './cloudSync';
 import { deleteMedia } from './mediaUpload';
 import { setCloudUserId, setInitialSyncSettled, triggerClimbsRefresh, triggerSessionsRefresh, triggerProjectsRefresh, triggerStatsRefresh, triggerFeedRefresh } from './storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -210,6 +210,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // data ever showed up, easily long enough to think it was gone for
       // good. Refresh the screens the instant it's done instead of waiting
       // for the rest of this function to finish.
+      // Before mergeData, which uploads every local session and climb: the
+      // phone's photo links must already use the current media address.
+      await migrateLocalMediaHost().catch(() => {});
       await mergeData(userId);
       triggerSessionsRefresh();
       triggerStatsRefresh();
