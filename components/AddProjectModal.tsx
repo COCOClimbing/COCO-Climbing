@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator
+  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Keyboard
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import PressGrow from './PressGrow';
 import BoldIcon from './BoldIcon';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { useTheme } from '../utils/ThemeContext';
 import { FONTS, SPACING, CLIMB_TYPES, CLIMB_STYLES, HOLD_COLORS, ENVIRONMENTS, ClimbTypeId, StyleId, HoldColorId } from '../utils/theme';
 import { generateId, saveNamedProject, NamedProject, getAllClimbs, saveClimb, projectEnvironment } from '../utils/storage';
@@ -41,6 +42,36 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
   const [environment, setEnvironment] = useState<'indoor' | 'outdoor'>('indoor');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  // Scroll a tapped box above the keyboard (same as Log/Edit Climb's notes)
+  const scrollRef = useRef<ScrollView>(null);
+  const locationYRef = useRef(0);   // bottom edge of each box, in scroll content
+  const notesYRef = useRef(0);
+  const offsetRef = useRef(0);
+  const kbTopRef = useRef(0);       // keyboard's top edge on screen (0 = keyboard down)
+  const scrollWrapRef = useRef<View>(null);
+  const focusedRef = useRef<React.MutableRefObject<number> | null>(null);
+  // Scroll just enough that the box's bottom sits a little above the keyboard.
+  // The keyboard reports screen coordinates but measureInWindow is relative to
+  // the sheet, which starts one status-bar height down the screen, so add that back.
+  const scrollToY = (bottom: React.MutableRefObject<number>) => {
+    focusedRef.current = bottom;
+    const kbTop = kbTopRef.current;
+    if (!kbTop) return; // keyboard not up yet; keyboardDidShow runs this again
+    scrollWrapRef.current?.measureInWindow((_x, top) => {
+      const sheetTop = initialWindowMetrics?.insets.top ?? 0;
+      const visible = kbTop - (top + sheetTop);
+      const target = bottom.current + 16 - visible;
+      if (target > offsetRef.current) scrollRef.current?.scrollTo({ y: target, animated: true });
+    });
+  };
+  React.useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', e => {
+      kbTopRef.current = e.endCoordinates.screenY;
+      if (focusedRef.current) scrollToY(focusedRef.current);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => { kbTopRef.current = 0; });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // Pre-fill when editing
   React.useEffect(() => {
@@ -142,7 +173,9 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
             </PressGrow>
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.content} keyboardShouldPersistTaps="handled">
+          <View ref={scrollWrapRef} style={{ flex: 1 }}>
+          <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={ss.content} keyboardShouldPersistTaps="handled"
+            onScroll={e => { offsetRef.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={32}>
             <Text style={[ss.label, { color: colors.textMuted }]}>PROJECT NAME</Text>
             <TextInput
               style={[ss.input, { backgroundColor: colors.bgCard, borderColor: colors.accent, color: colors.textPrimary, fontFamily: FONTS.family.regular }]}
@@ -233,6 +266,9 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               placeholderTextColor={colors.textMuted}
               value={location}
               onChangeText={setLocation}
+              onFocus={() => scrollToY(locationYRef)}
+              onBlur={() => { focusedRef.current = null; }}
+              onLayout={e => { locationYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}
             />
 
             <Text style={[ss.label, { color: colors.textMuted }]}>NOTES (optional)</Text>
@@ -244,9 +280,14 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               onChangeText={setNotes}
               multiline
               numberOfLines={3}
+              onFocus={() => scrollToY(notesYRef)}
+              onBlur={() => { focusedRef.current = null; }}
+              onLayout={e => { notesYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}
             />
-            <View style={{ height: 40 }} />
+            {/* Room to scroll the notes box up above the keyboard */}
+            <View style={{ height: 360 }} />
           </ScrollView>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
