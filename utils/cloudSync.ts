@@ -435,6 +435,13 @@ export async function deleteSessionFromCloud(id: string): Promise<void> {
   if (error) throw error;
 }
 
+function mediaColumns(p: NamedProject) {
+  const uris = p.mediaUris ?? [];
+  const keep = uris.map((u, i) => ({ u, t: p.mediaTypes?.[i] ?? 'photo' })).filter(x => x.u.startsWith('http'));
+  if (keep.length === 0 && uris.length === 0) return {};
+  return { media_uris: keep.map(x => x.u), media_types: keep.map(x => x.t) };
+}
+
 function projectToRow(p: NamedProject, userId: string) {
   return {
     id: p.id,
@@ -444,9 +451,13 @@ function projectToRow(p: NamedProject, userId: string) {
     type: p.type,
     styles: p.styles ?? [],
     created_at_local: p.createdAt,
-    // Only sent when set (see supabase_project_hold_color.sql / _environment.sql)
+    notes: p.notes ?? null,
+    location: p.location ?? null,
+    // Only sent when set (see supabase_project_hold_color.sql / _environment.sql / _media.sql)
     ...(p.holdColor ? { hold_color: p.holdColor } : {}),
     ...(p.environment ? { environment: p.environment } : {}),
+    // Only uploaded photos go to the cloud; local files are still uploading
+    ...mediaColumns(p),
   };
 }
 
@@ -454,13 +465,45 @@ function projectToRow(p: NamedProject, userId: string) {
 // upsert fails; retry without them so the project itself still syncs.
 async function upsertProjectRows(rows: Record<string, any>[]): Promise<void> {
   const { error } = await supabase.from('projects').upsert(rows, { onConflict: 'id' });
-  if (error && rows.some(r => 'hold_color' in r || 'environment' in r)) {
-    const stripped = rows.map(({ hold_color, environment, ...rest }) => rest);
+  if (error) {
+    const stripped = rows.map(({ hold_color, environment, media_uris, media_types, notes, location, ...rest }) => rest);
     await supabase.from('projects').upsert(stripped, { onConflict: 'id' });
   }
 }
 
-export async function syncProjectToCloud(project: NamedProject, userId: string): Promise<void> {
+export async function syncProjectToCloud(projectArg: NamedProject, userId: string): Promise<void> {
+  let project = projectArg;
+  const uris = project.mediaUris ?? [];
+  if (uris.some(u => !u.startsWith('http'))) {
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (authSession) {
+      const uploaded = new Map<string, string>();
+      for (let i = 0; i < uris.length; i++) {
+        const uri = uris[i];
+        if (uri.startsWith('http')) continue;
+        const type: 'photo' | 'video' = project.mediaTypes?.[i] ?? 'photo';
+        try {
+          const path = `${userId}/project_${project.id}_${Date.now()}_${i}.jpg`;
+          // Don't let a stalled upload hang forever; the next sync tries again
+          const url = await Promise.race([
+            (async () => uploadMedia(await shrinkPhotoForUpload(uri, type), path, authSession.access_token))(),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('upload timed out')), 60000)),
+          ]);
+          uploaded.set(uri, url);
+        } catch { /* keep the local file for the next attempt */ }
+      }
+      if (uploaded.size > 0) {
+        // Patch the project as stored now (photos only), so edits made while
+        // uploading aren't undone, then sync that fresh copy
+        const fresh = (await getAllNamedProjects()).find(p => p.id === project.id);
+        if (!fresh) return; // deleted while uploading
+        const mediaUris = (fresh.mediaUris ?? []).map(u => uploaded.get(u) ?? u);
+        project = { ...fresh, mediaUris };
+        const { saveNamedProjectLocal } = await import('./storage');
+        await saveNamedProjectLocal(project);
+      }
+    }
+  }
   await upsertProjectRows([projectToRow(project, userId)]);
 }
 
@@ -551,6 +594,10 @@ function rowToProject(row: any): NamedProject {
     styles: row.styles ?? [],
     holdColor: row.hold_color ?? undefined,
     environment: row.environment ?? undefined,
+    notes: row.notes ?? undefined,
+    location: row.location ?? undefined,
+    mediaUris: row.media_uris ?? undefined,
+    mediaTypes: row.media_types ?? undefined,
     createdAt: row.created_at_local,
   };
 }
@@ -772,10 +819,12 @@ export async function cleanupOrphanedR2Media(userId: string): Promise<void> {
   // upsert failed this sync (e.g. a schema mismatch) still points at its
   // uploaded photos locally; without this they'd look orphaned and be
   // permanently deleted before the next sync could save the reference.
-  const [localClimbs, localSessions] = await Promise.all([getAllClimbs(), getAllSessions()]);
+  const [localClimbs, localSessions, localProjects] = await Promise.all([getAllClimbs(), getAllSessions(), getAllNamedProjects()]);
   [...localClimbs, ...localSessions].forEach(item => {
     [...(item.mediaUris ?? []), ...(item.mediaUri ? [item.mediaUri] : [])].forEach(keep);
   });
+  // Project photos too (also returned by the RPC once supabase_project_media.sql is applied)
+  localProjects.forEach(p => (p.mediaUris ?? []).forEach(keep));
 
   const orphaned = allKeys.filter(k => !validKeys.has(k));
   if (orphaned.length > 0) {

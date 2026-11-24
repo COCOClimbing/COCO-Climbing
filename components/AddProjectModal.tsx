@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Keyboard
+  TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Keyboard, Image
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import PressGrow from './PressGrow';
 import BoldIcon from './BoldIcon';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../utils/ThemeContext';
 import { FONTS, SPACING, CLIMB_TYPES, CLIMB_STYLES, HOLD_COLORS, ENVIRONMENTS, ClimbTypeId, StyleId, HoldColorId } from '../utils/theme';
 import { generateId, saveNamedProject, NamedProject, getAllClimbs, saveClimb, projectEnvironment } from '../utils/storage';
@@ -41,6 +42,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
   const [holdColor, setHoldColor] = useState<HoldColorId | undefined>();
   const [environment, setEnvironment] = useState<'indoor' | 'outdoor'>('indoor');
   const [notes, setNotes] = useState('');
+  const [mediaItems, setMediaItems] = useState<{ uri: string; type: 'photo' | 'video' }[]>([]);
   const [saving, setSaving] = useState(false);
   // Scroll a tapped box above the keyboard (same as Log/Edit Climb's notes)
   const scrollRef = useRef<ScrollView>(null);
@@ -90,8 +92,9 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
           if (env) setEnvironment(env);
         });
       }
-      setLocation('');
-      setNotes('');
+      setLocation(existingProject.location ?? '');
+      setNotes(existingProject.notes ?? '');
+      setMediaItems((existingProject.mediaUris ?? []).map((uri, i) => ({ uri, type: existingProject.mediaTypes?.[i] ?? 'photo' })));
     } else if (visible && !existingProject) {
       reset();
     }
@@ -103,9 +106,36 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
 
   function reset() {
     setName(''); setClimbType('boulder'); setGradeSystem('v-scale');
-    setGrade('V3'); setLocation(''); setSelectedStyles([]); setHoldColor(undefined); setEnvironment('indoor'); setNotes('');
+    setGrade('V3'); setLocation(''); setSelectedStyles([]); setHoldColor(undefined); setEnvironment('indoor'); setNotes(''); setMediaItems([]);
   }
 
+  // Photos: same picker as Log/Edit Climb
+  async function pickPhoto() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow access to your photo library in Settings.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsMultipleSelection: true,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setMediaItems(prev => [...prev, ...result.assets.map(a => ({ uri: a.uri, type: 'photo' as const }))]);
+    }
+  }
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow camera access in Settings.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+    if (!result.canceled && result.assets[0]) {
+      setMediaItems(prev => [...prev, { uri: result.assets[0].uri, type: 'photo' as const }]);
+    }
+  }
+  function showMediaOptions() {
+    Keyboard.dismiss();
+    Alert.alert('Add Photo', 'Choose a source', [
+      { text: 'Take Photo', onPress: () => takePhoto() },
+      { text: 'Photo Library', onPress: () => pickPhoto() },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
   async function handleSave() {
     if (!name.trim()) {
       Alert.alert('Name required', 'Please give your project a name.');
@@ -115,8 +145,16 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
     // Hold color only applies to indoor projects
     const savedHold = environment === 'indoor' ? holdColor : undefined;
     try {
+      const projectId = existingProject?.id ?? generateId();
+      // Photos upload in the background when the project syncs (see syncProjectToCloud)
+      const extras = {
+        notes: notes.trim() || undefined,
+        location: location.trim() || undefined,
+        mediaUris: mediaItems.map(m => m.uri),
+        mediaTypes: mediaItems.map(m => m.type),
+      };
       if (isEditing && existingProject) {
-        await saveNamedProject({ ...existingProject, name: name.trim(), grade, type: climbType, styles: selectedStyles, holdColor: savedHold, environment });
+        await saveNamedProject({ ...existingProject, name: name.trim(), grade, type: climbType, styles: selectedStyles, holdColor: savedHold, environment, ...extras });
         // Update all linked climbs to match new grade/type
         const gs = inferGradeSystem(grade) as any;
         const all = await getAllClimbs();
@@ -129,7 +167,6 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
           });
         }
       } else {
-        const projectId = generateId();
         await saveNamedProject({
           id: projectId,
           name: name.trim(),
@@ -138,6 +175,7 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
           styles: selectedStyles,
           holdColor: savedHold,
           environment,
+          ...extras,
           createdAt: new Date().toISOString(),
         });
       }
@@ -284,6 +322,40 @@ export default function AddProjectModal({ visible, onClose, onSaved, existingPro
               onBlur={() => { focusedRef.current = null; }}
               onLayout={e => { notesYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}
             />
+            <Text style={[ss.label, { color: colors.textMuted }]}>MEDIA (optional)</Text>
+            {mediaItems.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
+                {mediaItems.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.uri + index}
+                    onLongPress={() => Alert.alert('Remove Photo', 'Remove this photo?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Remove', style: 'destructive', onPress: () => setMediaItems(prev => prev.filter((_, i) => i !== index)) },
+                    ])}
+                    activeOpacity={0.9}
+                    delayLongPress={400}
+                    style={{ marginRight: SPACING.sm }}
+                  >
+                    <Image source={{ uri: item.uri }} style={ss.mediaThumbnail} resizeMode="cover" />
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[ss.mediaThumbnail, ss.mediaAddTile, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
+                  onPress={showMediaOptions}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 30, color: colors.textMuted }}>+</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <TouchableOpacity
+                style={[ss.mediaBtn, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
+                onPress={showMediaOptions}
+              >
+                <Text style={[ss.mediaBtnText, { color: colors.textSecondary, fontFamily: FONTS.family.regular }]}>+ Add Photo</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Room to scroll the notes box up above the keyboard */}
             <View style={{ height: 360 }} />
           </ScrollView>
@@ -311,4 +383,8 @@ const ss = StyleSheet.create({
   swatchWrap: { borderWidth: 3, borderRadius: 24, padding: 2, marginRight: SPACING.xs, marginBottom: SPACING.xs },
   input: { borderRadius: 10, borderWidth: 1, fontSize: FONTS.sizes.md, padding: SPACING.md, marginBottom: SPACING.lg },
   inputMulti: { height: 80, textAlignVertical: 'top' },
+  mediaBtn: { borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.md },
+  mediaBtnText: { fontSize: FONTS.sizes.md },
+  mediaThumbnail: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#222' },
+  mediaAddTile: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 });

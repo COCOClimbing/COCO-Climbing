@@ -565,6 +565,10 @@ export interface NamedProject {
   styles?: string[];
   holdColor?: string;  // gym hold color, carried onto each new attempt
   environment?: 'indoor' | 'outdoor';
+  notes?: string;
+  location?: string;
+  mediaUris?: string[];              // uploaded photo URLs (or local files until uploaded)
+  mediaTypes?: ('photo' | 'video')[];
   createdAt: string;
 }
 
@@ -606,6 +610,15 @@ export async function saveNamedProject(project: NamedProject): Promise<void> {
       syncProjectToCloud(project, userId).catch(() => {})
     );
   }
+}
+
+// Same as saveNamedProject but without triggering a cloud sync (used by the sync itself)
+export async function saveNamedProjectLocal(project: NamedProject): Promise<void> {
+  const projects = await getAllNamedProjects();
+  const idx = projects.findIndex(p => p.id === project.id);
+  if (idx >= 0) projects[idx] = project; else projects.unshift(project);
+  await AsyncStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  triggerProjectsRefresh();
 }
 
 export async function deleteNamedProject(id: string): Promise<void> {
